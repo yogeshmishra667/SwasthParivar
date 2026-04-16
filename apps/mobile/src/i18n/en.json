@@ -1,0 +1,60 @@
+{
+  "common": {
+    "save": "Save",
+    "edit": "Edit",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No",
+    "retry": "Retry",
+    "loading": "Loading...",
+    "offline": "Offline",
+    "synced": "Synced",
+    "savedLocally": "Saved locally"
+  },
+  "auth": {
+    "enterPhone": "Enter your phone number",
+    "sendOtp": "Send OTP",
+    "enterOtp": "Enter OTP",
+    "verify": "Verify"
+  },
+  "onboarding": {
+    "chooseLanguage": "Choose your language",
+    "selectCondition": "Which condition are you managing?",
+    "diabetes": "Diabetes",
+    "firstReading": "Log your first reading",
+    "celebrate": "Well done! Your first reading is saved."
+  },
+  "logging": {
+    "tapToSpeak": "Tap to speak",
+    "useNumpad": "Or use numpad",
+    "confirmSave": "Save {{value}} mg/dL for {{profile}}?",
+    "fasting": "Fasting",
+    "postMeal": "Post-meal",
+    "random": "Random",
+    "preMeal": "Pre-meal",
+    "bedtime": "Bedtime",
+    "notSure": "Fasting or post-meal? Tap to choose.",
+    "profileLine": "Saving for {{profile}}",
+    "recentSwitchConfirm": "This is for {{profile}} — correct?",
+    "extremeConfirm": "{{value}} — this is very {{direction}}. Is it correct?"
+  },
+  "feedback": {
+    "noted": "{{value}} noted. {{streak}} day streak",
+    "celebrateDelta": "Great! Down {{delta}} from last time.",
+    "gentleWarnDelta": "{{value}} is a bit high. Stay hydrated.",
+    "firstReading": "First reading! {{value}} mg/dL saved.",
+    "festiveSkip": "Festival day — enjoy! Back to tracking tomorrow."
+  },
+  "critical": {
+    "lowTitle": "Sugar is very low ({{value}})",
+    "lowBody": "Eat something sweet now — juice, glucose, mithai. If dizzy, call {{contact}}.",
+    "highTitle": "Sugar is very high ({{value}})",
+    "highBody": "Drink water. Check if medication was taken. Call {{contact}}.",
+    "callNow": "Call now"
+  },
+  "offline": {
+    "banner": "Offline mode — readings are safe, will sync later",
+    "lastUpdated": "Last updated: {{time}}"
+  }
+}

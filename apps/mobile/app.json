@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "SwasthParivar",
+    "slug": "swasth-parivar",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "swasthparivar",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#2563EB"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.swasthparivar.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Aapki sugar reading voice se log karne ke liye.",
+        "NSSpeechRecognitionUsageDescription": "Hindi aur English me reading samajhne ke liye.",
+        "NSCameraUsageDescription": "Prescription photo lene ke liye.",
+        "NSLocationWhenInUseUsageDescription": "Emergency me location bhejne ke liye."
+      }
+    },
+    "android": {
+      "package": "com.swasthparivar.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#2563EB"
+      },
+      "permissions": [
+        "RECORD_AUDIO",
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS",
+        "VIBRATE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-localization",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#2563EB"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
