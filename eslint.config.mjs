@@ -1,0 +1,49 @@
+import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+import prettier from "eslint-config-prettier";
+
+export default [
+  js.configs.recommended,
+  ...tseslint.configs.recommendedTypeChecked,
+  ...tseslint.configs.stylisticTypeChecked,
+  prettier,
+  {
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+      "@typescript-eslint/consistent-type-imports": ["error", { prefer: "type-imports" }],
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": "error",
+      "@typescript-eslint/await-thenable": "error",
+      "@typescript-eslint/require-await": "error",
+      "@typescript-eslint/return-await": ["error", "always"],
+      "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true, allowBoolean: true }],
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+      "eqeqeq": ["error", "always", { null: "ignore" }],
+    },
+  },
+  {
+    files: ["**/*.test.ts", "**/*.spec.ts", "**/tests/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
+    },
+  },
+  {
+    ignores: [
+      "**/dist/**",
+      "**/build/**",
+      "**/node_modules/**",
+      "**/.expo/**",
+      "**/coverage/**",
+      "**/*.config.{js,mjs,cjs}",
+      "apps/mobile/**",
+    ],
+  },
+];

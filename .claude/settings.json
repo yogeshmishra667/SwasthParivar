@@ -1,0 +1,57 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(git:*)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(docker compose:*)",
+      "Bash(expo:*)",
+      "Bash(eas:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(echo:*)",
+      "Bash(curl:*)",
+      "Bash(prisma:*)",
+      "Bash(vitest:*)",
+      "Bash(tsc:*)",
+      "Bash(eslint:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf /:*)",
+      "Bash(rm -rf ~:*)",
+      "Bash(rm -rf /*)",
+      "Bash(sudo:*)",
+      "Bash(prisma migrate deploy:*)",
+      "Bash(prisma migrate reset --force:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(npx prisma db push:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "for f in $CLAUDE_FILE_PATHS; do case \"$f\" in *packages/domain-logic/*) if grep -En 'from.*@prisma|from.*ioredis|from.*bullmq|require.*prisma|require.*ioredis|require.*bullmq' \"$f\"; then echo \"--- BLOCKED: domain-logic must be PURE. No prisma/ioredis/bullmq imports in $f ---\" >&2; exit 2; fi;; esac; done"
+          }
+        ]
+      }
+    ]
+  }
+}
