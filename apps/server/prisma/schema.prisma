@@ -1,0 +1,268 @@
+// SwasthParivar — Phase 1 schema (glucose only)
+// Later phases extend this schema; do not remove fields without migration review.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────
+
+enum Gender {
+  male
+  female
+  other
+}
+
+enum Language {
+  hi
+  en
+}
+
+enum Condition {
+  diabetes
+  hypertension
+  asthma
+  cardiac
+}
+
+enum Tier {
+  free
+  premium
+  family
+}
+
+enum GlucoseReadingType {
+  fasting
+  pre_meal
+  post_meal
+  random
+  bedtime
+}
+
+enum ReadingSource {
+  manual
+  voice
+  device
+}
+
+enum ReadingContext {
+  normal
+  festive
+}
+
+enum MedicationLogStatus {
+  taken
+  skipped
+  missed_no_response
+  delayed
+}
+
+enum FeedbackTone {
+  celebrate
+  neutral
+  gentle_warn
+  encourage
+}
+
+enum FeedbackType {
+  first_reading
+  post_log_compare
+  streak_milestone
+  critical_warn
+  festive
+}
+
+// ─────────────────────────────────────────────────────────────
+// Users & Household (Phase 1)
+// ─────────────────────────────────────────────────────────────
+
+model Household {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  users     User[]
+
+  @@map("households")
+}
+
+model User {
+  id                 String      @id @default(uuid()) @db.Uuid
+  name               String
+  phone              String      @unique
+  age                Int
+  gender             Gender?
+  preferredLanguage  Language    @default(hi) @map("preferred_language")
+  conditions         Condition[]
+  timezone           String      @default("Asia/Kolkata")
+  householdId        String      @db.Uuid @map("household_id")
+  onboardingComplete Boolean     @default(false) @map("onboarding_complete")
+  onboardingStep     Int         @default(0) @map("onboarding_step")
+  tier               Tier        @default(free)
+  timeAnomalyCount   Int         @default(0) @map("time_anomaly_count")
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+
+  household            Household             @relation(fields: [householdId], references: [id])
+  glucoseReadings      GlucoseReading[]
+  medicationSchedules  MedicationSchedule[]
+  medicationLogs       MedicationLog[]
+  streak               UserStreak?
+  feedbackEvents       FeedbackEvent[]
+  notificationState    NotificationState?
+  emergencyContacts    EmergencyContact[]
+
+  @@index([householdId])
+  @@map("users")
+}
+
+model EmergencyContact {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid @map("user_id")
+  name         String
+  phone        String
+  relationship String
+  priority     Int
+  isGuardian   Boolean  @default(false) @map("is_guardian")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, priority])
+  @@map("emergency_contacts")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Readings (TimescaleDB hypertable — see migrations)
+// ─────────────────────────────────────────────────────────────
+
+model GlucoseReading {
+  id                String             @default(uuid()) @db.Uuid
+  clientUuid        String             @unique @db.Uuid @map("client_uuid")
+  userId            String             @db.Uuid @map("user_id")
+  valueMgDl         Int                @map("value_mg_dl")
+  readingType       GlucoseReadingType @map("reading_type")
+  context           ReadingContext     @default(normal)
+  notes             String?
+  source            ReadingSource
+  measuredAt        DateTime           @map("measured_at")
+  streakCreditedTo  DateTime           @db.Date @map("streak_credited_to")
+  version           Int                @default(1)
+  syncedAt          DateTime?          @map("synced_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([id, measuredAt])
+  @@index([userId, measuredAt])
+  @@index([userId, readingType, measuredAt])
+  @@index([userId, streakCreditedTo])
+  @@map("glucose_readings")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Medication (Phase 1 — minimal)
+// ─────────────────────────────────────────────────────────────
+
+model MedicationSchedule {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @db.Uuid @map("user_id")
+  medicineName      String   @map("medicine_name")
+  dosage            String?
+  timeSlots         Json     @map("time_slots")
+  condition         String?
+  isCritical        Boolean  @default(false) @map("is_critical")
+  photoUrl          String?  @map("photo_url")
+  quantityRemaining Int?     @map("quantity_remaining")
+  active            Boolean  @default(true)
+  startedAt         DateTime @default(now()) @map("started_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs MedicationLog[]
+
+  @@index([userId, active])
+  @@map("medication_schedules")
+}
+
+model MedicationLog {
+  id              String              @id @default(uuid()) @db.Uuid
+  scheduleId      String              @db.Uuid @map("schedule_id")
+  userId          String              @db.Uuid @map("user_id")
+  status          MedicationLogStatus
+  scheduledFor    DateTime            @map("scheduled_for")
+  respondedAt     DateTime?           @map("responded_at")
+  skipReason      String?             @map("skip_reason")
+  reminderCount   Int                 @default(0) @map("reminder_count")
+  guardianAlerted Boolean             @default(false) @map("guardian_alerted")
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  schedule MedicationSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, scheduledFor])
+  @@index([scheduleId, scheduledFor])
+  @@map("medication_logs")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Streaks & Feedback
+// ─────────────────────────────────────────────────────────────
+
+model UserStreak {
+  userId              String    @id @db.Uuid @map("user_id")
+  currentStreakDays   Int       @default(0) @map("current_streak_days")
+  longestStreakDays   Int       @default(0) @map("longest_streak_days")
+  lastLogDate         DateTime? @db.Date @map("last_log_date")
+  streakStartedAt     DateTime? @map("streak_started_at")
+  totalLogDays        Int       @default(0) @map("total_log_days")
+  brokenStreakLength  Int       @default(0) @map("broken_streak_length")
+  graceUsedThisWeek   Int       @default(0) @map("grace_used_this_week")
+  milestonesReached   Json      @default("[]") @map("milestones_reached")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_streaks")
+}
+
+model FeedbackEvent {
+  id             String       @id @default(uuid()) @db.Uuid
+  userId         String       @db.Uuid @map("user_id")
+  readingId      String?      @db.Uuid @map("reading_id")
+  feedbackType   FeedbackType @map("feedback_type")
+  tone           FeedbackTone
+  messageKey     String       @map("message_key")
+  variantIndex   Int          @map("message_variant_index")
+  messageParams  Json         @map("message_params")
+  shownAt        DateTime     @default(now()) @map("shown_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, shownAt])
+  @@map("feedback_events")
+}
+
+model NotificationState {
+  userId                  String   @id @db.Uuid @map("user_id")
+  fatigueLevel            Int      @default(0) @map("fatigue_level")
+  consecutiveIgnores      Int      @default(0) @map("consecutive_ignores")
+  lastNotificationAt      DateTime? @map("last_notification_at")
+  bestLogTimeFasting      String   @default("07:00") @map("best_log_time_fasting")
+  bestLogTimePostMeal     String   @default("13:30") @map("best_log_time_post_meal")
+  notificationHistory7d   Json     @default("[]") @map("notification_history_7d")
+  last3VariantIds         Json     @default("[]") @map("last_3_variant_ids")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_states")
+}
