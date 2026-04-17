@@ -2,17 +2,45 @@ import { useState } from "react";
 import { View, Text, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
+import { v4 as uuidv4 } from "uuid";
 import { NumpadInput } from "@/components/logging/NumpadInput";
 import { ConfirmationScreen } from "@/components/logging/ConfirmationScreen";
 import { Icon } from "@/components/ui/Icon";
+import { api } from "@/services/api";
 import { hapticCelebrate } from "@/utils/haptics";
+import { track } from "@/services/analytics";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
+import type { GlucoseReadingType } from "@swasth/shared-types";
 
 export default function FirstReadingScreen(): JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
   const [value, setValue] = useState<number | null>(null);
   const [celebrated, setCelebrated] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const saveReading = async (type: GlucoseReadingType): Promise<void> => {
+    if (value === null || saving) return;
+    setSaving(true);
+    try {
+      await api.post("/readings/glucose", {
+        clientUuid: uuidv4(),
+        valueMgDl: value,
+        readingType: type,
+        source: "manual",
+        measuredAtIso: new Date().toISOString(),
+        userTimezoneOffsetMinutes: -new Date().getTimezoneOffset(),
+        version: 1,
+      });
+      track("reading_logged", { type, source: "manual", value });
+      await api.patch("/users/me", { onboardingStep: 4 });
+    } catch {
+      // offline-first — continue to celebration
+    }
+    setSaving(false);
+    hapticCelebrate();
+    setCelebrated(true);
+  };
 
   if (celebrated) {
     return (
@@ -47,10 +75,7 @@ export default function FirstReadingScreen(): JSX.Element {
       value={value}
       type="fasting"
       uncertainType={false}
-      onConfirm={() => {
-        hapticCelebrate();
-        setCelebrated(true);
-      }}
+      onConfirm={(type) => void saveReading(type)}
       onEdit={() => setValue(null)}
     />
   );

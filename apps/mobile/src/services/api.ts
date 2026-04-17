@@ -39,6 +39,8 @@ export const api = {
     client.post<T>(url, body, config).then((r) => r.data),
   put: <T, B = unknown>(url: string, body?: B, config?: AxiosRequestConfig) =>
     client.put<T>(url, body, config).then((r) => r.data),
+  patch: <T, B = unknown>(url: string, body?: B, config?: AxiosRequestConfig) =>
+    client.patch<T>(url, body, config).then((r) => r.data),
   delete: <T,>(url: string, config?: AxiosRequestConfig) =>
     client.delete<T>(url, config).then((r) => r.data),
 };

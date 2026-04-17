@@ -37,7 +37,8 @@ export default function VerifyScreen(): JSX.Element {
         { phone: `+91${phone ?? ""}`, otp },
       );
       await setTokens(res.data.accessToken, res.data.refreshToken, res.data.userId);
-      router.replace(res.data.isNew ? "/(onboarding)/language" : "/(tabs)/dashboard");
+      // Let index.tsx resolve the correct destination based on onboardingComplete + step
+      router.replace("/");
     } catch {
       Alert.alert("OTP galat hai");
     } finally {
