@@ -23,7 +23,7 @@
     "selectCondition": "Kaun si condition manage kar rahe hain?",
     "diabetes": "Sugar (Diabetes)",
     "firstReading": "Pehli reading log karein",
-    "celebrate": "🎉 Pehli reading save ho gayi!"
+    "celebrate": "Pehli reading save ho gayi!"
   },
   "logging": {
     "tapToSpeak": "Bolne ke liye tap karein",
@@ -35,26 +35,26 @@
     "preMeal": "Khane se pehle",
     "bedtime": "Sone se pehle",
     "notSure": "Fasting ya post-meal? Tap karein.",
-    "profileLine": "👤 {{profile}} ke liye save ho raha hai",
+    "profileLine": "{{profile}} ke liye save ho raha hai",
     "recentSwitchConfirm": "Yeh {{profile}} ke liye hai — sahi hai?",
-    "extremeConfirm": "⚠️ {{value}} — yeh bahut {{direction}} hai. Kya sahi hai?"
+    "extremeConfirm": "{{value}} — yeh bahut {{direction}} hai. Kya sahi hai?"
   },
   "feedback": {
-    "noted": "✅ {{value}} noted. {{streak}} din ka streak 🔥",
-    "celebrateDelta": "🎉 Shaabash! Pichli baar se {{delta}} kam.",
+    "noted": "{{value}} noted. {{streak}} din ka streak",
+    "celebrateDelta": "Shaabash! Pichli baar se {{delta}} kam.",
     "gentleWarnDelta": "{{value}} thoda zyada hai. Paani peeyein.",
-    "firstReading": "🎉 Pehli reading! {{value}} mg/dL save ho gaya.",
-    "festiveSkip": "🎉 Festival hai! Enjoy karein. Kal se phir track karenge."
+    "firstReading": "Pehli reading! {{value}} mg/dL save ho gaya.",
+    "festiveSkip": "Festival hai! Enjoy karein. Kal se phir track karenge."
   },
   "critical": {
-    "lowTitle": "⚠️ Sugar bahut kam hai ({{value}})",
+    "lowTitle": "Sugar bahut kam hai ({{value}})",
     "lowBody": "Abhi kuch meetha khayein — juice, glucose, mithai. Agar chakkar aa rahe hain to turant {{contact}} ko call karein.",
-    "highTitle": "⚠️ Sugar bahut zyada hai ({{value}})",
+    "highTitle": "Sugar bahut zyada hai ({{value}})",
     "highBody": "Pani peeyein. Dawai li hai check karein. {{contact}} ko call karein.",
-    "callNow": "📞 Abhi call karein"
+    "callNow": "Abhi call karein"
   },
   "offline": {
-    "banner": "📵 Offline mode — readings safe hain, sync baad mein hoga",
+    "banner": "Offline mode — readings safe hain, sync baad mein hoga",
     "lastUpdated": "Last updated: {{time}}"
   }
 }

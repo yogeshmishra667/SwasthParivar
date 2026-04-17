@@ -22,6 +22,16 @@
     "test:coverage": "pnpm -r --parallel run test:coverage",
     "clean": "pnpm -r run clean && rm -rf node_modules"
   },
+  "pnpm": {
+    "overrides": {
+      "@nozbe/with-observables>react": "*",
+      "@nozbe/with-observables>@types/react": "*",
+      "semver": "^7.7.4"
+    }
+  },
+  "dependencies": {
+    "semver": "^7.7.4"
+  },
   "devDependencies": {
     "@types/node": "^20.14.10",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
@@ -29,7 +39,7 @@
     "eslint": "^9.9.0",
     "eslint-config-prettier": "^9.1.0",
     "prettier": "^3.3.3",
-    "typescript": "^5.5.4",
-    "vitest": "^2.0.5"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
   }
 }

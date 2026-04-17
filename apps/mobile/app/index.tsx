@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Redirect } from "expo-router";
 import { useAuthStore } from "@/stores/auth.store";
 
-export default function Index(): JSX.Element {
+export default function Index(): JSX.Element | null {
   const hydrated = useAuthStore((s) => s.hydrated);
   const token = useAuthStore((s) => s.accessToken);
 
@@ -10,6 +10,6 @@ export default function Index(): JSX.Element {
     if (!hydrated) void useAuthStore.getState().hydrate();
   }, [hydrated]);
 
-  if (!hydrated) return <Redirect href="/(auth)/login" />;
+  if (!hydrated) return null;
   return <Redirect href={token ? "/(tabs)/dashboard" : "/(auth)/login"} />;
 }

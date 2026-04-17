@@ -8,7 +8,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -144,7 +143,7 @@ model EmergencyContact {
 
 model GlucoseReading {
   id                String             @default(uuid()) @db.Uuid
-  clientUuid        String             @unique @db.Uuid @map("client_uuid")
+  clientUuid        String             @db.Uuid @map("client_uuid")
   userId            String             @db.Uuid @map("user_id")
   valueMgDl         Int                @map("value_mg_dl")
   readingType       GlucoseReadingType @map("reading_type")
@@ -161,6 +160,7 @@ model GlucoseReading {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([id, measuredAt])
+  @@unique([clientUuid, measuredAt])
   @@index([userId, measuredAt])
   @@index([userId, readingType, measuredAt])
   @@index([userId, streakCreditedTo])

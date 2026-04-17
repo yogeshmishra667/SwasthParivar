@@ -41,7 +41,7 @@ const ist = (): number => 330;
 export const createGlucoseReading = async (
   input: CreateReadingInput,
 ): Promise<CreateReadingResult> => {
-  const existing = await prisma.glucoseReading.findUnique({ where: { clientUuid: input.clientUuid } });
+  const existing = await prisma.glucoseReading.findFirst({ where: { clientUuid: input.clientUuid } });
 
   if (existing) {
     if (input.version <= existing.version) {
@@ -148,7 +148,7 @@ export const createGlucoseReading = async (
 
   const reading = existing
     ? await prisma.glucoseReading.update({
-        where: { clientUuid: input.clientUuid },
+        where: { clientUuid_measuredAt: { clientUuid: existing.clientUuid, measuredAt: existing.measuredAt } },
         data: { ...data, version: input.version },
       })
     : await prisma.glucoseReading.create({ data });
@@ -221,11 +221,12 @@ export const listGlucoseReadings = async (params: {
     where,
     orderBy: { measuredAt: "desc" },
     take: params.limit + 1,
-    ...(params.cursor ? { skip: 1, cursor: { clientUuid: params.cursor } } : {}),
+    ...(params.cursor ? { skip: 1, cursor: { clientUuid_measuredAt: { clientUuid: params.cursor.split('_')[0]!, measuredAt: new Date(params.cursor.split('_')[1]!) } } } : {}),
   });
 
   const hasMore = rows.length > params.limit;
   const data = hasMore ? rows.slice(0, params.limit) : rows;
-  const cursor = hasMore ? (data[data.length - 1]?.clientUuid ?? null) : null;
+  const lastItem = data[data.length - 1];
+  const cursor = hasMore && lastItem ? `${lastItem.clientUuid}_${lastItem.measuredAt.toISOString()}` : null;
   return { data, cursor, hasMore };
 };

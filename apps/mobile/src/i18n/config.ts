@@ -16,6 +16,7 @@ void i18n.use(initReactI18next).init({
   fallbackLng: "hi",
   interpolation: { escapeValue: false },
   returnNull: false,
+  compatibilityJSON: "v3", // React Native lacks Intl.PluralRules
 });
 
 export { i18n };

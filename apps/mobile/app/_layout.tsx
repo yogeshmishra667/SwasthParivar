@@ -1,22 +1,37 @@
 import "@/i18n/config";
 import "../global.css";
 import "react-native-get-random-values";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
+import * as SplashScreen from "expo-splash-screen";
 import { useAuthStore } from "@/stores/auth.store";
 import { useAccessibility } from "@/hooks/useAccessibility";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 
-export default function RootLayout(): JSX.Element {
+void SplashScreen.preventAutoHideAsync();
+
+export default function RootLayout(): JSX.Element | null {
   const hydrate = useAuthStore((s) => s.hydrate);
+  const [ready, setReady] = useState(false);
   useAccessibility();
 
   useEffect(() => {
-    void hydrate();
+    void (async () => {
+      try {
+        await hydrate();
+      } catch {
+        // SecureStore unavailable (e.g. emulator without keystore) — treat as logged out
+      } finally {
+        setReady(true);
+        await SplashScreen.hideAsync();
+      }
+    })();
   }, [hydrate]);
+
+  if (!ready) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

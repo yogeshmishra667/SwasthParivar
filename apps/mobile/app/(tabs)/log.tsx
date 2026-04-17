@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, Alert } from "react-native";
+import { View, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { v4 as uuidv4 } from "uuid";
@@ -11,25 +11,29 @@ import { NumpadInput } from "@/components/logging/NumpadInput";
 import { ConfirmationScreen } from "@/components/logging/ConfirmationScreen";
 import { UndoToast } from "@/components/shared/UndoToast";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
 import { useAuthStore } from "@/stores/auth.store";
 import { hapticSave } from "@/utils/haptics";
 import { track } from "@/services/analytics";
 
 type Stage = "input" | "confirm" | "saved";
+type InputMode = "voice" | "numpad";
+
+interface Parsed {
+  value: number;
+  type: GlucoseReadingType;
+  uncertain: boolean;
+}
 
 export default function LogScreen(): JSX.Element {
   const router = useRouter();
   const userId = useAuthStore((s) => s.userId);
   const [stage, setStage] = useState<Stage>("input");
-  const [mode, setMode] = useState<"voice" | "numpad">("voice");
-  const [parsed, setParsed] = useState<{
-    value: number;
-    type: GlucoseReadingType;
-    uncertain: boolean;
-  } | null>(null);
-  const [voiceFailCount, setVoiceFailCount] = useState(0);
+  const [mode, setMode] = useState<InputMode>("voice");
+  const [parsed, setParsed] = useState<Parsed | null>(null);
   const [undoVisible, setUndoVisible] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleVoice = (result: VoiceParseResult): void => {
     if (result.kind !== "ok") return;
@@ -49,10 +53,10 @@ export default function LogScreen(): JSX.Element {
   const save = async (type: GlucoseReadingType): Promise<void> => {
     if (!parsed || !userId) return;
     hapticSave();
-    const clientUuid = uuidv4();
+    setSaveError(null);
     try {
       await api.post("/readings/glucose", {
-        clientUuid,
+        clientUuid: uuidv4(),
         valueMgDl: parsed.value,
         readingType: type,
         source: mode,
@@ -60,15 +64,11 @@ export default function LogScreen(): JSX.Element {
         userTimezoneOffsetMinutes: -new Date().getTimezoneOffset(),
         version: 1,
       });
-      track("reading_logged", {
-        type,
-        source: mode,
-        value: parsed.value,
-      });
+      track("reading_logged", { type, source: mode, value: parsed.value });
       setUndoVisible(true);
       setStage("saved");
     } catch {
-      Alert.alert("Save nahi ho paya", "Phone dhyan rakhein, data locally safe hai.");
+      setSaveError("Save nahi ho paya — data locally safe hai, sync baad mein hoga.");
     }
   };
 
@@ -79,7 +79,10 @@ export default function LogScreen(): JSX.Element {
         type={parsed.type}
         uncertainType={parsed.uncertain}
         onConfirm={(t) => void save(t)}
-        onEdit={() => setStage("input")}
+        onEdit={() => {
+          setSaveError(null);
+          setStage("input");
+        }}
       />
     );
   }
@@ -87,7 +90,7 @@ export default function LogScreen(): JSX.Element {
   if (stage === "saved") {
     return (
       <SafeAreaView className="flex-1 items-center justify-center gap-4 bg-white p-6">
-        <Text className="text-hero">✅</Text>
+        <Icon name="checkmark-circle" size={72} color="#16A34A" accessibilityLabel="Saved" />
         <Text className="text-important">Save ho gaya</Text>
         <Button label="Dashboard" onPress={() => router.replace("/(tabs)/dashboard")} />
         <UndoToast
@@ -108,26 +111,21 @@ export default function LogScreen(): JSX.Element {
       <View className="items-end">
         <ActiveProfileBadge />
       </View>
+
       {mode === "voice" ? (
-        <VoiceInput
-          onParsed={handleVoice}
-          onFail={() => {
-            setVoiceFailCount((c) => c + 1);
-            setMode("numpad");
-          }}
-        />
+        <VoiceInput onParsed={handleVoice} onFail={() => setMode("numpad")} />
       ) : (
         <NumpadInput onSubmit={handleNumpad} />
       )}
+
       <Button
         label={mode === "voice" ? "Numpad use karein" : "Voice try karein"}
         variant="ghost"
         onPress={() => setMode((m) => (m === "voice" ? "numpad" : "voice"))}
       />
-      {voiceFailCount >= 2 && (
-        <Text className="text-body text-warning">
-          Voice mein dikkat hai, numpad use karein.
-        </Text>
+
+      {saveError !== null && (
+        <Text className="text-body text-warning">{saveError}</Text>
       )}
     </SafeAreaView>
   );

@@ -8,10 +8,13 @@ import { useAuthStore } from "@/stores/auth.store";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 
 interface VerifyResponse {
-  accessToken: string;
-  refreshToken: string;
-  userId: string;
-  onboardingComplete: boolean;
+  success: boolean;
+  data: {
+    accessToken: string;
+    refreshToken: string;
+    userId: string;
+    isNew: boolean;
+  };
 }
 
 export default function VerifyScreen(): JSX.Element {
@@ -33,8 +36,8 @@ export default function VerifyScreen(): JSX.Element {
         "/auth/verify-otp",
         { phone: `+91${phone ?? ""}`, otp },
       );
-      await setTokens(res.accessToken, res.refreshToken, res.userId);
-      router.replace(res.onboardingComplete ? "/(tabs)/dashboard" : "/(onboarding)/language");
+      await setTokens(res.data.accessToken, res.data.refreshToken, res.data.userId);
+      router.replace(res.data.isNew ? "/(onboarding)/language" : "/(tabs)/dashboard");
     } catch {
       Alert.alert("OTP galat hai");
     } finally {

@@ -5,6 +5,8 @@ import { Platform } from "react-native";
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
@@ -50,7 +52,7 @@ export const scheduleMedicationReminder = async (
   Notifications.scheduleNotificationAsync({
     identifier: id,
     content: { title, body, sound: true },
-    trigger: { date },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
   });
 
 export const cancelReminder = async (id: string): Promise<void> => {

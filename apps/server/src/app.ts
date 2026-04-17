@@ -1,4 +1,3 @@
-import "express-async-errors";
 import express, { type Express } from "express";
 import cors from "cors";
 import helmet from "helmet";

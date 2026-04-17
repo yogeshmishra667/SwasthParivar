@@ -38,13 +38,18 @@ export const verifyOtp = async (
     throw new DomainError("AUTH_OTP_INVALID", "too many attempts, request a new OTP");
   }
 
-  const stored = await redis.get(otpKey(phone));
-  if (!stored) throw new DomainError("AUTH_OTP_EXPIRED", "otp expired");
+  // Dev bypass: accept "000000" without Redis check (never in production)
+  const devBypass = env.NODE_ENV === "development" && otp === "000000";
 
-  if (stored !== hashOtp(otp, phone)) {
-    await redis.incr(attemptsKey(phone));
-    await redis.expire(attemptsKey(phone), OTP_TTL_SECONDS);
-    throw new DomainError("AUTH_OTP_INVALID", "invalid otp");
+  if (!devBypass) {
+    const stored = await redis.get(otpKey(phone));
+    if (!stored) throw new DomainError("AUTH_OTP_EXPIRED", "otp expired");
+
+    if (stored !== hashOtp(otp, phone)) {
+      await redis.incr(attemptsKey(phone));
+      await redis.expire(attemptsKey(phone), OTP_TTL_SECONDS);
+      throw new DomainError("AUTH_OTP_INVALID", "invalid otp");
+    }
   }
 
   await redis.del(otpKey(phone));

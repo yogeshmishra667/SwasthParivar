@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Modal, View, Text, Linking } from "react-native";
 import { CRITICAL_FULLSCREEN_LOCK_MS } from "@/utils/constants";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { hapticCritical } from "@/utils/haptics";
 
 interface CriticalAlertProps {
@@ -36,7 +37,7 @@ export const CriticalAlert = ({
   return (
     <Modal visible={visible} animationType="fade" transparent={false}>
       <View className="flex-1 items-center justify-center bg-critical px-6">
-        <Text className="text-6xl">⚠️</Text>
+        <Icon name="warning" size={72} color="#FFFFFF" accessibilityLabel="Critical alert" />
         <Text className="mt-4 text-hero font-bold text-white">
           Sugar bahut {direction === "low" ? "kam" : "zyada"}
         </Text>
@@ -48,7 +49,7 @@ export const CriticalAlert = ({
         </Text>
         <View className="mt-6 w-full gap-3">
           <Button
-            label={`📞 ${contactName} ko call karein`}
+            label={`${contactName} ko call karein`}
             variant="primary"
             onPress={() => void Linking.openURL(`tel:${contactPhone}`)}
           />

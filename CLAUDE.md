@@ -221,7 +221,7 @@ swasth-parivar/
 - **NotificationState:** user_id, fatigue_level(0-3), consecutive_ignores, last_notification_at, best_log_time_fasting, best_log_time_post_meal, notification_history_7d(JSONB), last_3_variant_ids(JSONB)
 
 ### Health Readings (TimescaleDB hypertables)
-- **GlucoseReading:** id, client_uuid(unique), user_id, value_mg_dl, reading_type(fasting|pre_meal|post_meal|random|bedtime), meal_log_id?, context?(normal|festive), notes?, source(manual|voice|device), measured_at, streak_credited_to(DATE), updated_at, version(int default 1), synced_at
+- **GlucoseReading:** id, client_uuid, user_id, value_mg_dl, reading_type(fasting|pre_meal|post_meal|random|bedtime), meal_log_id?, context?(normal|festive), notes?, source(manual|voice|device), measured_at, streak_credited_to(DATE), updated_at, version(int default 1), synced_at — PK: @@id([id, measuredAt]) for TimescaleDB hypertable; uniqueness: @@unique([clientUuid, measuredAt]) (standalone @unique on clientUuid is incompatible with hypertable composite PK)
 - **BPReading:** id, client_uuid, user_id, systolic, diastolic, pulse?, context, measured_at, streak_credited_to, updated_at, version, synced_at
 - **CardiacLog:** user_id, heart_rate, rhythm_status, chest_pain, pain_severity?, exercise_tolerance, measured_at
 - **RespiratoryLog:** user_id, peak_flow?, inhaler_used, inhaler_type?, puffs?, trigger_note?, symptom_severity, measured_at
@@ -422,7 +422,7 @@ DATABASE_URL, REDIS_URL, JWT_SECRET, JWT_REFRESH_SECRET, OTP_SECRET, CLAUDE_API_
 - /api/v1/ versioning
 - requestId per request → logger + X-Request-Id
 - Graceful shutdown: SIGTERM → drain BullMQ → close DB → exit
-- express-async-errors
+- Express 5: async errors propagate natively — do NOT add express-async-errors
 
 ---
 

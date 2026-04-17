@@ -2,6 +2,7 @@ import { useState } from "react";
 import { View, Text, Pressable } from "react-native";
 import { parseVoiceTranscript, type VoiceParseResult } from "@swasth/domain-logic";
 import { useProfileStore } from "@/stores/profile.store";
+import { Icon } from "@/components/ui/Icon";
 import { hapticSave } from "@/utils/haptics";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 import { track } from "@/services/analytics";
@@ -21,8 +22,7 @@ export const VoiceInput = ({ onParsed, onFail }: VoiceInputProps): JSX.Element =
     lockForLogging();
     setRecording(true);
     hapticSave();
-    // TODO: integrate expo-speech-recognition here.
-    // For now this is a dev stub that simulates a successful parse of a sample transcript.
+    // TODO: wire expo-speech-recognition — this is a dev stub.
     setTimeout(() => {
       const result = parseVoiceTranscript({
         transcript: "aaj sugar 140 aayi",
@@ -53,7 +53,7 @@ export const VoiceInput = ({ onParsed, onFail }: VoiceInputProps): JSX.Element =
       <Pressable
         onPress={() => void start()}
         accessibilityRole="button"
-        accessibilityLabel="Hold to speak your glucose reading"
+        accessibilityLabel="Tap to speak your glucose reading"
         className={`items-center justify-center rounded-full ${
           recording ? "bg-critical" : "bg-primary"
         }`}
@@ -62,7 +62,7 @@ export const VoiceInput = ({ onParsed, onFail }: VoiceInputProps): JSX.Element =
           height: TOUCH_TARGET_MIN * 2.5,
         }}
       >
-        <Text className="text-hero">🎙️</Text>
+        <Icon name="mic" size={48} color="#FFFFFF" />
       </Pressable>
       <Text className="text-important">
         {recording ? "Suna ja raha hai..." : "Bolne ke liye tap karein"}
