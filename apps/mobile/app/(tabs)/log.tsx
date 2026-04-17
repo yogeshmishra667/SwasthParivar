@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import { isCriticalGlucose } from "@swasth/shared-types";
 import type { GlucoseReadingType } from "@swasth/shared-types";
 import type { VoiceParseResult } from "@swasth/domain-logic";
+import { useTranslation } from "react-i18next";
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
 import { VoiceInput } from "@/components/logging/VoiceInput";
 import { NumpadInput } from "@/components/logging/NumpadInput";
@@ -37,14 +38,8 @@ interface SaveResponse {
   };
 }
 
-const FEEDBACK_MESSAGES: Record<string, string> = {
-  first_ever: "Pehli reading save ho gayi!",
-  celebrate: "Shaabash! Pichli baar se behtar.",
-  neutral: "Save ho gaya.",
-  gentle_warn: "Thoda zyada hai. Paani peeyein.",
-};
-
 export default function LogScreen(): JSX.Element {
+  const { t } = useTranslation();
   const router = useRouter();
   const userId = useAuthStore((s) => s.userId);
   const [stage, setStage] = useState<Stage>("input");
@@ -85,15 +80,14 @@ export default function LogScreen(): JSX.Element {
         valueMgDl: parsed.value,
         readingType: type,
         source: mode,
-        measuredAtIso: new Date().toISOString(),
-        userTimezoneOffsetMinutes: -new Date().getTimezoneOffset(),
+        measuredAt: new Date().toISOString(),
         version: 1,
       });
       track("reading_logged", { type, source: mode, value: parsed.value });
 
       const { streak, feedback, critical } = res.data;
       setStreakDays(streak.currentStreakDays);
-      setFeedbackMsg(FEEDBACK_MESSAGES[feedback.tone] ?? "Save ho gaya.");
+      setFeedbackMsg(t(`feedback.${feedback.tone}`, { defaultValue: t("logging.saved") }));
 
       if (critical.isCritical && critical.direction) {
         setCriticalAlert({ visible: true, value: parsed.value, direction: critical.direction });
@@ -108,7 +102,7 @@ export default function LogScreen(): JSX.Element {
         setCriticalAlert({ visible: true, value: parsed.value, direction: dir });
         track("critical_bypass_triggered", { value: parsed.value });
       }
-      setSaveError("Save nahi ho paya — data locally safe hai, sync baad mein hoga.");
+      setSaveError(t("logging.saveFailed"));
     }
   };
 
@@ -141,17 +135,17 @@ export default function LogScreen(): JSX.Element {
     return (
       <SafeAreaView className="flex-1 items-center justify-center gap-4 bg-white p-6">
         <Icon name="checkmark-circle" size={72} color="#16A34A" accessibilityLabel="Saved" />
-        <Text className="text-important">{feedbackMsg ?? "Save ho gaya"}</Text>
+        <Text className="text-important">{feedbackMsg ?? t("logging.saved")}</Text>
         {streakDays > 0 && (
           <View className="flex-row items-center gap-2">
             <Icon name="flame" size={20} color="#F59E0B" />
-            <Text className="text-body">{streakDays} din ka streak</Text>
+            <Text className="text-body">{t("logging.streakCount", { count: streakDays })}</Text>
           </View>
         )}
-        <Button label="Dashboard" onPress={() => router.replace("/(tabs)/dashboard")} />
+        <Button label={t("common.dashboard")} onPress={() => router.replace("/(tabs)/dashboard")} />
         <UndoToast
           visible={undoVisible}
-          message="Reading save hui"
+          message={t("logging.readingSaved")}
           onUndo={() => {
             setUndoVisible(false);
             setStage("input");
@@ -183,7 +177,7 @@ export default function LogScreen(): JSX.Element {
       )}
 
       <Button
-        label={mode === "voice" ? "Numpad use karein" : "Voice try karein"}
+        label={mode === "voice" ? t("logging.useNumpad") : t("logging.useVoice")}
         variant="ghost"
         onPress={() => setMode((m) => (m === "voice" ? "numpad" : "voice"))}
       />

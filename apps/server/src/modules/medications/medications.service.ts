@@ -1,4 +1,5 @@
 import type { MedicationSchedule, MedicationLog } from "@prisma/client";
+import type { MedicationLogStatus } from "@swasth/shared-types";
 import { prisma } from "../../shared/database.js";
 
 interface CreateSchedule {
@@ -28,7 +29,7 @@ export const createSchedule = async (input: CreateSchedule): Promise<MedicationS
 interface LogInput {
   userId: string;
   scheduleId: string;
-  status: "taken" | "skipped" | "missed_no_response" | "delayed";
+  status: MedicationLogStatus;
   scheduledFor: string;
   skipReason?: string | undefined;
 }

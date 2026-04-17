@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MEDICATION_LOG_STATUSES } from "@swasth/shared-types";
 
 export const createScheduleSchema = z.object({
   medicineName: z.string().min(1).max(100),
@@ -10,7 +11,7 @@ export const createScheduleSchema = z.object({
 
 export const logMedicationSchema = z.object({
   scheduleId: z.string().uuid(),
-  status: z.enum(["taken", "skipped", "missed_no_response", "delayed"]),
+  status: z.enum(MEDICATION_LOG_STATUSES),
   scheduledFor: z.string().datetime(),
   skipReason: z.string().max(200).optional(),
 });

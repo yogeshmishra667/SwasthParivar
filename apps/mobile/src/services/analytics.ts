@@ -13,3 +13,11 @@ export type EventProps = Record<string, JsonPrimitive | JsonPrimitive[]>;
 export const track = (event: string, props?: EventProps): void => {
   analytics?.capture(event, props);
 };
+
+export const logError = (screen: string, error: unknown): void => {
+  const message = error instanceof Error ? error.message : String(error);
+  if (__DEV__) {
+    console.warn(`[${screen}]`, message);
+  }
+  track("error_caught", { screen, message });
+};

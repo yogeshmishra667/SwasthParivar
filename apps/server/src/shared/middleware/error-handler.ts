@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler } from "express";
 import { ZodError } from "zod";
+import { Prisma } from "@prisma/client";
 import { DomainError, type ApiError, type ErrorCode } from "@swasth/shared-types";
 import { logger } from "../logger.js";
 import { isProd } from "../../config/env.js";
@@ -56,6 +57,26 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     };
     res.status(statusFor(err.code)).json(body);
     return;
+  }
+
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    const prismaBody = (status: number, code: ErrorCode, message: string): void => {
+      const body: ApiError = { success: false, error: { code, message } };
+      res.status(status).json(body);
+    };
+    switch (err.code) {
+      case "P2025":
+        prismaBody(404, "MED_SCHEDULE_NOT_FOUND", "Record not found");
+        return;
+      case "P2002":
+        prismaBody(409, "FAMILY_LINK_EXISTS", "Duplicate record");
+        return;
+      case "P2003":
+        prismaBody(400, "VALIDATION_ERROR", "Referenced record does not exist");
+        return;
+      default:
+        break;
+    }
   }
 
   logger.error({ err, requestId: req.requestId, path: req.path }, "unhandled error");

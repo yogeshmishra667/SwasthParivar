@@ -10,7 +10,12 @@
     "loading": "Ek minute...",
     "offline": "Offline",
     "synced": "Sync ho gaya",
-    "savedLocally": "Locally save hua"
+    "savedLocally": "Locally save hua",
+    "next": "Agay badhein",
+    "skip": "Abhi skip",
+    "days": "din",
+    "dashboard": "Dashboard",
+    "logout": "Logout"
   },
   "auth": {
     "enterPhone": "Apna phone number dalein",
@@ -23,11 +28,34 @@
     "selectCondition": "Kaun si condition manage kar rahe hain?",
     "diabetes": "Sugar (Diabetes)",
     "firstReading": "Pehli reading log karein",
-    "celebrate": "Pehli reading save ho gayi!"
+    "celebrate": "Pehli reading save ho gayi!",
+    "tellUs": "Thoda bataiye",
+    "namePlaceholder": "Naam",
+    "agePlaceholder": "Umar",
+    "addMedicines": "Dawaiyan add karni hain?",
+    "addMedicinesLater": "Baad mein bhi kar sakte hain."
+  },
+  "tabs": {
+    "home": "Home",
+    "log": "Log",
+    "medications": "Dawai",
+    "settings": "Settings"
+  },
+  "dashboard": {
+    "greeting": "Namaste, {{name}} ji",
+    "greetingDefault": "Namaste",
+    "staleData": "Purana data dikh raha hai — pull to refresh.",
+    "todayStreak": "Aaj ki streak",
+    "lastReading": "Aakhri reading",
+    "noReadings": "Koi reading nahi — abhi log karein.",
+    "todayReadings": "Aaj ki readings",
+    "logReading": "Reading log karein"
   },
   "logging": {
     "tapToSpeak": "Bolne ke liye tap karein",
-    "useNumpad": "Ya numpad use karein",
+    "listening": "Suna ja raha hai...",
+    "useNumpad": "Numpad use karein",
+    "useVoice": "Voice try karein",
     "confirmSave": "{{value}} mg/dL — {{profile}} ke liye save karein?",
     "fasting": "Fasting (khana khane se pehle)",
     "postMeal": "Khana khane ke baad",
@@ -37,14 +65,35 @@
     "notSure": "Fasting ya post-meal? Tap karein.",
     "profileLine": "{{profile}} ke liye save ho raha hai",
     "recentSwitchConfirm": "Yeh {{profile}} ke liye hai — sahi hai?",
-    "extremeConfirm": "{{value}} — yeh bahut {{direction}} hai. Kya sahi hai?"
+    "extremeConfirm": "{{value}} — yeh bahut {{direction}} hai. Kya sahi hai?",
+    "saved": "Save ho gaya",
+    "saveFailed": "Save nahi ho paya — data locally safe hai, sync baad mein hoga.",
+    "streakCount": "{{count}} din ka streak",
+    "readingSaved": "Reading save hui"
   },
   "feedback": {
+    "first_ever": "Pehli reading save ho gayi!",
+    "celebrate": "Shaabash! Pichli baar se behtar.",
+    "neutral": "Save ho gaya.",
+    "gentle_warn": "Thoda zyada hai. Paani peeyein.",
     "noted": "{{value}} noted. {{streak}} din ka streak",
     "celebrateDelta": "Shaabash! Pichli baar se {{delta}} kam.",
     "gentleWarnDelta": "{{value}} thoda zyada hai. Paani peeyein.",
     "firstReading": "Pehli reading! {{value}} mg/dL save ho gaya.",
     "festiveSkip": "Festival hai! Enjoy karein. Kal se phir track karenge."
+  },
+  "medications": {
+    "title": "Dawai",
+    "noMedicines": "Koi dawai add nahi hai.",
+    "addFromSettings": "Settings se add karein.",
+    "addMedicines": "Haan, add karein"
+  },
+  "settings": {
+    "title": "Settings",
+    "switchToEnglish": "Switch to English",
+    "switchToHindi": "Hindi par switch karein",
+    "normalText": "Normal text",
+    "largeText": "Bada text (1.3x)"
   },
   "critical": {
     "lowTitle": "Sugar bahut kam hai ({{value}})",

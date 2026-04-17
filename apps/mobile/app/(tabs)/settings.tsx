@@ -1,5 +1,6 @@
 import { View, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import { useAuthStore } from "@/stores/auth.store";
 import { usePreferencesStore } from "@/stores/preferences.store";
@@ -7,6 +8,7 @@ import { i18n } from "@/i18n/config";
 import { useRouter } from "expo-router";
 
 export default function SettingsScreen(): JSX.Element {
+  const { t } = useTranslation();
   const router = useRouter();
   const clear = useAuthStore((s) => s.clear);
   const largeText = usePreferencesStore((s) => s.largeText);
@@ -16,10 +18,10 @@ export default function SettingsScreen(): JSX.Element {
 
   return (
     <SafeAreaView className="flex-1 gap-4 bg-white p-6">
-      <Text className="text-hero font-bold">Settings</Text>
+      <Text className="text-hero font-bold">{t("settings.title")}</Text>
 
       <Button
-        label={language === "hi" ? "Switch to English" : "हिन्दी par switch karein"}
+        label={language === "hi" ? t("settings.switchToEnglish") : t("settings.switchToHindi")}
         variant="ghost"
         onPress={() => {
           const next = language === "hi" ? "en" : "hi";
@@ -29,14 +31,14 @@ export default function SettingsScreen(): JSX.Element {
       />
 
       <Button
-        label={largeText ? "Normal text" : "Bada text (1.3×)"}
+        label={largeText ? t("settings.normalText") : t("settings.largeText")}
         variant="ghost"
         onPress={() => setLargeText(!largeText)}
       />
 
       <View className="mt-6">
         <Button
-          label="Logout"
+          label={t("common.logout")}
           variant="critical"
           onPress={() => {
             void clear().then(() => router.replace("/(auth)/login"));

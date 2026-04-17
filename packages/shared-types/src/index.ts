@@ -5,3 +5,4 @@ export * from "./streak.js";
 export * from "./notifications.js";
 export * from "./errors.js";
 export * from "./profile.js";
+export * from "./medications.js";

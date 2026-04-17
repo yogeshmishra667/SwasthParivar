@@ -10,7 +10,12 @@
     "loading": "Loading...",
     "offline": "Offline",
     "synced": "Synced",
-    "savedLocally": "Saved locally"
+    "savedLocally": "Saved locally",
+    "next": "Continue",
+    "skip": "Skip for now",
+    "days": "days",
+    "dashboard": "Dashboard",
+    "logout": "Logout"
   },
   "auth": {
     "enterPhone": "Enter your phone number",
@@ -23,11 +28,34 @@
     "selectCondition": "Which condition are you managing?",
     "diabetes": "Diabetes",
     "firstReading": "Log your first reading",
-    "celebrate": "Well done! Your first reading is saved."
+    "celebrate": "Well done! Your first reading is saved!",
+    "tellUs": "Tell us about yourself",
+    "namePlaceholder": "Name",
+    "agePlaceholder": "Age",
+    "addMedicines": "Want to add medicines?",
+    "addMedicinesLater": "You can add them later too."
+  },
+  "tabs": {
+    "home": "Home",
+    "log": "Log",
+    "medications": "Meds",
+    "settings": "Settings"
+  },
+  "dashboard": {
+    "greeting": "Hello, {{name}}",
+    "greetingDefault": "Hello",
+    "staleData": "Showing older data — pull to refresh.",
+    "todayStreak": "Current streak",
+    "lastReading": "Last reading",
+    "noReadings": "No readings yet — log one now.",
+    "todayReadings": "Today's readings",
+    "logReading": "Log a reading"
   },
   "logging": {
     "tapToSpeak": "Tap to speak",
-    "useNumpad": "Or use numpad",
+    "listening": "Listening...",
+    "useNumpad": "Use numpad",
+    "useVoice": "Try voice",
     "confirmSave": "Save {{value}} mg/dL for {{profile}}?",
     "fasting": "Fasting",
     "postMeal": "Post-meal",
@@ -37,14 +65,35 @@
     "notSure": "Fasting or post-meal? Tap to choose.",
     "profileLine": "Saving for {{profile}}",
     "recentSwitchConfirm": "This is for {{profile}} — correct?",
-    "extremeConfirm": "{{value}} — this is very {{direction}}. Is it correct?"
+    "extremeConfirm": "{{value}} — this is very {{direction}}. Is it correct?",
+    "saved": "Saved",
+    "saveFailed": "Could not save — data is safe locally, will sync later.",
+    "streakCount": "{{count}} day streak",
+    "readingSaved": "Reading saved"
   },
   "feedback": {
+    "first_ever": "First reading saved!",
+    "celebrate": "Great! Better than last time.",
+    "neutral": "Saved.",
+    "gentle_warn": "A bit high. Stay hydrated.",
     "noted": "{{value}} noted. {{streak}} day streak",
     "celebrateDelta": "Great! Down {{delta}} from last time.",
     "gentleWarnDelta": "{{value}} is a bit high. Stay hydrated.",
     "firstReading": "First reading! {{value}} mg/dL saved.",
     "festiveSkip": "Festival day — enjoy! Back to tracking tomorrow."
+  },
+  "medications": {
+    "title": "Medications",
+    "noMedicines": "No medicines added.",
+    "addFromSettings": "Add from settings.",
+    "addMedicines": "Yes, add"
+  },
+  "settings": {
+    "title": "Settings",
+    "switchToEnglish": "Switch to English",
+    "switchToHindi": "Switch to Hindi",
+    "normalText": "Normal text",
+    "largeText": "Large text (1.3x)"
   },
   "critical": {
     "lowTitle": "Sugar is very low ({{value}})",

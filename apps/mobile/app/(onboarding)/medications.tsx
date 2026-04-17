@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { View, Text } from "react-native";
 import { useRouter } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import { api } from "@/services/api";
+import { logError } from "@/services/analytics";
 
 export default function MedicationsOnboarding(): JSX.Element {
+  const { t } = useTranslation();
   const router = useRouter();
   const [saving, setSaving] = useState(false);
 
@@ -15,8 +18,8 @@ export default function MedicationsOnboarding(): JSX.Element {
         onboardingComplete: true,
         onboardingStep: 5,
       });
-    } catch {
-      // offline-first — proceed to dashboard
+    } catch (e) {
+      logError("onboarding/medications", e);
     }
     setSaving(false);
     router.replace("/(tabs)/dashboard");
@@ -24,15 +27,15 @@ export default function MedicationsOnboarding(): JSX.Element {
 
   return (
     <View className="flex-1 justify-center gap-4 bg-white p-6">
-      <Text className="text-hero font-bold">Dawaiyan add karni hain?</Text>
-      <Text className="text-important">Baad mein bhi kar sakte hain.</Text>
+      <Text className="text-hero font-bold">{t("onboarding.addMedicines")}</Text>
+      <Text className="text-important">{t("onboarding.addMedicinesLater")}</Text>
       <Button
-        label="Haan, add karein"
+        label={t("medications.addMedicines")}
         onPress={() => router.push("/(tabs)/medications")}
         disabled={saving}
       />
       <Button
-        label="Abhi skip"
+        label={t("common.skip")}
         variant="ghost"
         onPress={() => void completeOnboarding()}
         disabled={saving}

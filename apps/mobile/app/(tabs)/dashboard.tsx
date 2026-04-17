@@ -2,13 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, ScrollView, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
 import { ProfileSwitcher } from "@/components/profile/ProfileSwitcher";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useActiveProfile } from "@/hooks/useActiveProfile";
+import { useProfileStore } from "@/stores/profile.store";
 import { api } from "@/services/api";
+import { logError } from "@/services/analytics";
 
 interface DashboardData {
   streak: { currentStreakDays: number };
@@ -24,34 +27,53 @@ const EMPTY: DashboardData = {
   medications: [],
 };
 
+const AVATAR_COLORS = ["#2563EB", "#16A34A", "#D97706", "#DC2626", "#8B5CF6"];
+
 export default function DashboardScreen(): JSX.Element {
+  const { t } = useTranslation();
   const router = useRouter();
   const profile = useActiveProfile();
+  const setHousehold = useProfileStore((s) => s.setHousehold);
   const [data, setData] = useState<DashboardData>(EMPTY);
   const [refreshing, setRefreshing] = useState(false);
   const [stale, setStale] = useState(false);
 
-  const fetchDashboard = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     try {
-      const res = await api.get<{ success: boolean; data: DashboardData }>("/dashboard");
-      setData(res.data);
+      const [dashRes, userRes] = await Promise.all([
+        api.get<{ success: boolean; data: DashboardData }>("/dashboard"),
+        api.get<{ success: boolean; data: { householdId: string; householdProfiles: { id: string; name: string; age: number; conditions: string[] }[] } }>("/users/me"),
+      ]);
+      setData(dashRes.data);
+      setHousehold(
+        userRes.data.householdId,
+        userRes.data.householdProfiles.map((p, i) => ({
+          id: p.id,
+          name: p.name || "User",
+          avatarColor: AVATAR_COLORS[i % AVATAR_COLORS.length] ?? "#6B7280",
+          conditions: p.conditions,
+        })),
+      );
       setStale(false);
-    } catch {
+    } catch (e) {
+      logError("dashboard", e);
       setStale(true);
     }
-  }, []);
+  }, [setHousehold]);
 
   useEffect(() => {
-    void fetchDashboard();
-  }, [fetchDashboard]);
+    void fetchAll();
+  }, [fetchAll]);
 
   const onRefresh = async (): Promise<void> => {
     setRefreshing(true);
-    await fetchDashboard();
+    await fetchAll();
     setRefreshing(false);
   };
 
-  const greeting = profile?.name ? `Namaste, ${profile.name} ji` : "Namaste";
+  const greeting = profile?.name
+    ? t("dashboard.greeting", { name: profile.name })
+    : t("dashboard.greetingDefault");
   const streak = data.streak.currentStreakDays;
   const latest = data.latestReading;
 
@@ -72,42 +94,38 @@ export default function DashboardScreen(): JSX.Element {
         }
       >
         {stale && (
-          <Text className="text-body text-warning">
-            Purana data dikh raha hai — pull to refresh.
-          </Text>
+          <Text className="text-body text-warning">{t("dashboard.staleData")}</Text>
         )}
 
         <Card>
-          <Text className="text-body text-neutral">Aaj ki streak</Text>
+          <Text className="text-body text-neutral">{t("dashboard.todayStreak")}</Text>
           <View className="mt-1 flex-row items-center gap-2">
             <Icon name="flame" size={28} color="#F59E0B" />
             <Text className="text-hero font-bold">{streak}</Text>
-            <Text className="text-body text-neutral">din</Text>
+            <Text className="text-body text-neutral">{t("common.days")}</Text>
           </View>
         </Card>
 
         <Card>
-          <Text className="text-body text-neutral">Aakhri reading</Text>
+          <Text className="text-body text-neutral">{t("dashboard.lastReading")}</Text>
           {latest ? (
             <>
               <Text className="text-hero font-bold">{latest.valueMgDl} mg/dL</Text>
               <Text className="text-body text-neutral">
-                {latest.readingType === "fasting" ? "Fasting" : "Post-meal"}
+                {latest.readingType === "fasting" ? t("logging.fasting") : t("logging.postMeal")}
               </Text>
             </>
           ) : (
-            <Text className="text-body text-neutral">
-              Koi reading nahi — abhi log karein.
-            </Text>
+            <Text className="text-body text-neutral">{t("dashboard.noReadings")}</Text>
           )}
         </Card>
 
         <Card>
-          <Text className="text-body text-neutral">Aaj ki readings</Text>
+          <Text className="text-body text-neutral">{t("dashboard.todayReadings")}</Text>
           <Text className="text-hero font-bold">{data.todayReadingCount}</Text>
         </Card>
 
-        <Button label="Reading log karein" onPress={() => router.push("/(tabs)/log")} />
+        <Button label={t("dashboard.logReading")} onPress={() => router.push("/(tabs)/log")} />
       </ScrollView>
     </SafeAreaView>
   );

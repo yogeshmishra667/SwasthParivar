@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import { api } from "@/services/api";
+import { logError } from "@/services/analytics";
 
 export default function ConditionScreen(): JSX.Element {
   const { t } = useTranslation();
@@ -17,8 +18,8 @@ export default function ConditionScreen(): JSX.Element {
         conditions: [condition],
         onboardingStep: 2,
       });
-    } catch {
-      // continue even if server unreachable — offline-first
+    } catch (e) {
+      logError("onboarding/condition", e);
     }
     setSaving(false);
     router.push("/(onboarding)/profile");

@@ -3,6 +3,7 @@ import { Redirect } from "expo-router";
 import { useAuthStore } from "@/stores/auth.store";
 import { useProfileStore } from "@/stores/profile.store";
 import { api } from "@/services/api";
+import { logError } from "@/services/analytics";
 
 type Route =
   | "/(auth)/login"
@@ -75,7 +76,8 @@ export default function Index(): JSX.Element | null {
         } else {
           setRoute(ONBOARDING_ROUTES[onboardingStep] ?? "/(onboarding)/language");
         }
-      } catch {
+      } catch (e) {
+        logError("index", e);
         setRoute("/(tabs)/dashboard");
       }
     })();

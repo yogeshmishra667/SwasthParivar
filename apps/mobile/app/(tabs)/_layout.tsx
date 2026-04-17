@@ -1,4 +1,5 @@
 import { Tabs } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 
@@ -18,6 +19,8 @@ const iconFor = (routeName: string): IconName => {
 };
 
 export default function TabsLayout(): JSX.Element {
+  const { t } = useTranslation();
+
   return (
     <Tabs
       screenOptions={({ route }) => ({
@@ -29,10 +32,10 @@ export default function TabsLayout(): JSX.Element {
         tabBarIcon: ({ color, size }) => <Icon name={iconFor(route.name)} size={size} color={color} />,
       })}
     >
-      <Tabs.Screen name="dashboard" options={{ title: "Home" }} />
-      <Tabs.Screen name="log" options={{ title: "Log" }} />
-      <Tabs.Screen name="medications" options={{ title: "Dawai" }} />
-      <Tabs.Screen name="settings" options={{ title: "Settings" }} />
+      <Tabs.Screen name="dashboard" options={{ title: t("tabs.home") }} />
+      <Tabs.Screen name="log" options={{ title: t("tabs.log") }} />
+      <Tabs.Screen name="medications" options={{ title: t("tabs.medications") }} />
+      <Tabs.Screen name="settings" options={{ title: t("tabs.settings") }} />
     </Tabs>
   );
 }

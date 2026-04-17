@@ -7,6 +7,7 @@ import { NumpadInput } from "@/components/logging/NumpadInput";
 import { ConfirmationScreen } from "@/components/logging/ConfirmationScreen";
 import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
+import { logError } from "@/services/analytics";
 import { hapticCelebrate } from "@/utils/haptics";
 import { track } from "@/services/analytics";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
@@ -28,14 +29,13 @@ export default function FirstReadingScreen(): JSX.Element {
         valueMgDl: value,
         readingType: type,
         source: "manual",
-        measuredAtIso: new Date().toISOString(),
-        userTimezoneOffsetMinutes: -new Date().getTimezoneOffset(),
+        measuredAt: new Date().toISOString(),
         version: 1,
       });
       track("reading_logged", { type, source: "manual", value });
       await api.patch("/users/me", { onboardingStep: 4 });
-    } catch {
-      // offline-first — continue to celebration
+    } catch (e) {
+      logError("onboarding/first-reading", e);
     }
     setSaving(false);
     hapticCelebrate();
@@ -54,7 +54,7 @@ export default function FirstReadingScreen(): JSX.Element {
           className="mt-4 items-center justify-center px-4"
         >
           <Text className="text-important font-semibold text-primary underline">
-            Agay badhein
+            {t("common.next")}
           </Text>
         </Pressable>
       </View>

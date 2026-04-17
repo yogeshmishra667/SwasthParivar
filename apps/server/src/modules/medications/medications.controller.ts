@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import type { MedicationLogStatus } from "@swasth/shared-types";
 import { ok } from "../../shared/http.js";
 import * as service from "./medications.service.js";
 
@@ -7,9 +8,13 @@ export const getSchedules = async (req: Request, res: Response): Promise<void> =
 };
 
 export const postSchedule = async (req: Request, res: Response): Promise<void> => {
-  const body = req.body as Parameters<typeof service.createSchedule>[0] extends infer _
-    ? { medicineName: string; dosage?: string; timeSlots: string[]; condition?: string; isCritical: boolean }
-    : never;
+  const body = req.body as {
+    medicineName: string;
+    dosage?: string;
+    timeSlots: string[];
+    condition?: string;
+    isCritical: boolean;
+  };
   const created = await service.createSchedule({ userId: req.auth!.sub, ...body });
   ok(res, created, 201);
 };
@@ -17,7 +22,7 @@ export const postSchedule = async (req: Request, res: Response): Promise<void> =
 export const postLog = async (req: Request, res: Response): Promise<void> => {
   const body = req.body as {
     scheduleId: string;
-    status: "taken" | "skipped" | "missed_no_response" | "delayed";
+    status: MedicationLogStatus;
     scheduledFor: string;
     skipReason?: string;
   };

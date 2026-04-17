@@ -1,12 +1,12 @@
 # SwasthParivar — Build Progress
 
-**Last session:** 2026-04-16
-**Branch:** main (4 commits local, unpushed — GitHub network issue at time of session)
+**Last updated:** 2026-04-17 (session 2, end)
+**Branch:** main
 
-## Current dependency versions
+## Dependency versions
 
 | Package | Version |
-|---|---|
+| --- | --- |
 | Prisma (client + CLI) | 7.7.0 |
 | @prisma/adapter-pg | 7.7.0 |
 | Express | 5.x |
@@ -16,133 +16,120 @@
 | React | 19 |
 | React Native | 0.81 |
 | expo-router | 6.x |
-| pnpm | workspace |
 
-## What exists
+---
 
-### Monorepo
-pnpm workspace, TypeScript strict (no `any`, exactOptionalPropertyTypes,
-noUncheckedIndexedAccess), ESLint (typescript-eslint recommendedTypeChecked),
-Prettier, Vitest. Docker-compose with TimescaleDB + Redis. Claude Code
-config with agents, skills, commands, and a PostToolUse hook that blocks
-domain-logic from importing `@prisma`, `ioredis`, `bullmq`.
+## Backend — Phase 1
 
-### `packages/`
-- **shared-types** — source-referenced (main/types → `src/index.ts`, no
-  dist build needed). Glucose thresholds hardcoded (65/315).
-- **domain-logic** — pure functions, zero DB/network imports:
-  - voice-parser (Hindi colloquial dict, longer-phrase priority,
-    past-tense rejection, uncertainty detection)
-  - streak-engine (3AM IST boundary via `streakDateFor()`, grace,
-    anti-cheat flags)
-  - feedback-engine (same-type comparison, 7-day rolling median,
-    festive override, noise floor <10)
-  - notification-resolver (priority order, fatigue levels 0-3,
-    24hr dedup)
-  - critical-bypass (always fullscreen+call; push/SMS skipped in cooldown)
-- **test-factories** — faker-based User, GlucoseReading, UserStreak,
-  NotificationState, voice transcript fixtures.
+### Completed
 
-**45 unit tests pass.**
+- [x] Auth module — OTP+JWT, dev bypass (000000), refresh tokens
+- [x] Users module — GET /api/v1/users/me (profile + household), PATCH /api/v1/users/me (name, age, conditions, language, timezone, onboardingStep, onboardingComplete)
+- [x] Readings module — POST glucose (idempotent by clientUuid, version conflict 409, returns streak + feedback + critical decision), GET list (cursor pagination)
+- [x] Medications module — CRUD schedules, log taken/skipped/delayed, adherence query. Status type from @swasth/shared-types.
+- [x] Streaks module — GET current streak
+- [x] Dashboard module — GET (streak, latest reading, today count, active meds). Re-fetches /users/me to refresh profile store.
+- [x] Sync module — push/pull endpoint stubs
+- [x] Health module — GET /health, GET /health/deep
+- [x] Error handler — ZodError->400, DomainError->mapped, Prisma P2025->404, P2002->409, P2003->400, unhandled->logged+500
+- [x] Database — Prisma 7 pg driver adapter, prisma.config.ts, init migration applied, TimescaleDB hypertable on glucose_readings
+- [x] Schema — 9 models: User, Household, EmergencyContact, GlucoseReading (composite PK+unique), MedicationSchedule, MedicationLog, UserStreak, FeedbackEvent, NotificationState
 
-### `apps/server/` (Phase 1 scope)
-Express 5 + Prisma 7 (strict, no `any`). **No express-async-errors** —
-Express 5 propagates async errors natively.
+### Pending
 
-**Database layer:** `pg.Pool` + `@prisma/adapter-pg` driver adapter pattern.
-Datasource URL is NOT in schema.prisma — it lives in `prisma.config.ts`
-(Prisma 7 external config). `database.ts` creates the pool and passes
-the adapter to PrismaClient. On disconnect: `prisma.$disconnect()` then
-`pool.end()`.
+- [ ] **BullMQ critical-alert worker** — currently logs and exits. Wire Expo Push (primary) + MSG91 SMS (fallback). Per CLAUDE.md: push to ALL guardian contacts, SMS only where push fails.
+- [ ] **Push token registration** — POST /api/v1/auth/push-token endpoint. Mobile has client-side `registerForPushNotificationsAsync()` ready but never called.
+- [ ] **Notification scheduling** — med reminder jobs (delayed per med time), best-time detection (rolling 5-day avg), streak-risk (>=7 and no log by 8PM), anti-fatigue (max 2 push/day, 3 ignores->1/day, 7->stop).
+- [ ] **Sync endpoints** — real conflict resolution: client_uuid + version, reject stale (version <= stored) with 409, last-write-wins by version.
+- [ ] **Integration tests** — health.test.ts stub exists with Testcontainers setup. Needs: dynamic env import (app.ts has buildApp()), readings endpoint test, sync conflict test.
 
-**Schema (9 models):** User, Household, EmergencyContact, GlucoseReading
-(composite `@@id([id, measuredAt])` for hypertable + `@@unique([clientUuid, measuredAt])`),
-MedicationSchedule, MedicationLog, UserStreak, FeedbackEvent, NotificationState.
+---
 
-**Migration:** `apps/server/prisma/migrations/20260416063106_init/` exists
-but has NOT been applied to local Docker yet. Run after `docker-compose up -d`:
+## Frontend — Phase 1
+
+### Completed
+
+- [x] Auth flow — login, verify, SecureStore tokens, dev bypass (000000)
+- [x] 401 auto-refresh interceptor — detects 401, refreshes via /auth/refresh, retries request, concurrent-safe promise lock
+- [x] Onboarding (end-to-end) — language (local pref), condition (PATCH conditions), profile (PATCH name+age), first-reading (POST /readings/glucose), medications (PATCH onboardingComplete). Each screen tracks onboardingStep.
+- [x] index.tsx routing — fetches /users/me, routes to correct onboarding step if incomplete, dashboard if done. Seeds profile store with household profiles.
+- [x] Dashboard — real data from GET /dashboard (streak, latest reading, today count). Pull-to-refresh. Stale data warning. Re-fetches /users/me to refresh profile badge.
+- [x] Log screen — numpad input, voice stub, confirmation with profile badge + type toggle + 3s delay on extreme values. Shows feedback message + streak after save. Triggers fullscreen CriticalAlert for glucose <65 or >315.
+- [x] Profile switcher + badge — seeded from /users/me on app start + dashboard mount. Netflix-style avatars. Locks during logging.
+- [x] Icon component — @expo/vector-icons Ionicons wrapper. Tab bar icons (home, add-circle, medkit, settings). All emojis removed.
+- [x] i18n — all screens use t() calls. hi.json + en.json. Language switch in settings works. compatibilityJSON v3.
+- [x] Error logging — logError(screen, error) in all catch blocks. console.warn in dev, PostHog track in prod.
+- [x] Reading save fix — sends `measuredAt` (not `measuredAtIso`) matching server validation schema.
+
+### Pending
+
+- [ ] **Voice input** — wire `expo-speech-recognition` to replace VoiceInput.tsx setTimeout stub. Call `parseVoiceTranscript()` from @swasth/domain-logic with real transcript + confidence. CLAUDE.md: 2 fails -> auto-show numpad, 5s silence -> dismiss mic.
+- [ ] **Medications CRUD UI** — medications tab is placeholder. Needs: add medicine (name + time slots), edit/delete, mark taken/skipped per schedule, adherence display.
+- [ ] **Med reminder notifications** — schedule local notifications via expo-notifications at med times. Reschedule on add/edit/delete.
+- [ ] **WatermelonDB sync** — offline-first queue for readings + meds. Sync on reconnect. db/sync.ts calls /sync/pull and /sync/push but not wired to app lifecycle.
+- [ ] **Push token registration** — call registerForPushNotificationsAsync() on app launch, POST token to server.
+- [ ] **Settings persistence** — preferences (language, large text) reset on app restart. Needs Zustand persist middleware with AsyncStorage.
+- [ ] **Large text toggle** — toggle state exists but doesn't scale fonts. Need to apply LARGE_TEXT_SCALE (1.3x) to NativeWind/Tailwind config dynamically.
+- [ ] **Profile inactivity check** — per CLAUDE.md: app open after 30+ min inactive -> show profile selector. Not implemented.
+- [ ] **Undo reading** — "Undo" toast shows but doesn't call API to delete the reading.
+
+---
+
+## Critical patterns
+
+- Prisma 7: datasource URL in prisma.config.ts, PrismaPg adapter
+- GlucoseReading: @@unique([clientUuid, measuredAt]), findFirst not findUnique
+- Pagination cursor: composite clientUuid_measuredAt string
+- Express 5: async errors propagate natively, no express-async-errors
+- Metro: custom resolver in metro.config.js for .js -> .ts workspace imports
+- semver@7 forced via root package.json dep (reanimated needs functions/satisfies)
+- Mobile field name: `measuredAt` (not measuredAtIso) — must match server Zod schema
+
+## DB access
+
 ```
-pnpm --filter=@swasth/server exec prisma migrate deploy
-# then add hypertable:
-docker exec -it <timescale-container> psql -U postgres -d swasth_parivar \
-  -c "SELECT create_hypertable('glucose_readings', 'measured_at');"
+docker exec -it swasth-postgres psql -U postgres -d swasth_parivar
 ```
 
-Modules wired: auth (OTP+JWT), readings (idempotent by clientUuid,
-version conflict → 409, enqueues CRITICAL_ALERT), medications, streaks,
-sync (push/pull), dashboard, health. BullMQ critical-alert worker is a
-stub — MSG91 + Expo Push not yet wired.
+```sql
+SELECT id, name, age, conditions, onboarding_complete, onboarding_step FROM users;
+SELECT id, user_id, value_mg_dl, reading_type, measured_at FROM glucose_readings ORDER BY measured_at DESC;
+SELECT * FROM user_streaks;
+-- Reset user for re-testing onboarding:
+UPDATE users SET name='', age=0, conditions='{}', onboarding_complete=false, onboarding_step=0 WHERE phone='+919999999999';
+```
 
-**Pagination cursor:** composite `${clientUuid}_${measuredAt.toISOString()}`
-(not plain clientUuid — required because `@@id` is composite for hypertable).
+---
 
-**Integration tests:** `apps/server/tests/integration/health.test.ts` —
-Testcontainers (TimescaleDB + Redis), runs prisma migrate deploy, creates
-hypertable, then tests `/health` and `/health/deep`. Stub only — needs
-`buildApp()` export from `app.ts` and the pool/adapter to accept dynamic URLs.
+## Changelog
 
-### `apps/mobile/` (Phase 1 scope)
-Expo SDK 54, React Native 0.81, React 19, New Architecture, Expo Router v6,
-NativeWind v4, Zustand, WatermelonDB, i18next (hi default).
-`experimentalDecorators: true` for WatermelonDB models.
+### Session 2 (2026-04-17)
 
-Routes: `(auth)` login/verify, `(onboarding)` language→condition→profile
-→first-reading→medications, `(tabs)` dashboard/log/medications/settings,
-plus SOS modal. Voice input is a stub — `expo-speech-recognition` not
-yet wired. Analytics events shape matches root CLAUDE.md spec.
+1. Created users module (GET + PATCH /api/v1/users/me)
+2. Wired all 5 onboarding screens to persist data via API
+3. index.tsx: fetches /users/me, routes to correct onboarding step, seeds profile store
+4. Dashboard: real data fetch + pull-to-refresh + stale warning + profile re-fetch
+5. Log screen: shows feedback + streak after save, triggers CriticalAlert on extreme values
+6. Created shared-types/medications.ts, deduplicated MedicationLogStatus across server
+7. Error handler: added Prisma P2025/P2002/P2003 catch
+8. Mobile api.ts: 401 auto-refresh interceptor with concurrent race prevention
+9. All catch blocks replaced with logError() — no silent swallowing
+10. Fixed reading save: measuredAtIso -> measuredAt field name mismatch
+11. Dashboard re-fetches /users/me to refresh profile badge after onboarding
+12. All screens converted to t() i18n calls — language switch now works
+13. Added i18n keys: dashboard, logging, medications, settings, onboarding sections
 
-## Critical patterns (already applied, don't repeat)
+### Session 1 (2026-04-16)
 
-- **Internal package type resolution**: `shared-types` + `domain-logic`
-  both source-reference `src/index.ts` via package.json `main`/`types`/
-  `exports`. No dist build in dev. Consumers import `@swasth/*` and TS
-  resolves to source.
-- **Prisma 7 config**: datasource URL goes in `prisma.config.ts`, NOT in
-  `schema.prisma`. `PrismaClient` receives a `PrismaPg` adapter, not
-  `datasources` override.
-- **Express augmentation**: types in `apps/server/src/types.d.ts`
-  augmenting `express-serve-static-core`. `@types/express-serve-static-core`
-  must be an explicit dep (not transitive).
-- **GlucoseReading unique constraint**: `@@unique([clientUuid, measuredAt])`
-  — NOT `@unique` on clientUuid alone. TimescaleDB hypertable forces
-  composite PK `@@id([id, measuredAt])`, which makes standalone unique
-  indices incompatible. Queries use `findFirst({ where: { clientUuid } })`
-  and update `where: { clientUuid_measuredAt: { ... } }`.
-- **Voice parser colloquial matching**: phrases sorted by length DESC
-  before lookup so "sava do sau"→225 matches before "do sau"→200.
-- **Past-tense rejection**: `if (hasNegated) reject` unconditionally —
-  do NOT gate on `!hasPresent`.
-- **Streak boundary**: always use `streakDateFor(measuredAtIso, tzOffset)`
-  — never fall back to raw `todayIso`.
-- **Critical bypass**: fullscreen+call ALWAYS; only push/SMS skipped
-  within 30-min cooldown.
-- **Express 5**: do NOT add express-async-errors — Express 5 handles
-  async errors natively.
-
-## Pending work (Phase 1 completion)
-
-1. **Voice API wiring** — replace `apps/mobile/src/components/logging/
-   VoiceInput.tsx` stub with real `expo-speech-recognition` integration.
-   Call `parseVoiceTranscript()` with actual transcript + confidence.
-2. **Server BullMQ worker integrations** — wire Expo Push (primary) and
-   MSG91 SMS (fallback) in `apps/server/src/workers/critical-alert.worker.ts`.
-   Currently logs and exits.
-3. **Apply migration + hypertable** — migration file exists; run against
-   local Docker (see commands above). Then verify `@@unique([clientUuid, measuredAt])`
-   is enforced at DB level.
-4. **Integration tests wiring** — `health.test.ts` stub exists but
-   `app.ts` needs `buildApp()` export and the database adapter needs
-   to accept the Testcontainers URL at test time (dynamic import after env set).
-5. **Push token registration** — `POST /api/v1/auth/push-token` endpoint
-   not implemented; mobile `services/notifications.ts` has the client
-   side ready.
-6. **WatermelonDB sync wiring** — `apps/mobile/src/db/sync.ts` calls
-   `/sync/pull` and `/sync/push`; server endpoints exist as stubs, need
-   real conflict resolution matching root CLAUDE.md §13 (version-based
-   with 409 on stale).
-
-## Do NOT start Phase 2 until
-
-- Papa logs 2+ readings/day for 14 consecutive days (CLAUDE.md success
-  metric). Phase 1 ships first: glucose only, no BP, no meals, no AI
-  chat, no guardian alerts, no SOS.
+1. Upgraded deps: Prisma 7, Express 5, TS 6, Vitest 4, Expo 54, React 19, RN 0.81
+2. shamefully-hoist=true for Metro pnpm compat
+3. Metro custom resolver for .js -> .ts workspace imports
+4. semver@7 override for reanimated
+5. SplashScreen lifecycle fix (preventAutoHide + hideAsync)
+6. verify.tsx response unwrapping fix
+7. Dev OTP bypass (000000)
+8. expo-notifications v0.32 API fix
+9. i18n Intl.PluralRules compat (compatibilityJSON v3)
+10. All emojis replaced with Ionicons vector icons
+11. Icon component + tab bar icons
+12. Removed dead components (SyncStatusBadge, TimeoutFallback)
