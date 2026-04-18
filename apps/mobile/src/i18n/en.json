@@ -105,5 +105,8 @@
   "offline": {
     "banner": "Offline mode — readings are safe, will sync later",
     "lastUpdated": "Last updated: {{time}}"
+  },
+  "timeAnomaly": {
+    "banner": "Your phone's clock looks wrong. Turn on automatic time in Settings — otherwise streaks may not count correctly."
   }
 }

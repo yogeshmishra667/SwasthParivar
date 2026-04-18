@@ -17,6 +17,7 @@ export const getProfile = async (userId: string) => {
       onboardingComplete: true,
       onboardingStep: true,
       tier: true,
+      timeAnomalyCount: true,
       createdAt: true,
     },
   });

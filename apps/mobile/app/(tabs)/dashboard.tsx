@@ -37,12 +37,13 @@ export default function DashboardScreen(): JSX.Element {
   const [data, setData] = useState<DashboardData>(EMPTY);
   const [refreshing, setRefreshing] = useState(false);
   const [stale, setStale] = useState(false);
+  const [timeAnomaly, setTimeAnomaly] = useState(false);
 
   const fetchAll = useCallback(async () => {
     try {
       const [dashRes, userRes] = await Promise.all([
         api.get<{ success: boolean; data: DashboardData }>("/dashboard"),
-        api.get<{ success: boolean; data: { householdId: string; householdProfiles: { id: string; name: string; age: number; conditions: string[] }[] } }>("/users/me"),
+        api.get<{ success: boolean; data: { householdId: string; householdProfiles: { id: string; name: string; age: number; conditions: string[] }[]; timeAnomalyCount?: number } }>("/users/me"),
       ]);
       setData(dashRes.data);
       setHousehold(
@@ -54,6 +55,7 @@ export default function DashboardScreen(): JSX.Element {
           conditions: p.conditions,
         })),
       );
+      setTimeAnomaly((userRes.data.timeAnomalyCount ?? 0) >= 2);
       setStale(false);
     } catch (e) {
       logError("dashboard", e);
@@ -95,6 +97,12 @@ export default function DashboardScreen(): JSX.Element {
       >
         {stale && (
           <Text className="text-body text-warning">{t("dashboard.staleData")}</Text>
+        )}
+
+        {timeAnomaly && (
+          <View className="rounded-lg border border-amber-600 bg-amber-50 p-3">
+            <Text className="text-body text-amber-900">{t("timeAnomaly.banner")}</Text>
+          </View>
         )}
 
         <Card>

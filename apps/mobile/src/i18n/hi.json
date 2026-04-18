@@ -105,5 +105,8 @@
   "offline": {
     "banner": "Offline mode — readings safe hain, sync baad mein hoga",
     "lastUpdated": "Last updated: {{time}}"
+  },
+  "timeAnomaly": {
+    "banner": "Phone ka time galat lag raha hai. Settings mein automatic time on karein — warna streak sahi count nahi hoga."
   }
 }
