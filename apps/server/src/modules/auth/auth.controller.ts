@@ -19,3 +19,14 @@ export const postRefresh = async (req: Request, res: Response): Promise<void> =>
   const result = await service.refreshTokens(refreshToken);
   ok(res, result);
 };
+
+export const postPushToken = async (req: Request, res: Response): Promise<void> => {
+  const userId = req.auth!.sub;
+  const body = req.body as {
+    token: string;
+    platform: "ios" | "android" | "web";
+    deviceId?: string;
+  };
+  const result = await service.upsertPushToken({ userId, ...body });
+  ok(res, result);
+};

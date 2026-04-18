@@ -83,6 +83,30 @@ export const verifyOtp = async (
   return { accessToken, refreshToken, userId: user.id, isNew };
 };
 
+export const upsertPushToken = async (params: {
+  userId: string;
+  token: string;
+  platform: "ios" | "android" | "web";
+  deviceId?: string;
+}): Promise<{ id: string }> => {
+  const row = await prisma.pushToken.upsert({
+    where: { token: params.token },
+    create: {
+      userId: params.userId,
+      token: params.token,
+      platform: params.platform,
+      ...(params.deviceId !== undefined ? { deviceId: params.deviceId } : {}),
+    },
+    update: {
+      userId: params.userId,
+      platform: params.platform,
+      ...(params.deviceId !== undefined ? { deviceId: params.deviceId } : {}),
+      lastSeenAt: new Date(),
+    },
+  });
+  return { id: row.id };
+};
+
 export const refreshTokens = async (
   refreshToken: string,
 ): Promise<{ accessToken: string; refreshToken: string }> => {

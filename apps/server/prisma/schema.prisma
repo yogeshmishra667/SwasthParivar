@@ -116,6 +116,7 @@ model User {
   feedbackEvents       FeedbackEvent[]
   notificationState    NotificationState?
   emergencyContacts    EmergencyContact[]
+  pushTokens           PushToken[]
 
   @@index([householdId])
   @@map("users")
@@ -249,6 +250,21 @@ model FeedbackEvent {
 
   @@index([userId, shownAt])
   @@map("feedback_events")
+}
+
+model PushToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid @map("user_id")
+  token      String   @unique
+  platform   String
+  deviceId   String?  @map("device_id")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
 }
 
 model NotificationState {
