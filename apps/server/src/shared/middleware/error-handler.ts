@@ -15,6 +15,7 @@ const statusFor = (code: ErrorCode): number => {
     case "FAMILY_NO_ACCESS":
       return 403;
     case "MED_SCHEDULE_NOT_FOUND":
+    case "READING_NOT_FOUND":
       return 404;
     case "FAMILY_LINK_EXISTS":
     case "SOS_ALREADY_ACTIVE":

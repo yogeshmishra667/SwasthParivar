@@ -203,6 +203,26 @@ export const createGlucoseReading = async (
   };
 };
 
+export const deleteGlucoseReading = async (params: {
+  userId: string;
+  id: string;
+}): Promise<void> => {
+  const existing = await prisma.glucoseReading.findFirst({
+    where: { id: params.id, userId: params.userId },
+  });
+  if (!existing) {
+    throw new DomainError("READING_NOT_FOUND", "reading does not exist");
+  }
+  await prisma.glucoseReading.delete({
+    where: {
+      clientUuid_measuredAt: {
+        clientUuid: existing.clientUuid,
+        measuredAt: existing.measuredAt,
+      },
+    },
+  });
+};
+
 export const listGlucoseReadings = async (params: {
   userId: string;
   from?: Date;

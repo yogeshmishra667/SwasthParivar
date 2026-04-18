@@ -57,6 +57,14 @@ export const postGlucoseVoice = async (req: Request, res: Response): Promise<voi
   ok(res, { ...result, parseHints: { colloquialMatch: parsed.colloquialMatch } }, 201);
 };
 
+export const deleteGlucose = async (req: Request, res: Response): Promise<void> => {
+  const userId = req.auth!.sub;
+  const id = req.params.id;
+  if (!id || typeof id !== "string") throw new DomainError("VALIDATION_ERROR", "id is required");
+  await service.deleteGlucoseReading({ userId, id });
+  ok(res, { deleted: true });
+};
+
 export const getGlucose = async (req: Request, res: Response): Promise<void> => {
   const userId = req.auth!.sub;
   const q = req.query as {

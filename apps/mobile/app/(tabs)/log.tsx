@@ -32,6 +32,7 @@ interface Parsed {
 interface SaveResponse {
   success: boolean;
   data: {
+    reading: { id: string };
     streak: { currentStreakDays: number; milestoneReached: string | null };
     feedback: { tone: string; messageKey: string; params: Record<string, unknown> };
     critical: { isCritical: boolean; direction?: "low" | "high" };
@@ -46,6 +47,7 @@ export default function LogScreen(): JSX.Element {
   const [mode, setMode] = useState<InputMode>("voice");
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [undoVisible, setUndoVisible] = useState(false);
+  const [lastReadingId, setLastReadingId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
   const [streakDays, setStreakDays] = useState(0);
@@ -85,7 +87,8 @@ export default function LogScreen(): JSX.Element {
       });
       track("reading_logged", { type, source: mode, value: parsed.value });
 
-      const { streak, feedback, critical } = res.data;
+      const { reading, streak, feedback, critical } = res.data;
+      setLastReadingId(reading.id);
       setStreakDays(streak.currentStreakDays);
       setFeedbackMsg(t(`feedback.${feedback.tone}`, { defaultValue: t("logging.saved") }));
 
@@ -148,6 +151,13 @@ export default function LogScreen(): JSX.Element {
           message={t("logging.readingSaved")}
           onUndo={() => {
             setUndoVisible(false);
+            const id = lastReadingId;
+            if (id) {
+              void api.delete(`/readings/glucose/${id}`).then(() => {
+                track("undo_used", { readingId: id });
+              }).catch(() => undefined);
+            }
+            setLastReadingId(null);
             setStage("input");
           }}
           onHide={() => setUndoVisible(false)}
