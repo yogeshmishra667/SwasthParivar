@@ -39,13 +39,14 @@
 - [x] **Med reminder jobs** — MED_REMINDER + MED_MISSED_ALERT workers. On `createSchedule`, repeatable BullMQ jobs registered per time slot (IST cron pattern). Fire → Hindi push; 1hr later missed-alert checks for taken/skipped/delayed log and auto-creates `missed_no_response` if absent. Critical meds flagged for future guardian escalation.
 - [x] **Notification trigger cron** — TRIGGER_NOTIFICATION repeatable every 15 min. Iterates onboarded users, builds candidates (best_time ±7min, missed_day, streak_risk ≥7d after 8PM), runs `resolveNotification` from @swasth/domain-logic (priority + 30-min throttle + fatigue cap), dispatches via Expo push, persists nextState.
 
+- [x] **Push token cleanup** — `sendExpoPush` now prunes tokens returned with `DeviceNotRegistered` error via `prisma.pushToken.deleteMany` (non-fatal on failure).
+- [x] **Integration tests (readings + sync)** — `tests/integration/readings.test.ts`: glucose POST happy path (streak + feedback), stale version → 409 READING_STALE_VERSION, critical flag for value < 65, sync/push per-row stale status. Uses Testcontainers + spawnSync prisma migrate deploy.
+
 ### Pending
 
 - [ ] **Guardian alert dispatch** — med-missed worker flags critical-med misses but doesn't push to guardians yet (Phase 3 GuardianAlert model doesn't exist).
-- [ ] **Push token cleanup** — prune `DeviceNotRegistered` tokens based on Expo receipt codes (deferred; needs receipt polling flow).
 - [ ] **Notification dedup across devices** — resolver sees `NotificationState` but copies go to all user tokens; may double-notify if user has multiple active devices. Acceptable for Phase 1.
-- [ ] **Sync endpoints deep validation** — conflict resolution already honors version <= stored → 409. Needs dedicated integration test.
-- [ ] **Integration tests** — health.test.ts stub exists with Testcontainers setup. Needs: dynamic env import, readings endpoint test, sync conflict test, critical-alert queue assertion.
+- [ ] **Critical-alert queue assertion test** — integration test that verifies BullMQ `critical-alert` queue receives a job when glucose < 65 is posted.
 
 ---
 
@@ -106,6 +107,11 @@ UPDATE users SET name='', age=0, conditions='{}', onboarding_complete=false, onb
 ---
 
 ## Changelog
+
+### Session 3b (2026-04-18) — Cleanup + tests
+
+10. `sendExpoPush` prunes push tokens flagged `DeviceNotRegistered` by Expo receipt
+11. `tests/integration/readings.test.ts` — full Testcontainers harness: readings POST (200/409/critical) + sync/push (stale row reporting)
 
 ### Session 3 (2026-04-18) — Notification backbone
 
