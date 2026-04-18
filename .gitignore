@@ -37,6 +37,8 @@ pnpm-debug.log*
 apps/mobile/.expo/
 apps/mobile/dist/
 apps/mobile/web-build/
+/.expo/
+/tsconfig.json
 apps/mobile/ios/
 apps/mobile/android/
 apps/mobile/*.jks
