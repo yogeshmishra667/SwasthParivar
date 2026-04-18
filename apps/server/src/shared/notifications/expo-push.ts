@@ -1,5 +1,6 @@
 import { env } from "../../config/env.js";
 import { logger } from "../logger.js";
+import { prisma } from "../database.js";
 
 export interface ExpoPushMessage {
   to: string;
@@ -61,7 +62,7 @@ export const sendExpoPush = async (
     const json = (await res.json()) as { data?: ExpoTicket[] };
     const tickets = json.data ?? [];
 
-    return messages.map((m, i) => {
+    const results: ExpoPushResult[] = messages.map((m, i) => {
       const t = tickets[i];
       if (!t) return { token: m.to, success: false, errorCode: "NO_TICKET" };
       if (t.status === "ok") return { token: m.to, success: true };
@@ -71,6 +72,22 @@ export const sendExpoPush = async (
         errorCode: t.details?.error ?? "UNKNOWN",
       };
     });
+
+    const invalidTokens = results
+      .filter((r) => r.errorCode === "DeviceNotRegistered")
+      .map((r) => r.token);
+    if (invalidTokens.length > 0) {
+      try {
+        const deleted = await prisma.pushToken.deleteMany({
+          where: { token: { in: invalidTokens } },
+        });
+        logger.info({ count: deleted.count }, "pruned invalid push tokens");
+      } catch (err) {
+        logger.warn({ err }, "failed to prune invalid push tokens");
+      }
+    }
+
+    return results;
   } catch (err) {
     logger.error({ err }, "expo push request failed");
     return messages.map((m) => ({ token: m.to, success: false, errorCode: "NETWORK_ERROR" }));
