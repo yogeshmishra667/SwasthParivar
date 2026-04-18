@@ -15,8 +15,11 @@ Notifications.setNotificationHandler({
   }),
 });
 
+const isExpoGo = Constants.appOwnership === "expo";
+
 export const registerForPushNotificationsAsync = async (): Promise<string | null> => {
   if (!Device.isDevice) return null;
+  if (isExpoGo) return null;
 
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {
