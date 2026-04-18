@@ -1,6 +1,7 @@
 import type { MedicationSchedule, MedicationLog } from "@prisma/client";
 import type { MedicationLogStatus } from "@swasth/shared-types";
 import { prisma } from "../../shared/database.js";
+import { scheduleMedReminders } from "./medications.jobs.js";
 
 interface CreateSchedule {
   userId: string;
@@ -14,8 +15,8 @@ interface CreateSchedule {
 export const listSchedules = async (userId: string): Promise<MedicationSchedule[]> =>
   prisma.medicationSchedule.findMany({ where: { userId, active: true }, orderBy: { startedAt: "asc" } });
 
-export const createSchedule = async (input: CreateSchedule): Promise<MedicationSchedule> =>
-  prisma.medicationSchedule.create({
+export const createSchedule = async (input: CreateSchedule): Promise<MedicationSchedule> => {
+  const schedule = await prisma.medicationSchedule.create({
     data: {
       userId: input.userId,
       medicineName: input.medicineName,
@@ -25,6 +26,9 @@ export const createSchedule = async (input: CreateSchedule): Promise<MedicationS
       isCritical: input.isCritical,
     },
   });
+  await scheduleMedReminders(schedule.id, input.userId, input.timeSlots);
+  return schedule;
+};
 
 interface LogInput {
   userId: string;
