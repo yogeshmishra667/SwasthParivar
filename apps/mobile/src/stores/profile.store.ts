@@ -12,11 +12,16 @@ interface ProfileState {
   profiles: Profile[];
   activeProfileId: string | null;
   lastSwitchedAt: number | null;
+  lastActiveAt: number | null;
   profileLockedForLogging: boolean;
+  selectorRequired: boolean;
   setHousehold: (id: string, profiles: Profile[]) => void;
   switchProfile: (id: string) => void;
   lockForLogging: () => void;
   unlock: () => void;
+  markActive: () => void;
+  requestSelector: () => void;
+  dismissSelector: () => void;
 }
 
 export const useProfileStore = create<ProfileState>((set) => ({
@@ -24,20 +29,26 @@ export const useProfileStore = create<ProfileState>((set) => ({
   profiles: [],
   activeProfileId: null,
   lastSwitchedAt: null,
+  lastActiveAt: null,
   profileLockedForLogging: false,
+  selectorRequired: false,
   setHousehold: (id, profiles) =>
-    set({
+    set((s) => ({
       householdId: id,
       profiles,
-      activeProfileId: profiles[0]?.id ?? null,
-    }),
+      activeProfileId: s.activeProfileId ?? profiles[0]?.id ?? null,
+    })),
   switchProfile: (id) =>
     set((s) => ({
       activeProfileId: s.profileLockedForLogging ? s.activeProfileId : id,
       lastSwitchedAt: s.profileLockedForLogging ? s.lastSwitchedAt : Date.now(),
+      selectorRequired: false,
     })),
   lockForLogging: () => set({ profileLockedForLogging: true }),
   unlock: () => set({ profileLockedForLogging: false }),
+  markActive: () => set({ lastActiveAt: Date.now() }),
+  requestSelector: () => set({ selectorRequired: true }),
+  dismissSelector: () => set({ selectorRequired: false }),
 }));
 
 export const selectActiveProfile = (s: ProfileState): Profile | null =>

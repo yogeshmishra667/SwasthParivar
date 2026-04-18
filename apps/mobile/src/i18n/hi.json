@@ -108,5 +108,10 @@
   },
   "timeAnomaly": {
     "banner": "Phone ka time galat lag raha hai. Settings mein automatic time on karein — warna streak sahi count nahi hoga."
+  },
+  "profileSelector": {
+    "title": "Kaun log kar raha hai?",
+    "subtitle": "Sahi profile chunein — taki reading sahi user ke liye save ho.",
+    "keepCurrent": "Current profile rakhein"
   }
 }

@@ -108,5 +108,10 @@
   },
   "timeAnomaly": {
     "banner": "Your phone's clock looks wrong. Turn on automatic time in Settings — otherwise streaks may not count correctly."
+  },
+  "profileSelector": {
+    "title": "Who is logging?",
+    "subtitle": "Pick the right profile so readings are saved for the correct user.",
+    "keepCurrent": "Keep current profile"
   }
 }

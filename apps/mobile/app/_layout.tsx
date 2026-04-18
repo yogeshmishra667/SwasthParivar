@@ -9,7 +9,9 @@ import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { useAuthStore } from "@/stores/auth.store";
 import { useAccessibility } from "@/hooks/useAccessibility";
+import { useProfileInactivity } from "@/hooks/useProfileInactivity";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
+import { ProfileSelectorModal } from "@/components/profile/ProfileSelectorModal";
 import { registerAndSyncPushToken } from "@/services/notifications";
 
 void SplashScreen.preventAutoHideAsync();
@@ -19,6 +21,7 @@ export default function RootLayout(): JSX.Element | null {
   const accessToken = useAuthStore((s) => s.accessToken);
   const [ready, setReady] = useState(false);
   useAccessibility();
+  useProfileInactivity();
 
   useEffect(() => {
     void (async () => {
@@ -45,6 +48,7 @@ export default function RootLayout(): JSX.Element | null {
       <SafeAreaProvider>
         <StatusBar style="dark" />
         <OfflineBanner />
+        <ProfileSelectorModal />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="(auth)" />
