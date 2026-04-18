@@ -1,6 +1,9 @@
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
+import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { api } from "@/services/api";
+import { logError } from "@/services/analytics";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -39,8 +42,27 @@ export const registerForPushNotificationsAsync = async (): Promise<string | null
   }
   if (status !== "granted") return null;
 
-  const token = await Notifications.getExpoPushTokenAsync();
+  const projectId =
+    Constants.expoConfig?.extra?.["eas"]?.["projectId"] ??
+    Constants.easConfig?.projectId;
+  const token = await Notifications.getExpoPushTokenAsync(
+    projectId ? { projectId } : undefined,
+  );
   return token.data;
+};
+
+export const registerAndSyncPushToken = async (): Promise<void> => {
+  try {
+    const token = await registerForPushNotificationsAsync();
+    if (!token) return;
+    await api.post("/auth/push-token", {
+      token,
+      platform: Platform.OS === "ios" ? "ios" : Platform.OS === "android" ? "android" : "web",
+      deviceId: Device.osInternalBuildId ?? undefined,
+    });
+  } catch (err) {
+    logError("registerAndSyncPushToken", err);
+  }
 };
 
 export const scheduleMedicationReminder = async (

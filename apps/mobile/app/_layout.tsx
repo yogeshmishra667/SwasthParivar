@@ -10,11 +10,13 @@ import * as SplashScreen from "expo-splash-screen";
 import { useAuthStore } from "@/stores/auth.store";
 import { useAccessibility } from "@/hooks/useAccessibility";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
+import { registerAndSyncPushToken } from "@/services/notifications";
 
 void SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout(): JSX.Element | null {
   const hydrate = useAuthStore((s) => s.hydrate);
+  const accessToken = useAuthStore((s) => s.accessToken);
   const [ready, setReady] = useState(false);
   useAccessibility();
 
@@ -30,6 +32,11 @@ export default function RootLayout(): JSX.Element | null {
       }
     })();
   }, [hydrate]);
+
+  useEffect(() => {
+    if (!ready || !accessToken) return;
+    void registerAndSyncPushToken();
+  }, [ready, accessToken]);
 
   if (!ready) return null;
 
