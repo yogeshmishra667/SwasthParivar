@@ -42,11 +42,42 @@
 - [x] **Push token cleanup** — `sendExpoPush` now prunes tokens returned with `DeviceNotRegistered` error via `prisma.pushToken.deleteMany` (non-fatal on failure).
 - [x] **Integration tests (readings + sync)** — `tests/integration/readings.test.ts`: glucose POST happy path (streak + feedback), stale version → 409 READING_STALE_VERSION, critical flag for value < 65, sync/push per-row stale status. Uses Testcontainers + spawnSync prisma migrate deploy.
 
-### Pending
+### Pending (Phase 1 polish)
 
-- [ ] **Guardian alert dispatch** — med-missed worker flags critical-med misses but doesn't push to guardians yet (Phase 3 GuardianAlert model doesn't exist).
-- [ ] **Notification dedup across devices** — resolver sees `NotificationState` but copies go to all user tokens; may double-notify if user has multiple active devices. Acceptable for Phase 1.
 - [ ] **Critical-alert queue assertion test** — integration test that verifies BullMQ `critical-alert` queue receives a job when glucose < 65 is posted.
+- [ ] **Multi-device notification dedup** — resolver sees `NotificationState` but copies go to all user tokens; may double-notify if user has multiple active devices. Acceptable for Phase 1.
+- [ ] **Server-time streak fallback** — `time_anomaly_count >= 2` should switch streak credit to `server_received_at` (Patch #18). Currently tracked but not applied.
+- [ ] **Weekly grace reset job** — `UserStreak.graceUsedThisWeek` needs Monday 3 AM IST reset (cron).
+- [ ] **Anti-cheat flag storage** — flags currently only logged; store on `GlucoseReading` or a separate column for product analytics.
+
+### Deferred to Phase 2
+
+- [ ] **BP readings module** — `BPReading` model, POST/GET endpoints, 5-day mean/variance detectors.
+- [ ] **Meal log module** — `MealLog` (halka/normal/heavy) + meal-category correlation detector.
+- [ ] **Insight engine** — `InsightEvent` model + spike/trend/correlation/anomaly detectors (pure functions in `@swasth/domain-logic/detectors`).
+- [ ] **Health check schedule** — `HealthCheckSchedule` + `HealthCheckCompliance` models with reminder jobs.
+- [ ] **HbA1c estimator** — `GET /api/v1/hba1c/estimate` using 90d weighted avg (30d ×1.5, 30d ×1.0, 30d ×0.5), always labelled ESTIMATE.
+- [ ] **HealthScore daily job** — logging 20% + stability 25% + trend 25% + med 20% + streak 10%, stored in `HealthScore` table, Redis-cached 24hr.
+- [ ] **Hindi dashboard summary card** — natural-language aggregation ("Aaj ka din: Sugar thik hai (Fasting: 118)…").
+- [ ] **Guardian read-only view** — `FamilyLink` model, `GET /api/v1/family/patients/:id/dashboard`. No alerts yet.
+
+### Deferred to Phase 3
+
+- [ ] **Guardian alert dispatch** — med-missed worker flags critical-med misses but doesn't push to guardians yet (needs `GuardianAlert` model + FamilyLink).
+- [ ] **AI chat** — `ChatMessage` model, Tier 1 template / Tier 2 cached / Tier 3 Sonnet; post-response safety filter; rate limit 3/day free tier.
+- [ ] **Silent Guardian** — `SilentGuardianSignal` model, 0-100 scoring + decay, orange/yellow alerts max 2/week.
+- [ ] **Cross-condition detectors** — t-test, p < 0.05, ≥30 days of data.
+- [ ] **SOS** — `SOSEvent` model, `POST /api/v1/sos/trigger`, escalation chain + IVR fallback (only after 4+ weeks of system stability).
+
+### Deferred to Phase 4+
+
+- [ ] **Prescription OCR** — `Prescription` + `PrescriptionItem` + Claude Vision job. RED/YELLOW/GREEN confidence tiers, all human-approved.
+- [ ] **CardiacLog / RespiratoryLog** — Phase 4 conditions.
+- [ ] **Doctor appointments** — `DoctorProfile`, `DoctorAppointment`, 7d/1d/2h reminder job.
+- [ ] **Activity + sleep sync** — `ActivityDaily`, `SleepLog` (wearable integration).
+- [ ] **Reports (PDF)** — `POST /api/v1/reports/generate` → Puppeteer + Claude executive summary → R2.
+- [ ] **Payments** — Razorpay webhooks, tier transitions, Apple IAP on iOS.
+- [ ] **Regional languages + festival nudging** — beyond Hindi/English.
 
 ---
 
@@ -66,17 +97,41 @@
 - [x] Error logging — logError(screen, error) in all catch blocks. console.warn in dev, PostHog track in prod.
 - [x] Reading save fix — sends `measuredAt` (not `measuredAtIso`) matching server validation schema.
 
-### Pending
+### Pending (Phase 1)
 
-- [ ] **Voice input** — wire `expo-speech-recognition` to replace VoiceInput.tsx setTimeout stub. Call `parseVoiceTranscript()` from @swasth/domain-logic with real transcript + confidence. CLAUDE.md: 2 fails -> auto-show numpad, 5s silence -> dismiss mic.
+- [ ] **Voice input** — wire `expo-speech-recognition` to replace VoiceInput.tsx setTimeout stub. Call `parseVoiceTranscript()` from @swasth/domain-logic with real transcript + confidence. CLAUDE.md: 2 fails → auto-show numpad, 5s silence → dismiss mic.
 - [ ] **Medications CRUD UI** — medications tab is placeholder. Needs: add medicine (name + time slots), edit/delete, mark taken/skipped per schedule, adherence display.
-- [ ] **Med reminder notifications** — schedule local notifications via expo-notifications at med times. Reschedule on add/edit/delete.
-- [ ] **WatermelonDB sync** — offline-first queue for readings + meds. Sync on reconnect. db/sync.ts calls /sync/pull and /sync/push but not wired to app lifecycle.
-- [ ] **Push token registration** — call registerForPushNotificationsAsync() on app launch, POST token to server.
+- [ ] **Med reminder local notifications** — schedule via `expo-notifications` at med times as offline fallback (server push is primary). Reschedule on add/edit/delete.
+- [ ] **WatermelonDB sync** — offline-first queue for readings + meds. Sync on reconnect. `db/sync.ts` calls /sync/pull and /sync/push but not wired to app lifecycle.
+- [ ] **Push token registration** — call `registerForPushNotificationsAsync()` on app launch, `POST /api/v1/auth/push-token` (endpoint exists as of session 3).
 - [ ] **Settings persistence** — preferences (language, large text) reset on app restart. Needs Zustand persist middleware with AsyncStorage.
-- [ ] **Large text toggle** — toggle state exists but doesn't scale fonts. Need to apply LARGE_TEXT_SCALE (1.3x) to NativeWind/Tailwind config dynamically.
-- [ ] **Profile inactivity check** — per CLAUDE.md: app open after 30+ min inactive -> show profile selector. Not implemented.
+- [ ] **Large text toggle** — toggle state exists but doesn't scale fonts. Apply LARGE_TEXT_SCALE (1.3x) to NativeWind/Tailwind config dynamically.
+- [ ] **Profile inactivity check** — per CLAUDE.md: app open after 30+ min inactive → show profile selector.
 - [ ] **Undo reading** — "Undo" toast shows but doesn't call API to delete the reading.
+- [ ] **Fullscreen critical alert 30s lock** — `CriticalAlert` should block dismiss for 30 seconds per CLAUDE.md safety rule.
+- [ ] **Device time anomaly surface** — show warning banner when `time_anomaly_count >= 2` from `/users/me`.
+
+### Deferred to Phase 2 (Frontend)
+
+- [ ] **BP logging screen** — numpad (systolic / diastolic / pulse), confirmation flow mirroring glucose.
+- [ ] **Meal log quick-entry** — halka / normal / heavy_fried buttons after post_meal reading.
+- [ ] **Insights feed** — `InsightEvent` list with acknowledge + helpful feedback.
+- [ ] **Dashboard Hindi summary card** — renders server-provided natural-language summary.
+- [ ] **Weekly report preview** — shows median + mini-chart unlocked day 7+.
+- [ ] **Guardian read-only dashboard** — separate view for linked patients.
+
+### Deferred to Phase 3 (Frontend)
+
+- [ ] **AI Chat screen** — send/receive messages, language toggle, flag button, rate-limit UI.
+- [ ] **Silent Guardian alert drawer** — orange/yellow cards with explanation + action.
+- [ ] **SOS button + cancel flow** — 5s long-press, countdown, auto-call priority 1.
+
+### Deferred to Phase 4+ (Frontend)
+
+- [ ] **Prescription upload + OCR review** — camera + confidence-tier UI.
+- [ ] **Medicine photo verification** — capture + AI match status.
+- [ ] **Doctor appointment booking + pre-visit report** — list view + reminders.
+- [ ] **Regional language packs** — beyond hi/en.
 
 ---
 
