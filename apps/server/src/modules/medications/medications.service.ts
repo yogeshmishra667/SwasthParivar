@@ -1,7 +1,7 @@
 import type { MedicationSchedule, MedicationLog } from "@prisma/client";
-import type { MedicationLogStatus } from "@swasth/shared-types";
+import { DomainError, type MedicationLogStatus } from "@swasth/shared-types";
 import { prisma } from "../../shared/database.js";
-import { scheduleMedReminders } from "./medications.jobs.js";
+import { scheduleMedReminders, cancelMedReminders } from "./medications.jobs.js";
 
 interface CreateSchedule {
   userId: string;
@@ -49,6 +49,23 @@ export const logMedication = async (input: LogInput): Promise<MedicationLog> =>
       ...(input.skipReason !== undefined ? { skipReason: input.skipReason } : {}),
     },
   });
+
+export const deleteSchedule = async (params: {
+  userId: string;
+  id: string;
+}): Promise<void> => {
+  const existing = await prisma.medicationSchedule.findFirst({
+    where: { id: params.id, userId: params.userId },
+  });
+  if (!existing) {
+    throw new DomainError("MED_SCHEDULE_NOT_FOUND", "schedule does not exist");
+  }
+  await prisma.medicationSchedule.update({
+    where: { id: existing.id },
+    data: { active: false },
+  });
+  await cancelMedReminders(existing.id, existing.timeSlots as string[]);
+};
 
 export const adherenceLast = async (
   userId: string,

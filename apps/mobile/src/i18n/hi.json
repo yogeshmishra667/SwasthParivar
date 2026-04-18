@@ -85,8 +85,23 @@
   "medications": {
     "title": "Dawai",
     "noMedicines": "Koi dawai add nahi hai.",
-    "addFromSettings": "Settings se add karein.",
-    "addMedicines": "Haan, add karein"
+    "addFromSettings": "+ button se dawai add karein.",
+    "addMedicines": "Haan, add karein",
+    "addNew": "Nayi dawai",
+    "medicineName": "Dawai ka naam",
+    "dosage": "Dose (optional)",
+    "timeSlots": "Reminder time",
+    "timeSlotHint": "Time add karein jaise 08:00, 14:00",
+    "addTime": "Time add karein",
+    "save": "Dawai save karein",
+    "remove": "Hatao",
+    "removeConfirm": "{{name}} hatayein?",
+    "markTaken": "Li",
+    "markSkipped": "Nahi li",
+    "logged": "Note ho gaya",
+    "loadFailed": "Dawai list load nahi hui.",
+    "saveFailed": "Save nahi hua. Dobara try karein.",
+    "invalidTime": "HH:MM format (jaise 08:00)"
   },
   "settings": {
     "title": "Settings",

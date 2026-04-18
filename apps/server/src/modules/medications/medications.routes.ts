@@ -10,5 +10,6 @@ medicationsRouter.use(requireAuth);
 
 medicationsRouter.get("/schedule", controller.getSchedules);
 medicationsRouter.post("/schedule", validateBody(createScheduleSchema), controller.postSchedule);
+medicationsRouter.delete("/schedule/:id", controller.deleteSchedule);
 medicationsRouter.post("/log", validateBody(logMedicationSchema), controller.postLog);
 medicationsRouter.get("/adherence", controller.getAdherence);

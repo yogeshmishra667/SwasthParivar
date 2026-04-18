@@ -85,8 +85,23 @@
   "medications": {
     "title": "Medications",
     "noMedicines": "No medicines added.",
-    "addFromSettings": "Add from settings.",
-    "addMedicines": "Yes, add"
+    "addFromSettings": "Tap + to add a medicine.",
+    "addMedicines": "Yes, add",
+    "addNew": "Add medicine",
+    "medicineName": "Medicine name",
+    "dosage": "Dosage (optional)",
+    "timeSlots": "Reminder times",
+    "timeSlotHint": "Add times like 08:00, 14:00",
+    "addTime": "Add time",
+    "save": "Save medicine",
+    "remove": "Remove",
+    "removeConfirm": "Remove {{name}}?",
+    "markTaken": "Taken",
+    "markSkipped": "Skipped",
+    "logged": "Logged",
+    "loadFailed": "Could not load medicines.",
+    "saveFailed": "Save failed. Try again.",
+    "invalidTime": "Use HH:MM (e.g. 08:00)"
   },
   "settings": {
     "title": "Settings",
