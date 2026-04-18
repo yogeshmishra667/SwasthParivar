@@ -1,6 +1,6 @@
 # SwasthParivar — Build Progress
 
-**Last updated:** 2026-04-17 (session 2, end)
+**Last updated:** 2026-04-18 (session 3, end)
 **Branch:** main
 
 ## Dependency versions
@@ -33,15 +33,19 @@
 - [x] Health module — GET /health, GET /health/deep
 - [x] Error handler — ZodError->400, DomainError->mapped, Prisma P2025->404, P2002->409, P2003->400, unhandled->logged+500
 - [x] Database — Prisma 7 pg driver adapter, prisma.config.ts, init migration applied, TimescaleDB hypertable on glucose_readings
-- [x] Schema — 9 models: User, Household, EmergencyContact, GlucoseReading (composite PK+unique), MedicationSchedule, MedicationLog, UserStreak, FeedbackEvent, NotificationState
+- [x] Schema — 10 models: User, Household, EmergencyContact, GlucoseReading, MedicationSchedule, MedicationLog, UserStreak, FeedbackEvent, NotificationState, PushToken
+- [x] **Push token registration** — POST /api/v1/auth/push-token upserts by token, binds userId + platform + deviceId. Migration `20260418000000_push_tokens`.
+- [x] **Critical-alert worker wired** — Expo push (primary, to guardian push tokens + patient) + MSG91 SMS fallback (to all contact phones when push fails). Per-token/per-phone success flags logged for observability. Uses `shared/notifications/{expo-push,msg91-sms}.ts`.
+- [x] **Med reminder jobs** — MED_REMINDER + MED_MISSED_ALERT workers. On `createSchedule`, repeatable BullMQ jobs registered per time slot (IST cron pattern). Fire → Hindi push; 1hr later missed-alert checks for taken/skipped/delayed log and auto-creates `missed_no_response` if absent. Critical meds flagged for future guardian escalation.
+- [x] **Notification trigger cron** — TRIGGER_NOTIFICATION repeatable every 15 min. Iterates onboarded users, builds candidates (best_time ±7min, missed_day, streak_risk ≥7d after 8PM), runs `resolveNotification` from @swasth/domain-logic (priority + 30-min throttle + fatigue cap), dispatches via Expo push, persists nextState.
 
 ### Pending
 
-- [ ] **BullMQ critical-alert worker** — currently logs and exits. Wire Expo Push (primary) + MSG91 SMS (fallback). Per CLAUDE.md: push to ALL guardian contacts, SMS only where push fails.
-- [ ] **Push token registration** — POST /api/v1/auth/push-token endpoint. Mobile has client-side `registerForPushNotificationsAsync()` ready but never called.
-- [ ] **Notification scheduling** — med reminder jobs (delayed per med time), best-time detection (rolling 5-day avg), streak-risk (>=7 and no log by 8PM), anti-fatigue (max 2 push/day, 3 ignores->1/day, 7->stop).
-- [ ] **Sync endpoints** — real conflict resolution: client_uuid + version, reject stale (version <= stored) with 409, last-write-wins by version.
-- [ ] **Integration tests** — health.test.ts stub exists with Testcontainers setup. Needs: dynamic env import (app.ts has buildApp()), readings endpoint test, sync conflict test.
+- [ ] **Guardian alert dispatch** — med-missed worker flags critical-med misses but doesn't push to guardians yet (Phase 3 GuardianAlert model doesn't exist).
+- [ ] **Push token cleanup** — prune `DeviceNotRegistered` tokens based on Expo receipt codes (deferred; needs receipt polling flow).
+- [ ] **Notification dedup across devices** — resolver sees `NotificationState` but copies go to all user tokens; may double-notify if user has multiple active devices. Acceptable for Phase 1.
+- [ ] **Sync endpoints deep validation** — conflict resolution already honors version <= stored → 409. Needs dedicated integration test.
+- [ ] **Integration tests** — health.test.ts stub exists with Testcontainers setup. Needs: dynamic env import, readings endpoint test, sync conflict test, critical-alert queue assertion.
 
 ---
 
@@ -102,6 +106,18 @@ UPDATE users SET name='', age=0, conditions='{}', onboarding_complete=false, onb
 ---
 
 ## Changelog
+
+### Session 3 (2026-04-18) — Notification backbone
+
+1. `PushToken` model + migration (`push_tokens` table, unique by token, indexed by user)
+2. `POST /api/v1/auth/push-token` upsert endpoint (bound to auth middleware)
+3. `shared/notifications/expo-push.ts` — Expo push batch client with per-token success flags
+4. `shared/notifications/msg91-sms.ts` — MSG91 flow API client with graceful NOT_CONFIGURED fallback
+5. `critical-alert.worker.ts` rewritten — resolves guardian phones → users → push tokens, sends push, falls back to SMS on push failure, logs success counts per channel
+6. `med-reminder.worker.ts` — fires scheduled reminders, enqueues 1hr missed-check; missed-alert worker auto-logs `missed_no_response`
+7. `medications.jobs.ts` — BullMQ repeatable jobs registered per HH:mm time slot on `createSchedule` (IST cron, stable repeatable keys)
+8. `notification-trigger.worker.ts` — 15-min tick iterates onboarded users, builds trigger candidates, delegates to domain `resolveNotification`, dispatches push, persists next `NotificationState`
+9. `bootstrapNotificationCron` on server start ensures tick repeatable exists (idempotent by key)
 
 ### Session 2 (2026-04-17)
 
