@@ -13,11 +13,14 @@ module.exports = {
         streak: "#F59E0B",
         neutral: "#6B7280",
       },
+      // Font sizes resolve from CSS variables set on the root via `vars()`.
+      // The `<FontScaleProvider>` in app/_layout.tsx supplies values for the
+      // current scale (normal vs largeText). Defaults are the normal-mode sizes.
       fontSize: {
-        body: "14px",
-        important: "16px",
-        number: "24px",
-        hero: "36px",
+        body: "var(--fs-body, 14px)",
+        important: "var(--fs-important, 16px)",
+        number: "var(--fs-number, 24px)",
+        hero: "var(--fs-hero, 36px)",
       },
       minHeight: {
         touch: "48px",

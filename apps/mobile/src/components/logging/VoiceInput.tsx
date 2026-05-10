@@ -1,72 +1,80 @@
-import { useState } from "react";
-import { View, Text, Pressable } from "react-native";
-import { parseVoiceTranscript, type VoiceParseResult } from "@swasth/domain-logic";
-import { useProfileStore } from "@/stores/profile.store";
+import { useEffect, useState, type ComponentType } from "react";
+import { View, Text, Pressable, Platform } from "react-native";
+import Constants from "expo-constants";
+import type { VoiceParseResult } from "@swasth/domain-logic";
 import { Icon } from "@/components/ui/Icon";
-import { hapticSave } from "@/utils/haptics";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
-import { track } from "@/services/analytics";
 
 interface VoiceInputProps {
   onParsed: (result: VoiceParseResult) => void;
   onFail: () => void;
 }
 
-export const VoiceInput = ({ onParsed, onFail }: VoiceInputProps): JSX.Element => {
-  const [recording, setRecording] = useState(false);
-  const [attemptCount, setAttemptCount] = useState(0);
-  const lockForLogging = useProfileStore((s) => s.lockForLogging);
-  const unlock = useProfileStore((s) => s.unlock);
+// `expo-speech-recognition` uses `requireNativeModule` at import time.
+// In Expo Go on Android the native module isn't present and the import
+// crashes the bundle, so we lazy-load the implementation only when the
+// runtime supports it (any custom dev build, or Expo Go on iOS).
+const isExpoGo = Constants.appOwnership === "expo";
+const voiceUnavailable = isExpoGo && Platform.OS === "android";
 
-  const start = async (): Promise<void> => {
-    lockForLogging();
-    setRecording(true);
-    hapticSave();
-    // TODO: wire expo-speech-recognition — this is a dev stub.
-    setTimeout(() => {
-      const result = parseVoiceTranscript({
-        transcript: "aaj sugar 140 aayi",
-        confidence: 0.8,
-        capturedAtHourLocal: new Date().getHours(),
-      });
-      track("voice_attempt", {
-        success: result.kind === "ok",
-        confidence: 0.8,
-        fallback: false,
-        colloquial_match: result.kind === "ok" ? result.colloquialMatch : false,
-        uncertainty_detected: result.kind === "ok" ? result.uncertaintyDetected : false,
-      });
-      if (result.kind === "ok") {
-        onParsed(result);
-      } else {
-        const next = attemptCount + 1;
-        setAttemptCount(next);
-        if (next >= 2) onFail();
-      }
-      setRecording(false);
-      unlock();
-    }, 400);
-  };
+const VoiceUnavailable = ({ onFail }: VoiceInputProps): JSX.Element => {
+  // Auto-fall back so the screen lands on numpad without an extra tap.
+  useEffect(() => {
+    onFail();
+  }, [onFail]);
 
   return (
     <View className="items-center gap-3">
       <Pressable
-        onPress={() => void start()}
+        disabled
         accessibilityRole="button"
-        accessibilityLabel="Tap to speak your glucose reading"
-        className={`items-center justify-center rounded-full ${
-          recording ? "bg-critical" : "bg-primary"
-        }`}
+        accessibilityState={{ disabled: true }}
+        accessibilityLabel="Voice unavailable in Expo Go on Android"
+        className="items-center justify-center rounded-full bg-gray-300"
         style={{
           width: TOUCH_TARGET_MIN * 2.5,
           height: TOUCH_TARGET_MIN * 2.5,
         }}
       >
-        <Icon name="mic" size={48} color="#FFFFFF" />
+        <Icon name="mic-off" size={48} color="#FFFFFF" />
       </Pressable>
-      <Text className="text-important">
-        {recording ? "Suna ja raha hai..." : "Bolne ke liye tap karein"}
+      <Text className="text-important text-center px-4">
+        Voice ke liye dev build chahiye — abhi numpad use karein.
       </Text>
     </View>
   );
+};
+
+export const VoiceInput = (props: VoiceInputProps): JSX.Element => {
+  const [Native, setNative] = useState<ComponentType<VoiceInputProps> | null>(null);
+
+  useEffect(() => {
+    if (voiceUnavailable) return;
+    let cancelled = false;
+    void import("./VoiceInputNative").then((mod) => {
+      if (!cancelled) setNative(() => mod.default);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (voiceUnavailable) return <VoiceUnavailable {...props} />;
+  if (!Native) {
+    return (
+      <View className="items-center gap-3">
+        <View
+          className="items-center justify-center rounded-full bg-gray-200"
+          style={{
+            width: TOUCH_TARGET_MIN * 2.5,
+            height: TOUCH_TARGET_MIN * 2.5,
+          }}
+        >
+          <Icon name="mic" size={48} color="#9CA3AF" />
+        </View>
+        <Text className="text-important text-center">Loading...</Text>
+      </View>
+    );
+  }
+  return <Native {...props} />;
 };

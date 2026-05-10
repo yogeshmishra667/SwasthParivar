@@ -48,13 +48,14 @@
           "icon": "./assets/images/notification-icon.png",
           "color": "#2563EB"
         }
-      ]
+      ],
+      "expo-speech-recognition"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "apiBaseUrl": "http://192.168.29.252:4000/api/v1"
+      "apiBaseUrl": "http://192.168.29.254:4000/api/v1"
     }
   }
 }
