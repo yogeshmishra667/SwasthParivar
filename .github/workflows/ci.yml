@@ -16,7 +16,10 @@ concurrency:
 
 env:
   PNPM_VERSION: "9.12.0"
-  NODE_VERSION: "20.x"
+  # Node 22.x — @commitlint/cli@21 requires >=22.12; matches the local
+  # dev environment (Node 22.18). Bump in lockstep with any raise of
+  # `engines.node` in package.json.
+  NODE_VERSION: "22.x"
 
 jobs:
   # ──────────────────────────────────────────────────────────
