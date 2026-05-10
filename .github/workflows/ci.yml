@@ -26,6 +26,10 @@ env:
   # that actually run against Postgres (integration-tests) override it
   # at runtime via Testcontainers.
   DATABASE_URL: "postgresql://stub:stub@localhost:5432/stub"
+  REDIS_URL: "redis://localhost:6379"
+  JWT_SECRET: "stub_jwt_secret_that_is_at_least_32_chars_long"
+  JWT_REFRESH_SECRET: "stub_refresh_secret_that_is_at_least_32_chars_long"
+  OTP_SECRET: "stub_otp_secret_that_is_at_least_32_chars_long"
 
 jobs:
   # ──────────────────────────────────────────────────────────
