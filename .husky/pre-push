@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+
+# Quick safety net before code leaves the laptop:
+#   1. Workspace typecheck (mobile + server + domain-logic + shared-types)
+#   2. Domain-logic unit tests (~5s; 45 tests cover voice parser, streak,
+#      feedback, notification resolver, critical bypass)
+#
+# Skipping with `git push --no-verify` is allowed in emergencies — CI runs
+# the same checks and will reject the PR.
+
+set -e
+
+echo "▶ pre-push: typecheck"
+pnpm -r --parallel run typecheck
+
+echo "▶ pre-push: domain-logic unit tests"
+pnpm --filter @swasth/domain-logic run test

@@ -5,17 +5,21 @@ import { Platform } from "react-native";
 import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
-
 const isExpoGo = Constants.appOwnership === "expo";
+
+// Remote notification APIs were removed from Expo Go in SDK 53+.
+// Only register the handler in development builds / standalone apps.
+if (!isExpoGo) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
 
 export const registerForPushNotificationsAsync = async (): Promise<string | null> => {
   if (!Device.isDevice) return null;
