@@ -16,7 +16,20 @@ concurrency:
 
 env:
   PNPM_VERSION: "9.12.0"
-  NODE_VERSION: "20.x"
+  # Node 22.x — @commitlint/cli@21 requires >=22.12; matches the local
+  # dev environment (Node 22.18). Bump in lockstep with any raise of
+  # `engines.node` in package.json.
+  NODE_VERSION: "22.x"
+  # `prisma.config.ts` calls `env("DATABASE_URL")` at config-load time
+  # — even `prisma generate` (which doesn't connect) needs the var to
+  # be present. We supply a parseable stub at the workflow level; jobs
+  # that actually run against Postgres (integration-tests) override it
+  # at runtime via Testcontainers.
+  DATABASE_URL: "postgresql://stub:stub@localhost:5432/stub"
+  REDIS_URL: "redis://localhost:6379"
+  JWT_SECRET: "stub_jwt_secret_that_is_at_least_32_chars_long"
+  JWT_REFRESH_SECRET: "stub_refresh_secret_that_is_at_least_32_chars_long"
+  OTP_SECRET: "stub_otp_secret_that_is_at_least_32_chars_long"
 
 jobs:
   # ──────────────────────────────────────────────────────────
