@@ -1,0 +1,40 @@
+# SwasthParivar CODEOWNERS
+#
+# Default: every PR pings @yogeshmishra667. The safety-critical paths below
+# additionally require two reviewers per CONTRIBUTING.md.
+#
+# Syntax: <pattern> <owner-or-team>
+# Last matching pattern wins, so place safety-critical rules at the bottom.
+
+# ---------- Default owner ----------
+*                                                            @yogeshmishra667
+
+# ---------- Tooling / repo plumbing ----------
+/.github/                                                    @yogeshmishra667
+/.husky/                                                     @yogeshmishra667
+/CONTRIBUTING.md                                             @yogeshmishra667
+/CLAUDE.md                                                   @yogeshmishra667
+/.claude/PROGRESS.md                                         @yogeshmishra667
+
+# ---------- Safety-critical: requires two reviews ----------
+# Glucose validation, critical bypass, streak engine, voice parser,
+# sync conflict resolution, schema migrations, push/SMS dispatch,
+# fullscreen safety alert.
+
+apps/server/src/modules/readings/**                          @yogeshmishra667
+apps/server/src/modules/sync/**                              @yogeshmishra667
+apps/server/src/workers/critical-alert.worker.ts             @yogeshmishra667
+apps/server/src/workers/grace-reset.worker.ts                @yogeshmishra667
+apps/server/src/shared/notifications/**                      @yogeshmishra667
+apps/server/prisma/schema.prisma                             @yogeshmishra667
+apps/server/prisma/migrations/**                             @yogeshmishra667
+
+packages/domain-logic/src/critical-bypass/**                 @yogeshmishra667
+packages/domain-logic/src/streak-engine/**                   @yogeshmishra667
+packages/domain-logic/src/voice-parser/**                    @yogeshmishra667
+packages/domain-logic/src/feedback-engine/**                 @yogeshmishra667
+packages/domain-logic/src/notification-resolver/**           @yogeshmishra667
+
+apps/mobile/src/components/logging/CriticalAlert.tsx         @yogeshmishra667
+apps/mobile/src/components/logging/VoiceInputNative.tsx      @yogeshmishra667
+apps/mobile/src/utils/phone.ts                               @yogeshmishra667

@@ -1,7 +1,7 @@
 # SwasthParivar — Build Progress
 
-**Last updated:** 2026-04-18 (session 3, end)
-**Branch:** main
+**Last updated:** 2026-05-10 (session 4, end)
+**Branch:** phase1-hardening (open PR — Phase 1 nearly complete)
 
 ## Dependency versions
 
@@ -41,14 +41,21 @@
 
 - [x] **Push token cleanup** — `sendExpoPush` now prunes tokens returned with `DeviceNotRegistered` error via `prisma.pushToken.deleteMany` (non-fatal on failure).
 - [x] **Integration tests (readings + sync)** — `tests/integration/readings.test.ts`: glucose POST happy path (streak + feedback), stale version → 409 READING_STALE_VERSION, critical flag for value < 65, sync/push per-row stale status. Uses Testcontainers + spawnSync prisma migrate deploy.
+- [x] **Server-time streak fallback (Patch #18)** — `apps/server/src/modules/readings/readings.service.ts` now compares `measuredAt` to server clock; >2hr drift atomically increments `User.timeAnomalyCount`. Once count ≥ 2, streak credit uses server time instead of client time. Reading's `measured_at` still preserves patient-reported timestamp for medical fidelity.
+- [x] **Anti-cheat flag persistence** — `glucose_readings.anti_cheat_flags` jsonb column added (migration `20260510120000_reading_anti_cheat_and_streak_source`). Engine output stored on every reading; never blocks save.
+- [x] **Streak-credited-at-server-time flag** — `glucose_readings.streak_credited_at_server_time` boolean records whether Patch #18 fired for that row.
+- [x] **Weekly grace reset cron** — `apps/server/src/workers/grace-reset.worker.ts`. BullMQ repeatable, fires Sunday 21:30 UTC = Monday 03:00 IST, scoped UPDATE on `UserStreak` rows where `graceUsedThisWeek > 0`. Idempotent across multi-replica deploys via `repeat.key`.
+- [x] **Critical-alert queue assertion test** — `tests/integration/readings.test.ts` posts glucose < 65 with a fresh user (avoids prior cooldown), polls all relevant BullMQ queue states, asserts the `dispatch` job lands with the correct `readingId`.
+- [x] **Anti-cheat persistence test** — posts 4 identical fasting readings, asserts the 4th carries `same_value_3_consecutive` in `antiCheatFlags`.
+- [x] **Server-time fallback test** — fresh user, two anomalous readings 5hr in the past; asserts `streakCreditedAtServerTime` flips on the 2nd save and `timeAnomalyCount` reaches 2.
+- [x] **Reading-update path no longer mutates partition key** — fixed a latent bug where the existing-row update spread `measuredAt`, which would have triggered TimescaleDB partition-key violations under sync. Update now writes only `valueMgDl, readingType, context, notes, source, streak*, antiCheatFlags, version`.
+- [x] **Test cleanup** — `disconnectDatabase()` helper now used in both integration test files so the underlying `pg.Pool` closes before Testcontainers stops Postgres. Eliminates the FATAL 57P01 noise that was failing process exit.
+- [x] **Test status assertions** — fixed pre-existing `expected 201 to be 200` mismatch in 3 readings tests (controller has always returned 201; assertions were stale from scaffold).
 
 ### Pending (Phase 1 polish)
 
-- [ ] **Critical-alert queue assertion test** — integration test that verifies BullMQ `critical-alert` queue receives a job when glucose < 65 is posted.
 - [ ] **Multi-device notification dedup** — resolver sees `NotificationState` but copies go to all user tokens; may double-notify if user has multiple active devices. Acceptable for Phase 1.
-- [ ] **Server-time streak fallback** — `time_anomaly_count >= 2` should switch streak credit to `server_received_at` (Patch #18). Currently tracked but not applied.
-- [ ] **Weekly grace reset job** — `UserStreak.graceUsedThisWeek` needs Monday 3 AM IST reset (cron).
-- [ ] **Anti-cheat flag storage** — flags currently only logged; store on `GlucoseReading` or a separate column for product analytics.
+- [ ] **Add-household-member endpoint** — required by the "shared phone profile switcher" — currently the household has only the onboarded patient and the switcher has nothing to switch to. Mobile gap (#3 below) blocks on this.
 
 ### Deferred to Phase 2
 
@@ -99,17 +106,25 @@
 
 ### Pending (Phase 1)
 
-- [ ] **Voice input** — wire `expo-speech-recognition` to replace VoiceInput.tsx setTimeout stub. Call `parseVoiceTranscript()` from @swasth/domain-logic with real transcript + confidence. CLAUDE.md: 2 fails → auto-show numpad, 5s silence → dismiss mic.
-- [ ] **Medications CRUD UI** — medications tab is placeholder. Needs: add medicine (name + time slots), edit/delete, mark taken/skipped per schedule, adherence display.
-- [ ] **Med reminder local notifications** — schedule via `expo-notifications` at med times as offline fallback (server push is primary). Reschedule on add/edit/delete.
-- [ ] **WatermelonDB sync** — offline-first queue for readings + meds. Sync on reconnect. `db/sync.ts` calls /sync/pull and /sync/push but not wired to app lifecycle.
-- [ ] **Push token registration** — call `registerForPushNotificationsAsync()` on app launch, `POST /api/v1/auth/push-token` (endpoint exists as of session 3).
-- [ ] **Settings persistence** — preferences (language, large text) reset on app restart. Needs Zustand persist middleware with AsyncStorage.
-- [ ] **Large text toggle** — toggle state exists but doesn't scale fonts. Apply LARGE_TEXT_SCALE (1.3x) to NativeWind/Tailwind config dynamically.
-- [ ] **Profile inactivity check** — per CLAUDE.md: app open after 30+ min inactive → show profile selector.
-- [ ] **Undo reading** — "Undo" toast shows but doesn't call API to delete the reading.
-- [ ] **Fullscreen critical alert 30s lock** — `CriticalAlert` should block dismiss for 30 seconds per CLAUDE.md safety rule.
-- [ ] **Device time anomaly surface** — show warning banner when `time_anomaly_count >= 2` from `/users/me`.
+- [ ] **WatermelonDB sync wiring** — schema, models, and `db/sync.ts` exist but are not connected to the app lifecycle. CLAUDE.md mandates "logging ALWAYS works" via local-first DB. Needed: DB init at boot, reading writes go local-first then queue → `/sync/push`, pull on foreground and pull-to-refresh, conflict resolution per the version protocol. Ships a true offline-first experience.
+- [ ] **Med reminder local notifications** — server push is wired; need an `expo-notifications` schedule on `addMedicine` / `editMedicine` / `deleteMedicine` so reminders fire when the device is offline or push is throttled.
+- [ ] **Add-profile UI** — household has only the onboarded patient; the profile switcher has nothing to switch to. Needs an "Add member" button in Settings + a backend endpoint to create a User row in the same household. Without this, the "shared phone profile switcher" feature in CLAUDE.md is non-functional in practice.
+
+### Done in session 4 (mobile polish)
+
+- [x] **Voice STT (real)** — `expo-speech-recognition` wired in `src/components/logging/VoiceInputNative.tsx`. Permission gating, hi-IN/en-IN locale based on language pref, interim results, 5s silence auto-stop, 2-fail → numpad fallback, error codes (no-speech, audio-capture, not-allowed, etc.) handled, recurring haptic pulse during recording. Native module is **lazy-loaded** so Expo Go on Android falls back to numpad with a clear message instead of crashing the bundle.
+- [x] **Large-text toggle (real)** — Tailwind font tokens (`text-body`, `text-important`, `text-number`, `text-hero`) now resolve from NativeWind CSS variables. `<FontScaleProvider>` wraps the tree and updates the variables when the toggle flips; every `text-*` class scales 1.3× instantly. Removed the old broken `Text.defaultProps.style` hack from `useAccessibility`.
+- [x] **Profile badge tap → selector** — `ActiveProfileBadge` is `Pressable` when `profileCount > 1`, opens the existing `ProfileSelectorModal`. Static when there's only one profile (no false-affordance).
+- [x] **CriticalAlert hardware-back lock** — `BackHandler` swallows back press while `secondsLeft > 0`. Modal `onRequestClose` only forwards to `onDismiss` when dismissible. Countdown shown as live `Wait Ns...` label. Recurring haptic pulse every 4s per CLAUDE.md "haptic on critical: continuous".
+- [x] **`tel:` URI sanitizer (security)** — added `src/utils/phone.ts` (`sanitizePhoneForTelUri`). Strips everything except digits, leading `+`, `*`, `#` before opening `tel:`. Prevents pause/2nd-stage injection (`,` `;` `p` `w`). Used in CriticalAlert and `app/sos.tsx` (the latter previously interpolated raw deep-link `phone` query param straight into the URL — closed).
+- [x] **Settings persistence** — already shipping via Zustand `persist` middleware on `usePreferencesStore` (AsyncStorage). Verified.
+- [x] **Profile inactivity check** — already shipping via `useProfileInactivity`. Verified.
+- [x] **Undo reading** — already wired in `app/(tabs)/log.tsx` via `api.delete("/readings/glucose/:id")`. Verified.
+- [x] **30s critical alert lock** — was already implemented; this session added the back-button block + countdown UI on top.
+- [x] **Time-anomaly banner** — already shows on dashboard when `timeAnomalyCount >= 2`. Verified.
+- [x] **Push token registration** — already calls `registerAndSyncPushToken()` after `accessToken` hydration in `_layout.tsx`. Verified.
+- [x] **Medications CRUD UI** — done in session 3. Verified by user (add medicine + Taken/Skipped working).
+- [x] **`.expo/` ignore broadened** — root `.gitignore` now uses `**/.expo/` so stray Expo dirs in any workspace don't leak into git status.
 
 ### Deferred to Phase 2 (Frontend)
 
@@ -144,6 +159,9 @@
 - Metro: custom resolver in metro.config.js for .js -> .ts workspace imports
 - semver@7 forced via root package.json dep (reanimated needs functions/satisfies)
 - Mobile field name: `measuredAt` (not measuredAtIso) — must match server Zod schema
+- Reading update path must NEVER mutate `measured_at` (TimescaleDB partition key) — only `valueMgDl, readingType, context, notes, source, streak*, antiCheatFlags, version` are updatable
+- Patch #18: `User.timeAnomalyCount` is incremented atomically via Prisma `increment: 1`; >= 2 → streak credit uses server time, not `measuredAt`
+- Native modules with `requireNativeModule` (e.g. `expo-speech-recognition`, WatermelonDB) must be lazy-loaded behind a `Constants.appOwnership === "expo"` guard so Expo Go on Android doesn't crash at bundle load
 
 ## DB access
 
@@ -162,6 +180,33 @@ UPDATE users SET name='', age=0, conditions='{}', onboarding_complete=false, onb
 ---
 
 ## Changelog
+
+### Session 4 (2026-05-10) — Phase 1 hardening
+
+Branch: `phase1-hardening`. All checks green: mobile typecheck, server typecheck, domain-logic 45/45 unit, server integration 9/9 (exit 0). 8 atomic commits.
+
+**Mobile**
+
+1. Voice STT wired (`expo-speech-recognition`) with lazy native-module load so Expo Go on Android falls back to numpad without crashing the bundle. Permission gating, hi-IN/en-IN locale, 5s silence timeout, 2-fail → numpad, all error codes handled.
+2. Large-text toggle now actually scales fonts. Tailwind tokens (`text-body|important|number|hero`) routed through NativeWind CSS variables; `<FontScaleProvider>` updates them at runtime. Removed broken `Text.defaultProps.style` hack.
+3. Profile badge tappable when `profileCount > 1` (opens `ProfileSelectorModal`); static otherwise.
+4. CriticalAlert: hardware-back blocked while locked, live `Wait Ns...` countdown, recurring haptic pulse every 4s.
+5. Security: `tel:` URI sanitizer extracted to `src/utils/phone.ts` and used in both CriticalAlert and `app/sos.tsx` (the latter previously took raw deep-link `phone` and concatenated into `tel:`).
+6. `_layout.tsx` lazy-loads `expo-notifications` only outside Expo Go (was crashing at boot in Expo Go SDK 53+).
+7. `notifications.ts` sets handler only outside Expo Go.
+8. Stray `apps/server/.expo/` no longer untracked — root `.gitignore` broadened to `**/.expo/`.
+
+**Server**
+
+9. **Patch #18 — server-time streak fallback.** `readings.service.ts` compares `measuredAt` to server clock; >2hr drift atomically increments `User.timeAnomalyCount`. Once count ≥ 2, streak credit uses server time; reading's medical timestamp is preserved.
+10. New columns: `glucose_readings.anti_cheat_flags jsonb` and `glucose_readings.streak_credited_at_server_time boolean`. Migration `20260510120000_reading_anti_cheat_and_streak_source` (NOT NULL with safe defaults — non-blocking).
+11. **Reading update path narrowed** — no longer mutates `measured_at` (was a latent TimescaleDB partition-key violation under sync edits).
+12. **Weekly grace reset cron** — `workers/grace-reset.worker.ts`. BullMQ repeatable, Sunday 21:30 UTC = Monday 03:00 IST, `repeat.key` for multi-replica idempotency.
+13. **3 new integration tests** — critical-alert queue receives job; anti-cheat flag persisted on 4th identical reading; server-time fallback engages on 2nd anomalous clock.
+14. Fixed pre-existing `expected 201 to be 200` mismatch in 3 readings tests.
+15. Fixed pg.Pool teardown — both integration test files now call `disconnectDatabase()` before stopping Testcontainers, eliminating FATAL 57P01 noise on exit.
+
+**Pending after this session:** WatermelonDB sync wiring, med reminder local-notification fallback, add-household-member endpoint + UI. See `Pending (Phase 1)` above.
 
 ### Session 3b (2026-04-18) — Cleanup + tests
 

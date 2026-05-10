@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
 import { ProfileSwitcher } from "@/components/profile/ProfileSwitcher";
+import { SyncStatusBadge } from "@/components/shared/SyncStatusBadge";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -85,7 +86,10 @@ export default function DashboardScreen(): JSX.Element {
         <Text className="text-hero font-bold" numberOfLines={1}>
           {greeting}
         </Text>
-        <ActiveProfileBadge />
+        <View className="flex-row items-center gap-2">
+          <SyncStatusBadge />
+          <ActiveProfileBadge />
+        </View>
       </View>
       <ProfileSwitcher />
 
