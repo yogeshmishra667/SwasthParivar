@@ -3,13 +3,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { sanitizePhoneForTelUri } from "@/utils/phone";
 
 export default function SosScreen(): JSX.Element {
   const router = useRouter();
   const { phone, name } = useLocalSearchParams<{ phone?: string; name?: string }>();
 
   const call = (): void => {
-    if (phone) void Linking.openURL(`tel:${phone}`);
+    const tel = sanitizePhoneForTelUri(phone);
+    if (tel.length === 0) return;
+    void Linking.openURL(`tel:${tel}`);
   };
 
   return (
@@ -20,7 +23,11 @@ export default function SosScreen(): JSX.Element {
         {name ?? "Contact"} ko call karein
       </Text>
       <View className="mt-6 w-full gap-3">
-        <Button label="Abhi call karein" onPress={call} disabled={!phone} />
+        <Button
+          label="Abhi call karein"
+          onPress={call}
+          disabled={sanitizePhoneForTelUri(phone).length === 0}
+        />
         <Button label="Close" variant="ghost" onPress={() => router.back()} />
       </View>
     </SafeAreaView>
