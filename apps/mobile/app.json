@@ -42,6 +42,7 @@
       "expo-localization",
       "expo-secure-store",
       "expo-font",
+      "expo-speech-recognition",
       [
         "expo-notifications",
         {

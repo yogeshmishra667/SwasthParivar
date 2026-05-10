@@ -63,10 +63,7 @@ export default function LogScreen(): JSX.Element {
     setStage("confirm");
   };
 
-  const save = async (
-    type: GlucoseReadingType,
-    context: "normal" | "festive",
-  ): Promise<void> => {
+  const save = async (type: GlucoseReadingType, context: "normal" | "festive"): Promise<void> => {
     if (!parsed || !userId) return;
     hapticSave();
     setSaveError(null);
@@ -93,18 +90,7 @@ export default function LogScreen(): JSX.Element {
       }
       setUndoVisible(true);
       setStage("saved");
-      return;
-    }
-
-    if (result.kind === "queued") {
-      // Offline path — reading is in the local queue, drain hook will
-      // push it later. Show success but make the offline status clear.
-      setLastReadingId(null);
-      setSavedOffline(true);
-      setStreakDays(0);
-      setFeedbackMsg(t("logging.savedOffline"));
-      // Critical-value safety still fires from the local check — patient
-      // shouldn't lose the alert just because they're offline.
+    } catch (error) {
       if (isCriticalGlucose(parsed.value)) {
         const dir = parsed.value < 65 ? "low" : "high";
         setCriticalAlert({ visible: true, value: parsed.value, direction: dir });
@@ -158,9 +144,7 @@ export default function LogScreen(): JSX.Element {
           color={savedOffline ? "#D97706" : "#16A34A"}
           accessibilityLabel={savedOffline ? "Saved locally" : "Saved"}
         />
-        <Text className="text-important text-center">
-          {feedbackMsg ?? t("logging.saved")}
-        </Text>
+        <Text className="text-important text-center">{feedbackMsg ?? t("logging.saved")}</Text>
         {streakDays > 0 && (
           <View className="flex-row items-center gap-2">
             <Icon name="flame" size={20} color="#F59E0B" />
@@ -219,9 +203,7 @@ export default function LogScreen(): JSX.Element {
         onPress={() => setMode((m) => (m === "voice" ? "numpad" : "voice"))}
       />
 
-      {saveError !== null && (
-        <Text className="text-body text-warning">{saveError}</Text>
-      )}
+      {saveError !== null && <Text className="text-body text-warning">{saveError}</Text>}
     </SafeAreaView>
   );
 }
