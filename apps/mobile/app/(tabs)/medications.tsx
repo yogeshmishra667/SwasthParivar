@@ -7,6 +7,11 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
+import {
+  cancelMedReminders,
+  reconcileMedReminders,
+  syncMedReminders,
+} from "@/services/medication-reminders";
 import { hapticSave } from "@/utils/haptics";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 
@@ -33,6 +38,16 @@ export default function MedicationsScreen(): JSX.Element {
     try {
       const res = await api.get<{ success: boolean; data: Schedule[] }>("/medications/schedule");
       setSchedules(res.data);
+      // Reconcile local reminders with server truth on every load.
+      // Fixes drift from re-install, force-quit, or a missed sync.
+      // Fire-and-forget — failures shouldn't block the UI.
+      void reconcileMedReminders(
+        res.data.map((s) => ({
+          id: s.id,
+          medicineName: s.medicineName,
+          timeSlots: s.timeSlots,
+        })),
+      );
     } catch {
       setError(t("medications.loadFailed"));
     } finally {
@@ -55,6 +70,7 @@ export default function MedicationsScreen(): JSX.Element {
             try {
               await api.delete(`/medications/schedule/${s.id}`);
               setSchedules((prev) => prev.filter((x) => x.id !== s.id));
+              await cancelMedReminders(s.id);
             } catch {
               setError(t("medications.saveFailed"));
             }
@@ -160,6 +176,10 @@ export default function MedicationsScreen(): JSX.Element {
             onSaved={(s) => {
               setSchedules((prev) => [...prev, s]);
               setShowForm(false);
+              // Schedule the local reminder on every slot. Async, no
+              // need to block the UI — schedule failure is logged but
+              // the schedule itself is persisted server-side.
+              void syncMedReminders(s.id, s.medicineName, s.timeSlots);
             }}
             onError={() => setError(t("medications.saveFailed"))}
             invalidTimeMsg={t("medications.invalidTime")}

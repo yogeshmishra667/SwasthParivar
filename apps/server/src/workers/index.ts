@@ -4,6 +4,7 @@ import {
   notificationTriggerWorker,
   bootstrapNotificationCron,
 } from "./notification-trigger.worker.js";
+import { graceResetWorker, bootstrapGraceResetCron } from "./grace-reset.worker.js";
 import { logger } from "../shared/logger.js";
 
 const workers = [
@@ -11,11 +12,15 @@ const workers = [
   medReminderWorker,
   medMissedAlertWorker,
   notificationTriggerWorker,
+  graceResetWorker,
 ];
 
 export const startWorkers = (): void => {
   bootstrapNotificationCron().catch((err) =>
     logger.error({ err }, "failed to bootstrap notification cron"),
+  );
+  bootstrapGraceResetCron().catch((err) =>
+    logger.error({ err }, "failed to bootstrap grace-reset cron"),
   );
   logger.info({ count: workers.length }, "workers started");
 };

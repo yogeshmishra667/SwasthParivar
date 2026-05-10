@@ -14,6 +14,16 @@ const criticalQueue = createQueue<{ readingId: string; userId: string; decision:
   QUEUE_NAMES.CRITICAL_ALERT,
 );
 
+// Patch #18 — device-time manipulation defense.
+// If |client_measuredAt − server_now| exceeds this threshold, the reading
+// counts as one anomalous occurrence. After TIME_ANOMALY_TRIGGER_COUNT cumulative
+// occurrences, streak credit falls back to server time so users cannot game
+// streaks by jumping the device clock. The reading itself preserves the
+// patient-reported timestamp for medical fidelity.
+const SERVER_TIME_FALLBACK_THRESHOLD_HOURS = 2;
+const TIME_ANOMALY_TRIGGER_COUNT = 2;
+const MS_PER_HOUR = 3_600_000;
+
 interface CreateReadingInput {
   userId: string;
   clientUuid: string;
@@ -41,6 +51,11 @@ const ist = (): number => 330;
 export const createGlucoseReading = async (
   input: CreateReadingInput,
 ): Promise<CreateReadingResult> => {
+  const serverNow = new Date();
+  const measuredAtDate = new Date(input.measuredAt);
+  const clockDeltaMs = Math.abs(serverNow.getTime() - measuredAtDate.getTime());
+  const isAnomalousClock = clockDeltaMs > SERVER_TIME_FALLBACK_THRESHOLD_HOURS * MS_PER_HOUR;
+
   const existing = await prisma.glucoseReading.findFirst({ where: { clientUuid: input.clientUuid } });
 
   if (existing) {
@@ -50,6 +65,33 @@ export const createGlucoseReading = async (
   }
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId } });
+
+  // Increment time-anomaly counter atomically when this reading's client
+  // clock is off by > 2hr from the server. The post-increment count drives
+  // the streak-source decision below.
+  let effectiveAnomalyCount = user.timeAnomalyCount;
+  if (isAnomalousClock) {
+    const updated = await prisma.user.update({
+      where: { id: input.userId },
+      data: { timeAnomalyCount: { increment: 1 } },
+      select: { timeAnomalyCount: true },
+    });
+    effectiveAnomalyCount = updated.timeAnomalyCount;
+    logger.warn(
+      {
+        userId: input.userId,
+        clockDeltaMs,
+        deviceTime: input.measuredAt,
+        serverTime: serverNow.toISOString(),
+        timeAnomalyCount: effectiveAnomalyCount,
+      },
+      "device clock anomaly detected",
+    );
+  }
+  const useServerTimeForStreak = effectiveAnomalyCount >= TIME_ANOMALY_TRIGGER_COUNT;
+  const streakSourceIso = useServerTimeForStreak
+    ? serverNow.toISOString()
+    : input.measuredAt;
 
   const state = await prisma.userStreak.upsert({
     where: { userId: input.userId },
@@ -80,7 +122,7 @@ export const createGlucoseReading = async (
       graceUsedThisWeek: state.graceUsedThisWeek,
       milestonesReached: (state.milestonesReached as number[]) ?? [],
     },
-    measuredAtIso: input.measuredAt,
+    measuredAtIso: streakSourceIso,
     userTimezoneOffsetMinutes: ist(),
     recentLogTimestampsLast7d: recent.map((r) => r.measuredAt.toISOString()),
     recentValuesSameType: recentSameType.map((r) => r.valueMgDl),
@@ -142,14 +184,30 @@ export const createGlucoseReading = async (
     source: input.source,
     measuredAt: new Date(input.measuredAt),
     streakCreditedTo: new Date(streakResult.streakCreditedTo),
+    streakCreditedAtServerTime: useServerTimeForStreak,
+    antiCheatFlags: streakResult.antiCheatFlags,
     version: input.version,
     user: { connect: { id: input.userId } },
   };
 
+  // On update we deliberately preserve the existing measuredAt (the
+  // partition key for the TimescaleDB hypertable). The user-facing edit
+  // flow updates value/type/notes — not the medical timestamp. Anything
+  // that would shift measuredAt should go through DELETE + create.
   const reading = existing
     ? await prisma.glucoseReading.update({
         where: { clientUuid_measuredAt: { clientUuid: existing.clientUuid, measuredAt: existing.measuredAt } },
-        data: { ...data, version: input.version },
+        data: {
+          valueMgDl: input.valueMgDl,
+          readingType: input.readingType,
+          context: input.context,
+          ...(input.notes !== undefined ? { notes: input.notes } : {}),
+          source: input.source,
+          streakCreditedTo: new Date(streakResult.streakCreditedTo),
+          streakCreditedAtServerTime: useServerTimeForStreak,
+          antiCheatFlags: streakResult.antiCheatFlags,
+          version: input.version,
+        },
       })
     : await prisma.glucoseReading.create({ data });
 

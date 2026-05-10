@@ -67,6 +67,7 @@
     "recentSwitchConfirm": "Yeh {{profile}} ke liye hai — sahi hai?",
     "extremeConfirm": "{{value}} — yeh bahut {{direction}} hai. Kya sahi hai?",
     "saved": "Save ho gaya",
+    "savedOffline": "Locally save ho gaya — internet aane par sync ho jaayega.",
     "saveFailed": "Save nahi ho paya — data locally safe hai, sync baad mein hoga.",
     "streakCount": "{{count}} din ka streak",
     "readingSaved": "Reading save hui",
@@ -104,7 +105,11 @@
     "logged": "Note ho gaya",
     "loadFailed": "Dawai list load nahi hui.",
     "saveFailed": "Save nahi hua. Dobara try karein.",
-    "invalidTime": "HH:MM format (jaise 08:00)"
+    "invalidTime": "HH:MM format (jaise 08:00)",
+    "localReminder": {
+      "title": "Dawai ka time",
+      "body": "{{name}} lijiye"
+    }
   },
   "settings": {
     "title": "Settings",

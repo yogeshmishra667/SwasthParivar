@@ -67,6 +67,7 @@
     "recentSwitchConfirm": "This is for {{profile}} — correct?",
     "extremeConfirm": "{{value}} — this is very {{direction}}. Is it correct?",
     "saved": "Saved",
+    "savedOffline": "Saved locally — will sync when you're back online.",
     "saveFailed": "Could not save — data is safe locally, will sync later.",
     "streakCount": "{{count}} day streak",
     "readingSaved": "Reading saved",
@@ -104,7 +105,11 @@
     "logged": "Logged",
     "loadFailed": "Could not load medicines.",
     "saveFailed": "Save failed. Try again.",
-    "invalidTime": "Use HH:MM (e.g. 08:00)"
+    "invalidTime": "Use HH:MM (e.g. 08:00)",
+    "localReminder": {
+      "title": "Medication time",
+      "body": "Take {{name}}"
+    }
   },
   "settings": {
     "title": "Settings",

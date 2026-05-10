@@ -10,8 +10,8 @@ const statusFor = (code: ErrorCode): number => {
     case "AUTH_OTP_EXPIRED":
     case "AUTH_OTP_INVALID":
     case "AUTH_TOKEN_EXPIRED":
-      return 401;
     case "AUTH_UNAUTHORIZED":
+      return 401;
     case "FAMILY_NO_ACCESS":
       return 403;
     case "MED_SCHEDULE_NOT_FOUND":
@@ -20,6 +20,7 @@ const statusFor = (code: ErrorCode): number => {
     case "FAMILY_LINK_EXISTS":
     case "SOS_ALREADY_ACTIVE":
     case "READING_STALE_VERSION":
+    case "HOUSEHOLD_PROFILE_LIMIT":
       return 409;
     case "CHAT_RATE_LIMITED":
     case "RATE_LIMITED":

@@ -1,0 +1,78 @@
+# Default: text files use LF line endings everywhere — Macs / Linux / WSL match,
+# Windows users get LF in working tree (Git Bash + modern editors handle this).
+* text=auto eol=lf
+
+# ──────────────────────────────────────────────────────────
+# Source / config: explicit text + LF
+# ──────────────────────────────────────────────────────────
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.cjs       text eol=lf
+*.mjs       text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.sh        text eol=lf
+*.sql       text eol=lf
+*.prisma    text eol=lf
+
+# Husky hooks must stay LF (executed by sh on macOS/Linux CI).
+.husky/*    text eol=lf
+
+# ──────────────────────────────────────────────────────────
+# Lockfiles: huge, machine-generated. Treat as binary so:
+#   - `git diff` doesn't dump 5k lines on every dep change
+#   - merges don't try to text-merge ordered manifests (which produces
+#     subtly broken lockfiles). Resolve via `pnpm install` instead.
+# ──────────────────────────────────────────────────────────
+pnpm-lock.yaml -diff merge=binary
+package-lock.json -diff merge=binary
+yarn.lock -diff merge=binary
+
+# ──────────────────────────────────────────────────────────
+# Binary assets: never try to text-diff
+# ──────────────────────────────────────────────────────────
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.webp    binary
+*.ico     binary
+*.pdf     binary
+*.zip     binary
+*.gz      binary
+*.tgz     binary
+*.tar     binary
+*.woff    binary
+*.woff2   binary
+*.ttf     binary
+*.otf     binary
+*.mp3     binary
+*.mp4     binary
+*.mov     binary
+*.aab     binary
+*.apk     binary
+*.ipa     binary
+*.keystore binary
+*.jks      binary
+*.p8       binary
+*.p12      binary
+*.mobileprovision binary
+
+# ──────────────────────────────────────────────────────────
+# Languages with helpful diff drivers
+# ──────────────────────────────────────────────────────────
+*.md        diff=markdown
+*.ts        diff=typescript
+*.tsx       diff=typescript
+
+# ──────────────────────────────────────────────────────────
+# GitHub linguist: keep generated / vendored content out of language
+# stats and exclude from diff size calculations.
+# ──────────────────────────────────────────────────────────
+pnpm-lock.yaml             linguist-generated=true
+**/dist/**                 linguist-generated=true
+**/build/**                linguist-generated=true
+apps/server/prisma/migrations/**  linguist-generated=true

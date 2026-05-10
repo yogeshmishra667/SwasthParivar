@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+
+# Enforces Conventional Commits per CONTRIBUTING.md.
+# `$1` is the path to the in-progress commit message file.
+
+pnpm exec commitlint --edit "$1"

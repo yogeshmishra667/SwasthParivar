@@ -1,0 +1,156 @@
+name: CI
+
+# Runs on every PR + every push to main. Mirrors the local pre-push hook
+# and adds the integration tests that are too slow for pre-push.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel older in-flight CI runs for the same ref so we only ever spend
+# minutes on the latest commit.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PNPM_VERSION: "9.12.0"
+  # Node 22.x — @commitlint/cli@21 requires >=22.12; matches the local
+  # dev environment (Node 22.18). Bump in lockstep with any raise of
+  # `engines.node` in package.json.
+  NODE_VERSION: "22.x"
+  # `prisma.config.ts` calls `env("DATABASE_URL")` at config-load time
+  # — even `prisma generate` (which doesn't connect) needs the var to
+  # be present. We supply a parseable stub at the workflow level; jobs
+  # that actually run against Postgres (integration-tests) override it
+  # at runtime via Testcontainers.
+  DATABASE_URL: "postgresql://stub:stub@localhost:5432/stub"
+  REDIS_URL: "redis://localhost:6379"
+  JWT_SECRET: "stub_jwt_secret_that_is_at_least_32_chars_long"
+  JWT_REFRESH_SECRET: "stub_refresh_secret_that_is_at_least_32_chars_long"
+  OTP_SECRET: "stub_otp_secret_that_is_at_least_32_chars_long"
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  # Fast feedback: typecheck across the workspace.
+  # Same command pre-push runs locally.
+  # ──────────────────────────────────────────────────────────
+  typecheck:
+    name: Typecheck (workspace)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @swasth/server prisma:generate
+
+      - name: Typecheck
+        run: pnpm -r --parallel run typecheck
+
+  # ──────────────────────────────────────────────────────────
+  # Domain-logic unit tests (pure functions, no Docker needed).
+  # ──────────────────────────────────────────────────────────
+  unit-tests:
+    name: Unit tests (domain-logic)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm test:unit
+
+  # ──────────────────────────────────────────────────────────
+  # Server integration tests (Testcontainers Postgres + Redis).
+  # Slower (~2 min); runs in parallel with typecheck/unit.
+  # ──────────────────────────────────────────────────────────
+  integration-tests:
+    name: Integration tests (server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @swasth/server prisma:generate
+
+      - name: Integration tests
+        run: pnpm test:integration
+
+  # ──────────────────────────────────────────────────────────
+  # Migration check: every diff that touches schema.prisma must
+  # include at least one new migration folder under prisma/migrations.
+  # Catches a common bug pattern (schema-without-migration drift).
+  #
+  # SHAs flow through env to avoid script injection patterns even
+  # though SHAs are hex-only — defence in depth.
+  # ──────────────────────────────────────────────────────────
+  migration-check:
+    name: Schema ↔ migration parity
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 2
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify schema changes ship with a migration
+        run: |
+          set -eu
+          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          SCHEMA_TOUCHED=$(printf '%s\n' "$CHANGED" | grep -E '^apps/server/prisma/schema\.prisma$' || true)
+          MIGRATION_ADDED=$(git diff --name-only --diff-filter=A "$BASE_SHA" "$HEAD_SHA" \
+            | grep -E '^apps/server/prisma/migrations/[^/]+/migration\.sql$' || true)
+          if [ -n "$SCHEMA_TOUCHED" ] && [ -z "$MIGRATION_ADDED" ]; then
+            echo "::error::schema.prisma changed but no new migration folder was added."
+            echo "Run: pnpm --filter @swasth/server prisma:migrate -- --name <slug>"
+            exit 1
+          fi
+          if [ -n "$SCHEMA_TOUCHED" ]; then
+            echo "Schema change pairs with new migration(s):"
+            printf '%s\n' "$MIGRATION_ADDED"
+          else
+            echo "No schema changes — migration check skipped."
+          fi
