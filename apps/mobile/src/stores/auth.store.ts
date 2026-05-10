@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
+import { clearDashboardCache } from "@/services/dashboard-cache";
 
 interface AuthState {
   accessToken: string | null;
@@ -30,6 +31,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     await SecureStore.deleteItemAsync(KEY_ACCESS);
     await SecureStore.deleteItemAsync(KEY_REFRESH);
     await SecureStore.deleteItemAsync(KEY_USER);
+    // Drop cached server data — never leak the previous user's
+    // dashboard onto a fresh login on the same device.
+    await clearDashboardCache();
     set({ accessToken: null, refreshToken: null, userId: null });
   },
   hydrate: async () => {

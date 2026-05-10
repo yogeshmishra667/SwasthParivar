@@ -45,11 +45,14 @@
     "greeting": "Hello, {{name}}",
     "greetingDefault": "Hello",
     "staleData": "Showing older data — pull to refresh.",
+    "lastUpdated": "Last updated: {{time}}",
     "todayStreak": "Current streak",
     "lastReading": "Last reading",
     "noReadings": "No readings yet — log one now.",
     "todayReadings": "Today's readings",
-    "logReading": "Log a reading"
+    "logReading": "Log a reading",
+    "welcomeBackTitle": "Welcome back!",
+    "welcomeBackBody": "{{days}} days since your last log — start a new streak 💪"
   },
   "logging": {
     "tapToSpeak": "Tap to speak",
