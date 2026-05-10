@@ -1,18 +1,24 @@
 import { useEffect, useState } from "react";
-import { View, Text } from "react-native";
+import { View, Text, Pressable } from "react-native";
+import { useTranslation } from "react-i18next";
 import { isCriticalGlucose } from "@swasth/shared-types";
 import type { GlucoseReadingType } from "@swasth/shared-types";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { useProfileStore, isRecentSwitch } from "@/stores/profile.store";
+import { useFestiveStore, FESTIVE_MAX_PER_WEEK } from "@/stores/festive.store";
 import { useActiveProfile } from "@/hooks/useActiveProfile";
+import { TOUCH_TARGET_MIN } from "@/utils/constants";
+import { track } from "@/services/analytics";
+
+export type ReadingContext = "normal" | "festive";
 
 interface ConfirmationProps {
   value: number;
   type: GlucoseReadingType;
   uncertainType: boolean;
-  onConfirm: (type: GlucoseReadingType) => void;
+  onConfirm: (type: GlucoseReadingType, context: ReadingContext) => void;
   onEdit: () => void;
 }
 
@@ -35,9 +41,14 @@ export const ConfirmationScreen = ({
   onConfirm,
   onEdit,
 }: ConfirmationProps): JSX.Element => {
+  const { t } = useTranslation();
   const profile = useActiveProfile();
   const [selectedType, setSelectedType] = useState<GlucoseReadingType>(type);
+  const [isFestive, setIsFestive] = useState(false);
   const recentSwitch = useProfileStore(isRecentSwitch);
+  const festiveCanUse = useFestiveStore((s) => s.canUseFestive());
+  const festiveUsedThisWeek = useFestiveStore((s) => s.recentUses());
+  const recordFestiveUse = useFestiveStore((s) => s.recordUse);
   const isCritical = isCriticalGlucose(value);
   const [confirmReady, setConfirmReady] = useState(!isCritical);
 
@@ -46,6 +57,19 @@ export const ConfirmationScreen = ({
     const id = setTimeout(() => setConfirmReady(true), EXTREME_CONFIRM_DELAY_MS);
     return () => clearTimeout(id);
   }, [isCritical]);
+
+  // Critical values ignore the festive toggle entirely — safety doesn't
+  // bend for celebrations. Mirrors the engine rule in feedback-engine.
+  const festiveAvailable = !isCritical && festiveCanUse;
+  const festiveActive = isFestive && festiveAvailable;
+
+  const handleConfirm = (): void => {
+    if (festiveActive) {
+      recordFestiveUse();
+      track("festive_tag_used", { used_this_week: festiveUsedThisWeek + 1 });
+    }
+    onConfirm(selectedType, festiveActive ? "festive" : "normal");
+  };
 
   return (
     <View className="gap-4 p-4">
@@ -92,13 +116,61 @@ export const ConfirmationScreen = ({
         </View>
       </Card>
 
+      {/* Festive toggle. Hidden when critical (safety wins) or when
+          the user has burned both weekly slots — see CLAUDE.md "Festive
+          Tag: Disable After Limit". */}
+      {!isCritical && (
+        <Card>
+          <Pressable
+            onPress={() => festiveAvailable && setIsFestive((v) => !v)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: festiveActive, disabled: !festiveAvailable }}
+            disabled={!festiveAvailable}
+            style={{ minHeight: TOUCH_TARGET_MIN }}
+            className="flex-row items-center justify-between"
+          >
+            <View className="flex-1 pr-3">
+              <Text
+                className={`text-important font-semibold ${
+                  festiveAvailable ? "" : "text-neutral"
+                }`}
+              >
+                🎉 {t("logging.festiveToggle", { defaultValue: "Special din?" })}
+              </Text>
+              {!festiveCanUse ? (
+                <Text className="mt-1 text-body text-neutral">
+                  {t("logging.festiveLimitReached", {
+                    defaultValue: "Is hafte 2 baar use ho chuka. Kal se phir.",
+                  })}
+                </Text>
+              ) : (
+                <Text className="mt-1 text-body text-neutral">
+                  {t("logging.festiveHint", {
+                    used: festiveUsedThisWeek,
+                    max: FESTIVE_MAX_PER_WEEK,
+                    defaultValue: `Festival ho to enable karein (${festiveUsedThisWeek}/${FESTIVE_MAX_PER_WEEK} this week)`,
+                  })}
+                </Text>
+              )}
+            </View>
+            <View
+              className={`h-7 w-12 items-${festiveActive ? "end" : "start"} justify-center rounded-full px-1 ${
+                festiveActive ? "bg-celebration" : "bg-gray-300"
+              } ${festiveAvailable ? "" : "opacity-40"}`}
+            >
+              <View className="h-5 w-5 rounded-full bg-white" />
+            </View>
+          </Pressable>
+        </Card>
+      )}
+
       <View className="flex-row gap-3">
         <Button label="Edit" variant="ghost" onPress={onEdit} />
         <Button
           label={confirmReady ? "Haan, save" : "Wait..."}
           variant={isCritical ? "critical" : "primary"}
           disabled={!confirmReady}
-          onPress={() => onConfirm(selectedType)}
+          onPress={handleConfirm}
         />
       </View>
     </View>

@@ -2,6 +2,8 @@ import { useState } from "react";
 import { View, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import "react-native-get-random-values";
+import { v4 as uuidv4 } from "uuid";
 import { isCriticalGlucose } from "@swasth/shared-types";
 import type { GlucoseReadingType } from "@swasth/shared-types";
 import type { VoiceParseResult } from "@swasth/domain-logic";
@@ -27,6 +29,16 @@ interface Parsed {
   value: number;
   type: GlucoseReadingType;
   uncertain: boolean;
+}
+
+interface SaveResponse {
+  success: boolean;
+  data: {
+    reading: { id: string };
+    streak: { currentStreakDays: number; milestoneReached: string | null };
+    feedback: { tone: string; messageKey: string; params: Record<string, unknown> };
+    critical: { isCritical: boolean; direction?: "low" | "high" };
+  };
 }
 
 export default function LogScreen(): JSX.Element {
@@ -63,51 +75,34 @@ export default function LogScreen(): JSX.Element {
     setStage("confirm");
   };
 
-  const save = async (type: GlucoseReadingType): Promise<void> => {
+  const save = async (type: GlucoseReadingType, context: "normal" | "festive"): Promise<void> => {
     if (!parsed || !userId) return;
     hapticSave();
     setSaveError(null);
+    try {
+      const res = await api.post<SaveResponse>("/readings/glucose", {
+        clientUuid: uuidv4(),
+        valueMgDl: parsed.value,
+        readingType: type,
+        context,
+        source: mode,
+        measuredAt: new Date().toISOString(),
+        version: 1,
+      });
+      track("reading_logged", { type, source: mode, value: parsed.value });
 
-    const result = await saveGlucoseReading({
-      userId,
-      valueMgDl: parsed.value,
-      readingType: type,
-      context: "normal",
-      // `mode` is the input affordance (voice|numpad). Server `source`
-      // is broader (manual|voice|device); numpad maps to manual.
-      source: mode === "voice" ? "voice" : "manual",
-      measuredAtIso: new Date().toISOString(),
-    });
+      const { reading, streak, feedback, critical } = res.data;
+      setLastReadingId(reading.id);
+      setStreakDays(streak.currentStreakDays);
+      setFeedbackMsg(t(`feedback.${feedback.tone}`, { defaultValue: t("logging.saved") }));
 
-    if (result.kind === "synced") {
-      setLastReadingId(result.readingId);
-      setStreakDays(result.streak.currentStreakDays);
-      setFeedbackMsg(
-        t(`feedback.${result.feedback.tone}`, { defaultValue: t("logging.saved") }),
-      );
-      setSavedOffline(false);
-      if (result.critical.isCritical && result.critical.direction) {
-        setCriticalAlert({
-          visible: true,
-          value: parsed.value,
-          direction: result.critical.direction,
-        });
+      if (critical.isCritical && critical.direction) {
+        setCriticalAlert({ visible: true, value: parsed.value, direction: critical.direction });
         track("critical_bypass_triggered", { value: parsed.value });
       }
       setUndoVisible(true);
       setStage("saved");
-      return;
-    }
-
-    if (result.kind === "queued") {
-      // Offline path — reading is in the local queue, drain hook will
-      // push it later. Show success but make the offline status clear.
-      setLastReadingId(null);
-      setSavedOffline(true);
-      setStreakDays(0);
-      setFeedbackMsg(t("logging.savedOffline"));
-      // Critical-value safety still fires from the local check — patient
-      // shouldn't lose the alert just because they're offline.
+    } catch (error) {
       if (isCriticalGlucose(parsed.value)) {
         const dir = parsed.value < 65 ? "low" : "high";
         setCriticalAlert({ visible: true, value: parsed.value, direction: dir });
@@ -134,7 +129,7 @@ export default function LogScreen(): JSX.Element {
           value={parsed.value}
           type={parsed.type}
           uncertainType={parsed.uncertain}
-          onConfirm={(t) => void save(t)}
+          onConfirm={(t, ctx) => void save(t, ctx)}
           onEdit={() => {
             setSaveError(null);
             setStage("input");
@@ -161,9 +156,7 @@ export default function LogScreen(): JSX.Element {
           color={savedOffline ? "#D97706" : "#16A34A"}
           accessibilityLabel={savedOffline ? "Saved locally" : "Saved"}
         />
-        <Text className="text-important text-center">
-          {feedbackMsg ?? t("logging.saved")}
-        </Text>
+        <Text className="text-important text-center">{feedbackMsg ?? t("logging.saved")}</Text>
         {streakDays > 0 && (
           <View className="flex-row items-center gap-2">
             <Icon name="flame" size={20} color="#F59E0B" />
@@ -222,9 +215,7 @@ export default function LogScreen(): JSX.Element {
         onPress={() => setMode((m) => (m === "voice" ? "numpad" : "voice"))}
       />
 
-      {saveError !== null && (
-        <Text className="text-body text-warning">{saveError}</Text>
-      )}
+      {saveError !== null && <Text className="text-body text-warning">{saveError}</Text>}
     </SafeAreaView>
   );
 }

@@ -70,7 +70,10 @@
     "savedOffline": "Locally save ho gaya — internet aane par sync ho jaayega.",
     "saveFailed": "Save nahi ho paya — data locally safe hai, sync baad mein hoga.",
     "streakCount": "{{count}} din ka streak",
-    "readingSaved": "Reading save hui"
+    "readingSaved": "Reading save hui",
+    "festiveToggle": "Special din?",
+    "festiveHint": "Festival hai? Toggle karein. Is hafte: {{used}}/{{max}}",
+    "festiveLimitReached": "Is hafte 2 baar use ho chuka. Kal se phir available hoga."
   },
   "feedback": {
     "first_ever": "Pehli reading save ho gayi!",
