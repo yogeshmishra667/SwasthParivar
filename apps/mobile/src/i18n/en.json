@@ -69,7 +69,10 @@
     "saved": "Saved",
     "saveFailed": "Could not save — data is safe locally, will sync later.",
     "streakCount": "{{count}} day streak",
-    "readingSaved": "Reading saved"
+    "readingSaved": "Reading saved",
+    "festiveToggle": "Special day?",
+    "festiveHint": "Festival? Tag this reading. This week: {{used}}/{{max}}",
+    "festiveLimitReached": "Used twice this week — toggle returns next week."
   },
   "feedback": {
     "first_ever": "First reading saved!",

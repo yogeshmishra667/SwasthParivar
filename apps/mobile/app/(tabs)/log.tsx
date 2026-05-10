@@ -72,7 +72,10 @@ export default function LogScreen(): JSX.Element {
     setStage("confirm");
   };
 
-  const save = async (type: GlucoseReadingType): Promise<void> => {
+  const save = async (
+    type: GlucoseReadingType,
+    context: "normal" | "festive",
+  ): Promise<void> => {
     if (!parsed || !userId) return;
     hapticSave();
     setSaveError(null);
@@ -81,6 +84,7 @@ export default function LogScreen(): JSX.Element {
         clientUuid: uuidv4(),
         valueMgDl: parsed.value,
         readingType: type,
+        context,
         source: mode,
         measuredAt: new Date().toISOString(),
         version: 1,
@@ -116,7 +120,7 @@ export default function LogScreen(): JSX.Element {
           value={parsed.value}
           type={parsed.type}
           uncertainType={parsed.uncertain}
-          onConfirm={(t) => void save(t)}
+          onConfirm={(t, ctx) => void save(t, ctx)}
           onEdit={() => {
             setSaveError(null);
             setStage("input");

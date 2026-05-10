@@ -20,7 +20,10 @@ export default function FirstReadingScreen(): JSX.Element {
   const [celebrated, setCelebrated] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const saveReading = async (type: GlucoseReadingType): Promise<void> => {
+  const saveReading = async (
+    type: GlucoseReadingType,
+    context: "normal" | "festive",
+  ): Promise<void> => {
     if (value === null || saving) return;
     setSaving(true);
     try {
@@ -28,6 +31,7 @@ export default function FirstReadingScreen(): JSX.Element {
         clientUuid: uuidv4(),
         valueMgDl: value,
         readingType: type,
+        context,
         source: "manual",
         measuredAt: new Date().toISOString(),
         version: 1,
@@ -75,7 +79,7 @@ export default function FirstReadingScreen(): JSX.Element {
       value={value}
       type="fasting"
       uncertainType={false}
-      onConfirm={(type) => void saveReading(type)}
+      onConfirm={(type, ctx) => void saveReading(type, ctx)}
       onEdit={() => setValue(null)}
     />
   );
