@@ -2,7 +2,6 @@ import { useState } from "react";
 import { View, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { v4 as uuidv4 } from "uuid";
 import { isCriticalGlucose } from "@swasth/shared-types";
 import type { GlucoseReadingType } from "@swasth/shared-types";
 import type { VoiceParseResult } from "@swasth/domain-logic";
@@ -16,6 +15,7 @@ import { UndoToast } from "@/components/shared/UndoToast";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
+import { saveGlucoseReading } from "@/services/readings";
 import { useAuthStore } from "@/stores/auth.store";
 import { hapticSave } from "@/utils/haptics";
 import { track } from "@/services/analytics";
@@ -29,16 +29,6 @@ interface Parsed {
   uncertain: boolean;
 }
 
-interface SaveResponse {
-  success: boolean;
-  data: {
-    reading: { id: string };
-    streak: { currentStreakDays: number; milestoneReached: string | null };
-    feedback: { tone: string; messageKey: string; params: Record<string, unknown> };
-    critical: { isCritical: boolean; direction?: "low" | "high" };
-  };
-}
-
 export default function LogScreen(): JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
@@ -48,6 +38,7 @@ export default function LogScreen(): JSX.Element {
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [undoVisible, setUndoVisible] = useState(false);
   const [lastReadingId, setLastReadingId] = useState<string | null>(null);
+  const [savedOffline, setSavedOffline] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
   const [streakDays, setStreakDays] = useState(0);
@@ -76,37 +67,64 @@ export default function LogScreen(): JSX.Element {
     if (!parsed || !userId) return;
     hapticSave();
     setSaveError(null);
-    try {
-      const res = await api.post<SaveResponse>("/readings/glucose", {
-        clientUuid: uuidv4(),
-        valueMgDl: parsed.value,
-        readingType: type,
-        source: mode,
-        measuredAt: new Date().toISOString(),
-        version: 1,
-      });
-      track("reading_logged", { type, source: mode, value: parsed.value });
 
-      const { reading, streak, feedback, critical } = res.data;
-      setLastReadingId(reading.id);
-      setStreakDays(streak.currentStreakDays);
-      setFeedbackMsg(t(`feedback.${feedback.tone}`, { defaultValue: t("logging.saved") }));
+    const result = await saveGlucoseReading({
+      userId,
+      valueMgDl: parsed.value,
+      readingType: type,
+      context: "normal",
+      // `mode` is the input affordance (voice|numpad). Server `source`
+      // is broader (manual|voice|device); numpad maps to manual.
+      source: mode === "voice" ? "voice" : "manual",
+      measuredAtIso: new Date().toISOString(),
+    });
 
-      if (critical.isCritical && critical.direction) {
-        setCriticalAlert({ visible: true, value: parsed.value, direction: critical.direction });
+    if (result.kind === "synced") {
+      setLastReadingId(result.readingId);
+      setStreakDays(result.streak.currentStreakDays);
+      setFeedbackMsg(
+        t(`feedback.${result.feedback.tone}`, { defaultValue: t("logging.saved") }),
+      );
+      setSavedOffline(false);
+      if (result.critical.isCritical && result.critical.direction) {
+        setCriticalAlert({
+          visible: true,
+          value: parsed.value,
+          direction: result.critical.direction,
+        });
         track("critical_bypass_triggered", { value: parsed.value });
       }
-
       setUndoVisible(true);
       setStage("saved");
-    } catch {
+      return;
+    }
+
+    if (result.kind === "queued") {
+      // Offline path — reading is in the local queue, drain hook will
+      // push it later. Show success but make the offline status clear.
+      setLastReadingId(null);
+      setSavedOffline(true);
+      setStreakDays(0);
+      setFeedbackMsg(t("logging.savedOffline"));
+      // Critical-value safety still fires from the local check — patient
+      // shouldn't lose the alert just because they're offline.
       if (isCriticalGlucose(parsed.value)) {
         const dir = parsed.value < 65 ? "low" : "high";
         setCriticalAlert({ visible: true, value: parsed.value, direction: dir });
         track("critical_bypass_triggered", { value: parsed.value });
       }
-      setSaveError(t("logging.saveFailed"));
+      setStage("saved");
+      return;
     }
+
+    // Server rejected — surface a real error. Critical-value alert
+    // still fires regardless of the rejection reason.
+    if (isCriticalGlucose(parsed.value)) {
+      const dir = parsed.value < 65 ? "low" : "high";
+      setCriticalAlert({ visible: true, value: parsed.value, direction: dir });
+      track("critical_bypass_triggered", { value: parsed.value });
+    }
+    setSaveError(t("logging.saveFailed"));
   };
 
   if (stage === "confirm" && parsed) {
@@ -137,8 +155,15 @@ export default function LogScreen(): JSX.Element {
   if (stage === "saved") {
     return (
       <SafeAreaView className="flex-1 items-center justify-center gap-4 bg-white p-6">
-        <Icon name="checkmark-circle" size={72} color="#16A34A" accessibilityLabel="Saved" />
-        <Text className="text-important">{feedbackMsg ?? t("logging.saved")}</Text>
+        <Icon
+          name={savedOffline ? "cloud-offline" : "checkmark-circle"}
+          size={72}
+          color={savedOffline ? "#D97706" : "#16A34A"}
+          accessibilityLabel={savedOffline ? "Saved locally" : "Saved"}
+        />
+        <Text className="text-important text-center">
+          {feedbackMsg ?? t("logging.saved")}
+        </Text>
         {streakDays > 0 && (
           <View className="flex-row items-center gap-2">
             <Icon name="flame" size={20} color="#F59E0B" />
@@ -146,22 +171,27 @@ export default function LogScreen(): JSX.Element {
           </View>
         )}
         <Button label={t("common.dashboard")} onPress={() => router.replace("/(tabs)/dashboard")} />
-        <UndoToast
-          visible={undoVisible}
-          message={t("logging.readingSaved")}
-          onUndo={() => {
-            setUndoVisible(false);
-            const id = lastReadingId;
-            if (id) {
-              void api.delete(`/readings/glucose/${id}`).then(() => {
-                track("undo_used", { readingId: id });
-              }).catch(() => undefined);
-            }
-            setLastReadingId(null);
-            setStage("input");
-          }}
-          onHide={() => setUndoVisible(false)}
-        />
+        {/* Undo only when we have a server id — offline rows live in the
+            local queue and the dashboard can edit them once synced. */}
+        {!savedOffline && (
+          <UndoToast
+            visible={undoVisible}
+            message={t("logging.readingSaved")}
+            onUndo={() => {
+              setUndoVisible(false);
+              const id = lastReadingId;
+              if (id) {
+                void api
+                  .delete(`/readings/glucose/${id}`)
+                  .then(() => track("undo_used", { readingId: id }))
+                  .catch(() => undefined);
+              }
+              setLastReadingId(null);
+              setStage("input");
+            }}
+            onHide={() => setUndoVisible(false)}
+          />
+        )}
         <CriticalAlert
           visible={criticalAlert.visible}
           value={criticalAlert.value}
