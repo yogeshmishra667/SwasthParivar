@@ -42,16 +42,22 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
-  if (prisma) {
-    await prisma.$disconnect();
+  // Close every client BEFORE stopping the containers so we don't leave
+  // open sockets that explode with FATAL 57P01 on container shutdown.
+  // `disconnectDatabase` ends the externally-created pg.Pool that
+  // `prisma.$disconnect()` alone doesn't reach.
+  try {
+    const dbModule = await import("../../src/shared/database.js");
+    await dbModule.disconnectDatabase();
+  } catch {
+    // ignore
   }
   try {
     const cacheModule = await import("../../src/shared/redis.js");
     if (cacheModule.redis) await cacheModule.redis.quit();
-  } catch (err) {
+  } catch {
     // ignore
   }
-  
   if (postgresContainer) {
     await postgresContainer.stop();
   }
