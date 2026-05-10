@@ -10,8 +10,8 @@ const statusFor = (code: ErrorCode): number => {
     case "AUTH_OTP_EXPIRED":
     case "AUTH_OTP_INVALID":
     case "AUTH_TOKEN_EXPIRED":
-      return 401;
     case "AUTH_UNAUTHORIZED":
+      return 401;
     case "FAMILY_NO_ACCESS":
       return 403;
     case "MED_SCHEDULE_NOT_FOUND":
