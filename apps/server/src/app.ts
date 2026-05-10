@@ -13,6 +13,7 @@ import { streaksRouter } from "./modules/streaks/streaks.routes.js";
 import { syncRouter } from "./modules/sync/sync.routes.js";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
 import { usersRouter } from "./modules/users/users.routes.js";
+import { householdRouter } from "./modules/household/household.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 
 export const buildApp = (): Express => {
@@ -47,6 +48,7 @@ export const buildApp = (): Express => {
   app.use("/api/v1/sync", syncRouter);
   app.use("/api/v1/dashboard", dashboardRouter);
   app.use("/api/v1/users", usersRouter);
+  app.use("/api/v1/household", householdRouter);
 
   app.use(errorHandler);
 
