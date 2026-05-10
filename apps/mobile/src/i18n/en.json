@@ -101,7 +101,11 @@
     "logged": "Logged",
     "loadFailed": "Could not load medicines.",
     "saveFailed": "Save failed. Try again.",
-    "invalidTime": "Use HH:MM (e.g. 08:00)"
+    "invalidTime": "Use HH:MM (e.g. 08:00)",
+    "localReminder": {
+      "title": "Medication time",
+      "body": "Take {{name}}"
+    }
   },
   "settings": {
     "title": "Settings",

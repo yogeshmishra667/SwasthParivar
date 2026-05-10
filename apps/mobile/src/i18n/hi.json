@@ -101,7 +101,11 @@
     "logged": "Note ho gaya",
     "loadFailed": "Dawai list load nahi hui.",
     "saveFailed": "Save nahi hua. Dobara try karein.",
-    "invalidTime": "HH:MM format (jaise 08:00)"
+    "invalidTime": "HH:MM format (jaise 08:00)",
+    "localReminder": {
+      "title": "Dawai ka time",
+      "body": "{{name}} lijiye"
+    }
   },
   "settings": {
     "title": "Settings",
