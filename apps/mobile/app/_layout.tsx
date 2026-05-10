@@ -10,6 +10,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { useAuthStore } from "@/stores/auth.store";
 import { useAccessibility } from "@/hooks/useAccessibility";
 import { useProfileInactivity } from "@/hooks/useProfileInactivity";
+import { useSyncDrain } from "@/hooks/useSyncDrain";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { FontScaleProvider } from "@/components/shared/FontScaleProvider";
 import { ProfileSelectorModal } from "@/components/profile/ProfileSelectorModal";
@@ -23,6 +24,7 @@ export default function RootLayout(): JSX.Element | null {
   const [ready, setReady] = useState(false);
   useAccessibility();
   useProfileInactivity();
+  useSyncDrain();
 
   useEffect(() => {
     void (async () => {
