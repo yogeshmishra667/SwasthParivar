@@ -2,6 +2,8 @@ import { useState } from "react";
 import { View, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import "react-native-get-random-values";
+import { v4 as uuidv4 } from "uuid";
 import { isCriticalGlucose } from "@swasth/shared-types";
 import type { GlucoseReadingType } from "@swasth/shared-types";
 import type { VoiceParseResult } from "@swasth/domain-logic";
@@ -27,6 +29,16 @@ interface Parsed {
   value: number;
   type: GlucoseReadingType;
   uncertain: boolean;
+}
+
+interface SaveResponse {
+  success: boolean;
+  data: {
+    reading: { id: string };
+    streak: { currentStreakDays: number; milestoneReached: string | null };
+    feedback: { tone: string; messageKey: string; params: Record<string, unknown> };
+    critical: { isCritical: boolean; direction?: "low" | "high" };
+  };
 }
 
 export default function LogScreen(): JSX.Element {

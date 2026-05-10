@@ -6,7 +6,9 @@ import { NumpadInput } from "@/components/logging/NumpadInput";
 import { ConfirmationScreen } from "@/components/logging/ConfirmationScreen";
 import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
-import { logError } from "@/services/analytics";
+import { logError, track } from "@/services/analytics";
+import "react-native-get-random-values";
+import { v4 as uuidv4 } from "uuid";
 import { saveGlucoseReading } from "@/services/readings";
 import { useAuthStore } from "@/stores/auth.store";
 import { hapticCelebrate } from "@/utils/haptics";
@@ -26,7 +28,7 @@ export default function FirstReadingScreen(): JSX.Element {
     type: GlucoseReadingType,
     context: "normal" | "festive",
   ): Promise<void> => {
-    if (value === null || saving) return;
+    if (value === null || saving || !userId) return;
     setSaving(true);
     const result = await saveGlucoseReading({
       userId,
