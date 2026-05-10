@@ -20,6 +20,12 @@ env:
   # dev environment (Node 22.18). Bump in lockstep with any raise of
   # `engines.node` in package.json.
   NODE_VERSION: "22.x"
+  # `prisma.config.ts` calls `env("DATABASE_URL")` at config-load time
+  # — even `prisma generate` (which doesn't connect) needs the var to
+  # be present. We supply a parseable stub at the workflow level; jobs
+  # that actually run against Postgres (integration-tests) override it
+  # at runtime via Testcontainers.
+  DATABASE_URL: "postgresql://stub:stub@localhost:5432/stub"
 
 jobs:
   # ──────────────────────────────────────────────────────────
