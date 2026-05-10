@@ -143,20 +143,29 @@ model EmergencyContact {
 // ─────────────────────────────────────────────────────────────
 
 model GlucoseReading {
-  id                String             @default(uuid()) @db.Uuid
-  clientUuid        String             @db.Uuid @map("client_uuid")
-  userId            String             @db.Uuid @map("user_id")
-  valueMgDl         Int                @map("value_mg_dl")
-  readingType       GlucoseReadingType @map("reading_type")
-  context           ReadingContext     @default(normal)
-  notes             String?
-  source            ReadingSource
-  measuredAt        DateTime           @map("measured_at")
-  streakCreditedTo  DateTime           @db.Date @map("streak_credited_to")
-  version           Int                @default(1)
-  syncedAt          DateTime?          @map("synced_at")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
+  id                          String             @default(uuid()) @db.Uuid
+  clientUuid                  String             @db.Uuid @map("client_uuid")
+  userId                      String             @db.Uuid @map("user_id")
+  valueMgDl                   Int                @map("value_mg_dl")
+  readingType                 GlucoseReadingType @map("reading_type")
+  context                     ReadingContext     @default(normal)
+  notes                       String?
+  source                      ReadingSource
+  measuredAt                  DateTime           @map("measured_at")
+  streakCreditedTo            DateTime           @db.Date @map("streak_credited_to")
+  // Anti-cheat flags raised by the streak engine for this reading
+  // (e.g. ["same_value_3_consecutive"]). Stored for analytics; never
+  // blocks save. Empty array when no flags raised.
+  antiCheatFlags              Json               @default("[]") @map("anti_cheat_flags")
+  // True when streak credit used server-received time instead of the
+  // client-reported `measuredAt` (Patch #18 — fired when the user has
+  // crossed time_anomaly_count >= 2). The reading's measuredAt remains
+  // the patient-reported timestamp for medical fidelity.
+  streakCreditedAtServerTime  Boolean            @default(false) @map("streak_credited_at_server_time")
+  version                     Int                @default(1)
+  syncedAt                    DateTime?          @map("synced_at")
+  createdAt                   DateTime           @default(now()) @map("created_at")
+  updatedAt                   DateTime           @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
