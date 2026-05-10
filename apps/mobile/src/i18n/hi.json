@@ -67,6 +67,7 @@
     "recentSwitchConfirm": "Yeh {{profile}} ke liye hai — sahi hai?",
     "extremeConfirm": "{{value}} — yeh bahut {{direction}} hai. Kya sahi hai?",
     "saved": "Save ho gaya",
+    "savedOffline": "Locally save ho gaya — internet aane par sync ho jaayega.",
     "saveFailed": "Save nahi ho paya — data locally safe hai, sync baad mein hoga.",
     "streakCount": "{{count}} din ka streak",
     "readingSaved": "Reading save hui"

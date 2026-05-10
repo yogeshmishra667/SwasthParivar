@@ -1,0 +1,29 @@
+# <type>(<scope>): <subject — imperative, ≤72 chars, no trailing period>
+#
+# WHY this change exists. Don't restate the diff; explain the motivation,
+# the user-visible effect, and any constraint that drove the design.
+# Wrap at 72 columns.
+#
+# References (delete the line if N/A):
+#   Closes #
+#   Refs   #
+#
+# Breaking change (delete if N/A):
+#   BREAKING CHANGE: <what breaks + how to migrate>
+#
+# ─────────────────────────────────────────────────────────────────────
+# type:
+#   feat      — new behaviour or capability
+#   fix       — bug fix on existing behaviour
+#   perf      — performance change, no functional delta
+#   refactor  — internal restructure, no behavioural change
+#   test      — add/repair tests only
+#   docs      — documentation only
+#   chore     — tooling, deps, config, no production code
+#   hotfix    — production-blocking fix
+#
+# scope: module touched. e.g. mobile, server, domain-logic, repo, ci,
+#        readings, streak, voice, critical-alert, sync.
+#
+# Project policy: do NOT add `Co-Authored-By:` trailers.
+# ─────────────────────────────────────────────────────────────────────

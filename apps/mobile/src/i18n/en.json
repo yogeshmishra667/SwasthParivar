@@ -67,6 +67,7 @@
     "recentSwitchConfirm": "This is for {{profile}} — correct?",
     "extremeConfirm": "{{value}} — this is very {{direction}}. Is it correct?",
     "saved": "Saved",
+    "savedOffline": "Saved locally — will sync when you're back online.",
     "saveFailed": "Could not save — data is safe locally, will sync later.",
     "streakCount": "{{count}} day streak",
     "readingSaved": "Reading saved"
