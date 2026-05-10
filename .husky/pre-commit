@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+
+# Runs lint-staged on staged files only — fast (≤2s typical).
+# Rules are defined in package.json under "lint-staged".
+
+pnpm exec lint-staged
