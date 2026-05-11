@@ -104,10 +104,27 @@ const buildCandidates = (ctx: UserCtx, now: Date): NotificationCandidate[] => {
     });
   }
 
+  // CLAUDE.md re-engagement ladder. The resolver's anti-fatigue clamps
+  // the cadence (3 ignores → 1/day cap, 5 → every-other-day, 7 → stop)
+  // — we just emit candidates and let it gate.
+  //
+  // Day 1-2: missed_day with day-N copy ("Kal nahi hua").
+  // Day 3-7: re_engagement with escalating concern. We use a per-day
+  //          messageKey so the resolver's 24h duplicate suppression
+  //          doesn't eat the next day's nudge.
+  // Day 8+:  silent. The user returns on their own; the mobile
+  //          welcome-back banner handles the next reading save.
   if (daysSinceLog >= 1 && daysSinceLog < 3) {
     candidates.push({
       trigger: "missed_day",
-      messageKey: "notification.missed_day",
+      messageKey: `notification.missed_day_d${daysSinceLog}`,
+      scheduledFor: now.toISOString(),
+      params: { days: daysSinceLog },
+    });
+  } else if (daysSinceLog >= 3 && daysSinceLog < 8) {
+    candidates.push({
+      trigger: "re_engagement",
+      messageKey: `notification.re_engagement_d${daysSinceLog}`,
       scheduledFor: now.toISOString(),
       params: { days: daysSinceLog },
     });
@@ -134,6 +151,33 @@ const COPY: Record<
   missed_day: (p) => ({
     title: `${p.days ?? 1} din se log nahi`,
     body: "Sab theek? Aaj ek reading le lein.",
+  }),
+  // CLAUDE.md re-engagement copy must NEVER be guilt-trippy. Tone
+  // gradually shifts from gentle nudge → caring concern → invitation.
+  // Day-7 message is intentionally short and friendly so the last
+  // push before silence isn't a downer.
+  re_engagement: (p) => {
+    const days = Number(p.days ?? 3);
+    if (days <= 3) {
+      return {
+        title: `${days} din se reading nahi`,
+        body: "Sab theek? Aaj ek baar check kar lein 🙏",
+      };
+    }
+    if (days <= 5) {
+      return {
+        title: "Hum yaad kar rahe hain",
+        body: `${days} din ho gaye — aaj jab time ho, ek reading le lein.`,
+      };
+    }
+    return {
+      title: "Wapas aane ka swagat hai",
+      body: "Jab ready ho, naya log start kar lein 💪",
+    };
+  },
+  welcome_back: () => ({
+    title: "Welcome back!",
+    body: "Naya streak shuru karein 💪",
   }),
   streak_risk: (p) => ({
     title: `${p.streak ?? 7} din ki streak!`,

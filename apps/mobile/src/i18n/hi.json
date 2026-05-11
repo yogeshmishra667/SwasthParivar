@@ -45,11 +45,14 @@
     "greeting": "Namaste, {{name}} ji",
     "greetingDefault": "Namaste",
     "staleData": "Purana data dikh raha hai — pull to refresh.",
+    "lastUpdated": "Last update: {{time}}",
     "todayStreak": "Aaj ki streak",
     "lastReading": "Aakhri reading",
     "noReadings": "Koi reading nahi — abhi log karein.",
     "todayReadings": "Aaj ki readings",
-    "logReading": "Reading log karein"
+    "logReading": "Reading log karein",
+    "welcomeBackTitle": "Welcome back!",
+    "welcomeBackBody": "{{days}} din ho gaye — naya streak shuru karein 💪"
   },
   "logging": {
     "tapToSpeak": "Bolne ke liye tap karein",
