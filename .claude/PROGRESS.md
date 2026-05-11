@@ -1,8 +1,8 @@
 # SwasthParivar — Build Progress
 
-**Last updated:** 2026-05-11 (session 5, end)
+**Last updated:** 2026-05-11 (session 6, end)
 **Status:** ✅ **Phase 1 complete.** Phase 2 may begin.
-**Branch:** main (8 PRs merged + PR #6/#7/#8 open at the time of this update)
+**Branch:** main (9 PRs merged + 2 open: `chore/server-boot-banner`, `fix/profile-aware-saves`)
 
 ## Dependency versions
 
@@ -62,9 +62,11 @@ _No items remaining. Every Phase 1 mandate from `CLAUDE.md` is shipped._
 - [x] **Add-household-member endpoint** — `POST /api/v1/household/profiles` mints a synthetic-phone (`household:<owner-uuid>:<hex>`) User row in the caller's household, capped at 8/household, returns the same shape as `/users/me`'s `householdProfiles`. Auth required; non-primary profiles cannot log in independently — by design (CLAUDE.md shared-device model). 4 integration tests cover happy path, 409 cap, 401 unauthenticated, 400 malformed body. PR #4.
 - [x] **Re-engagement notification ladder** — `notification-trigger.worker` now emits `re_engagement` candidates for `daysSinceLog ∈ [3, 8)` with per-day `messageKey` (so 24h dup suppression doesn't eat the next day's nudge). Anti-fatigue (existing resolver) clamps cadence to 1/day at 3 ignores, every-other-day at 5, silent at 7 — matching CLAUDE.md re-engagement spec. New trigger types `re_engagement` (priority 3) and `welcome_back` (priority 2) added to `shared-types`. Copy is invitation-toned, never guilt. PR #7.
 
-### Acceptable for Phase 1 (NOT a blocker)
+### Done in session 6 (Phase 1 correctness + polish)
 
-- [ ] **Multi-device notification dedup** — resolver sees `NotificationState` but copies go to all user tokens; may double-notify if user has multiple active devices. Phase 2 polish.
+- [x] **Multi-device notification dedup (Option A)** — server workers (notification-trigger, critical-alert, med-reminder) generate one `randomUUID` per logical dispatch and stamp it on every push that fans out to a user's tokens. Mobile `setNotificationHandler` checks an AsyncStorage-backed LRU (100 entries) and suppresses duplicates so a household phone + tablet ring once instead of twice. No FCM migration needed — Expo Push wraps FCM/APNs. PR #9 (merged).
+- [x] **Profile-aware logging + dashboard (CLAUDE.md "shared phone profile switcher" correctness fix)** — until now the active profile toggle was purely cosmetic; every reading saved under the JWT-authenticated user regardless of selected household member. Added `shared/auth/household.ts:resolveHouseholdMember` (validates `targetUserId` shares `householdId` with caller, else `FAMILY_NO_ACCESS`). Wired through POST/GET/DELETE `/readings/glucose`, POST `/readings/glucose/voice`, and GET `/dashboard`. Mobile `services/readings.ts` always sends `targetUserId` (active profile id) on both immediate and drained-from-queue posts so offline rows resync under the correct profile. Branch `fix/profile-aware-saves`.
+- [x] **Server dev boot banner** — `apps/server/src/index.ts` prints local + LAN URLs, db/redis ping with latency, and worker queue names at startup (dev only; prod keeps a single structured `server ready` log line). Removes guesswork when the dev laptop changes networks. Branch `chore/server-boot-banner`.
 
 ### Deferred to Phase 2
 
@@ -137,6 +139,12 @@ _No items remaining. Every CLAUDE.md mandate is shipped._
 - [x] **Push token registration** — calls `registerAndSyncPushToken()` after `accessToken` hydration in `_layout.tsx`. Verified.
 - [x] **Medications CRUD UI** — done in session 3. Verified by user (add medicine + Taken/Skipped working).
 - [x] **`.expo/` ignore broadened** — root `.gitignore` uses `**/.expo/` so stray Expo dirs in any workspace don't leak into git status.
+
+### Done in session 6 (mobile UX correctness)
+
+- [x] **Log "saved" state polish** — `app/(tabs)/log.tsx` now wraps the post-save view in a Card with the value + feedback + streak grouped together, and adds a primary "Ek aur reading log karein" CTA so shared-phone households can log for the next person without bouncing through the dashboard. Active profile badge shown in the saved header. UndoToast (5s) and CriticalAlert still fire as before.
+- [x] **ConfirmationScreen scroll + keyboard** — wrapped in `SafeAreaView` + `KeyboardAvoidingView` + `ScrollView` so the festive toggle and confirm/edit row stay reachable on small Android screens (was cut off when festive toggle expanded).
+- [x] **Auth + onboarding + modal polish** — login/verify screens get `SafeAreaView` + `KeyboardAvoidingView` + `+91` country chip + letter-spaced OTP input. Onboarding screens (language, condition, profile, first-reading, medications) get consistent header iconography and KAV wrappers. AddProfileModal and ProfileSelectorModal converted to bottom-sheet presentation with clearer placeholder/border contrast. Dashboard drops the standalone `ProfileSwitcher` row — selector opens via existing badge tap. PR #9 (merged as part of phase1-complete bundle).
 
 ### Done in session 4 (mobile polish)
 

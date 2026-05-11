@@ -76,10 +76,14 @@ export default function DashboardScreen(): JSX.Element {
     })();
   }, []);
 
+  const activeProfileId = profile?.id ?? null;
+
   const fetchAll = useCallback(async () => {
     try {
       const [dashRes, userRes] = await Promise.all([
-        api.get<{ success: boolean; data: DashboardData }>("/dashboard"),
+        api.get<{ success: boolean; data: DashboardData }>("/dashboard", {
+          params: activeProfileId ? { targetUserId: activeProfileId } : undefined,
+        }),
         api.get<{
           success: boolean;
           data: {
@@ -111,7 +115,7 @@ export default function DashboardScreen(): JSX.Element {
       logError("dashboard", e);
       setStale(true);
     }
-  }, [setHousehold]);
+  }, [setHousehold, activeProfileId]);
 
   useEffect(() => {
     void fetchAll();

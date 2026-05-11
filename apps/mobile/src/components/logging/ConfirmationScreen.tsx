@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 import { isCriticalGlucose } from "@swasth/shared-types";
 import type { GlucoseReadingType } from "@swasth/shared-types";
@@ -72,7 +73,15 @@ export const ConfirmationScreen = ({
   };
 
   return (
-    <View className="gap-4 p-4">
+    <SafeAreaView className="flex-1 bg-white">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}
+          keyboardShouldPersistTaps="handled"
+        >
       <Card>
         <View className="flex-row items-center gap-2">
           <Icon name="person" size={16} color="#374151" />
@@ -173,6 +182,8 @@ export const ConfirmationScreen = ({
           onPress={handleConfirm}
         />
       </View>
-    </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
