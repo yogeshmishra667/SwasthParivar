@@ -15,6 +15,14 @@ const workers = [
   graceResetWorker,
 ];
 
+export const workerNames = [
+  "critical-alert",
+  "med-reminder",
+  "med-missed-alert",
+  "notification-trigger",
+  "grace-reset",
+];
+
 export const startWorkers = (): void => {
   bootstrapNotificationCron().catch((err) =>
     logger.error({ err }, "failed to bootstrap notification cron"),
