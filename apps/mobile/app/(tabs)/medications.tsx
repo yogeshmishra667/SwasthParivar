@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, ScrollView, TextInput, Alert, Pressable, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  TextInput,
+  Alert,
+  Pressable,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
@@ -115,7 +125,14 @@ export default function MedicationsScreen(): JSX.Element {
         </View>
       )}
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 120 }}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1 }}
+      >
+      <ScrollView
+        contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 120 }}
+        keyboardShouldPersistTaps="handled"
+      >
         {loading ? (
           <ActivityIndicator />
         ) : schedules.length === 0 && !showForm ? (
@@ -188,6 +205,7 @@ export default function MedicationsScreen(): JSX.Element {
           <Button label={`+ ${t("medications.addNew")}`} onPress={() => setShowForm(true)} />
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
