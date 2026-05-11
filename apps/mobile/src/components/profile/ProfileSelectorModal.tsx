@@ -14,9 +14,9 @@ export const ProfileSelectorModal = (): JSX.Element | null => {
   if (!visible || profiles.length === 0) return null;
 
   return (
-    <Modal transparent animationType="fade" visible={visible} onRequestClose={dismiss}>
-      <View className="flex-1 items-center justify-center bg-black/60 px-6">
-        <View className="w-full rounded-2xl bg-white p-6">
+    <Modal transparent animationType="slide" visible={visible} onRequestClose={dismiss}>
+      <View className="flex-1 justify-end bg-black/60">
+        <View className="w-full rounded-t-3xl bg-white p-6">
           <Text className="text-hero font-bold">{t("profileSelector.title")}</Text>
           <Text className="mt-1 text-body text-neutral">
             {t("profileSelector.subtitle")}

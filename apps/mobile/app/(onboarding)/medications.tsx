@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { View, Text } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
 
@@ -26,20 +28,36 @@ export default function MedicationsOnboarding(): JSX.Element {
   };
 
   return (
-    <View className="flex-1 justify-center gap-4 bg-white p-6">
-      <Text className="text-hero font-bold">{t("onboarding.addMedicines")}</Text>
-      <Text className="text-important">{t("onboarding.addMedicinesLater")}</Text>
-      <Button
-        label={t("medications.addMedicines")}
-        onPress={() => router.push("/(tabs)/medications")}
-        disabled={saving}
-      />
-      <Button
-        label={t("common.skip")}
-        variant="ghost"
-        onPress={() => void completeOnboarding()}
-        disabled={saving}
-      />
-    </View>
+    <SafeAreaView className="flex-1 bg-white">
+      <View className="flex-1 items-center justify-center px-6">
+        {/* Header */}
+        <View className="mb-10 items-center">
+          <View className="mb-4 h-24 w-24 items-center justify-center rounded-full bg-blue-50">
+            <Icon name="medkit" size={48} color="#2563EB" />
+          </View>
+          <Text className="text-3xl font-bold tracking-tight text-gray-900">
+            {t("onboarding.addMedicines")}
+          </Text>
+          <Text className="mt-2 text-center text-body text-gray-500">
+            {t("onboarding.addMedicinesLater")}
+          </Text>
+        </View>
+
+        {/* Actions */}
+        <View className="w-full gap-3">
+          <Button
+            label={t("medications.addMedicines")}
+            onPress={() => router.push("/(tabs)/medications")}
+            disabled={saving}
+          />
+          <Button
+            label={t("common.skip")}
+            variant="ghost"
+            onPress={() => void completeOnboarding()}
+            disabled={saving}
+          />
+        </View>
+      </View>
+    </SafeAreaView>
   );
 }

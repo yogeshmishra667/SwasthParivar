@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { View, Text, TextInput, Alert } from "react-native";
+import { View, Text, TextInput, Alert, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 
@@ -29,20 +31,53 @@ export default function LoginScreen(): JSX.Element {
   };
 
   return (
-    <View className="flex-1 justify-center gap-6 bg-white p-6">
-      <Text className="text-hero font-bold">SwasthParivar</Text>
-      <Text className="text-important">{t("auth.enterPhone")}</Text>
-      <TextInput
-        value={phone}
-        onChangeText={setPhone}
-        keyboardType="phone-pad"
-        maxLength={10}
-        placeholder="10 digit mobile"
-        accessibilityLabel="Phone number input"
-        style={{ minHeight: TOUCH_TARGET_MIN }}
-        className="rounded-2xl border border-neutral px-4 text-important"
-      />
-      <Button label={t("auth.sendOtp")} onPress={() => void sendOtp()} disabled={loading} />
-    </View>
+    <SafeAreaView className="flex-1 bg-white">
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }}>
+          
+          <View className="mb-10 items-center">
+            <View className="mb-4 h-24 w-24 items-center justify-center rounded-full bg-blue-50">
+              <Icon name="medkit" size={48} color="#2563EB" />
+            </View>
+            <Text className="text-3xl font-bold text-gray-900 tracking-tight">SwasthParivar</Text>
+            <Text className="mt-2 text-center text-body text-gray-500">
+              {t("auth.subtitle", { defaultValue: "Apni family ki health ka dhyan rakhein, asani se." })}
+            </Text>
+          </View>
+
+          <View className="mb-6">
+            <Text className="mb-2 text-important font-semibold text-gray-800">{t("auth.enterPhone")}</Text>
+            <View 
+              style={{ minHeight: TOUCH_TARGET_MIN }}
+              className="flex-row items-center overflow-hidden rounded-2xl border border-gray-300 bg-gray-50"
+            >
+              <View className="flex-row items-center border-r border-gray-300 px-4 py-4 bg-gray-100">
+                <Text className="text-important font-bold text-gray-700">+91</Text>
+              </View>
+              <TextInput
+                value={phone}
+                onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, ""))}
+                keyboardType="phone-pad"
+                maxLength={10}
+                placeholder="00000 00000"
+                placeholderTextColor="#9CA3AF"
+                accessibilityLabel="Phone number input"
+                className="flex-1 px-4 py-4 text-important font-semibold text-gray-900"
+              />
+            </View>
+          </View>
+
+          <Button 
+            label={t("auth.sendOtp")} 
+            onPress={() => void sendOtp()} 
+            disabled={loading || phone.length < 10} 
+          />
+
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
