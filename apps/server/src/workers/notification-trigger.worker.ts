@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Worker } from "bullmq";
 import { resolveNotification } from "@swasth/domain-logic";
 import type {
@@ -11,7 +12,7 @@ import { prisma } from "../shared/database.js";
 import { logger } from "../shared/logger.js";
 import { sendExpoPush } from "../shared/notifications/expo-push.js";
 
-type TickJob = { tick: true };
+interface TickJob { tick: true }
 
 const triggerQueue = createQueue<TickJob>(QUEUE_NAMES.TRIGGER_NOTIFICATION);
 
@@ -131,11 +132,11 @@ const COPY: Record<
   critical_low_high: () => ({ title: "⚠️ Critical", body: "Check reading." }),
   best_time: () => ({ title: "Sugar check karein?", body: "Aaj ka log kar lein 🙏" }),
   missed_day: (p) => ({
-    title: `${p["days"] ?? 1} din se log nahi`,
+    title: `${p.days ?? 1} din se log nahi`,
     body: "Sab theek? Aaj ek reading le lein.",
   }),
   streak_risk: (p) => ({
-    title: `${p["streak"] ?? 7} din ki streak!`,
+    title: `${p.streak ?? 7} din ki streak!`,
     body: "Aaj bhi log karein, streak safe rahegi 🔥",
   }),
   generic_morning: () => ({ title: "Good morning", body: "Aaj sugar check karein" }),
@@ -181,6 +182,7 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
   }
 
   const copy = COPY[result.chosen.trigger](result.chosen.params);
+  const notificationId = randomUUID();
   await sendExpoPush(
     ctx.tokens.map((t) => ({
       to: t,
@@ -190,6 +192,7 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
       priority: "high",
       channelId: "reminders",
       data: {
+        notificationId,
         type: result.chosen.trigger,
         messageKey: result.chosen.messageKey,
       },
