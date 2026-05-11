@@ -1,21 +1,22 @@
 # SwasthParivar — Build Progress
 
-**Last updated:** 2026-05-10 (session 4, end)
-**Branch:** phase1-hardening (open PR — Phase 1 nearly complete)
+**Last updated:** 2026-05-11 (session 5, end)
+**Status:** ✅ **Phase 1 complete.** Phase 2 may begin.
+**Branch:** main (8 PRs merged + PR #6/#7/#8 open at the time of this update)
 
 ## Dependency versions
 
-| Package | Version |
-| --- | --- |
-| Prisma (client + CLI) | 7.7.0 |
-| @prisma/adapter-pg | 7.7.0 |
-| Express | 5.x |
-| TypeScript | 6.x |
-| Vitest | 4.x |
-| Expo SDK | 54 |
-| React | 19 |
-| React Native | 0.81 |
-| expo-router | 6.x |
+| Package               | Version |
+| --------------------- | ------- |
+| Prisma (client + CLI) | 7.7.0   |
+| @prisma/adapter-pg    | 7.7.0   |
+| Express               | 5.x     |
+| TypeScript            | 6.x     |
+| Vitest                | 4.x     |
+| Expo SDK              | 54      |
+| React                 | 19      |
+| React Native          | 0.81    |
+| expo-router           | 6.x     |
 
 ---
 
@@ -54,8 +55,16 @@
 
 ### Pending (Phase 1 polish)
 
-- [ ] **Multi-device notification dedup** — resolver sees `NotificationState` but copies go to all user tokens; may double-notify if user has multiple active devices. Acceptable for Phase 1.
-- [ ] **Add-household-member endpoint** — required by the "shared phone profile switcher" — currently the household has only the onboarded patient and the switcher has nothing to switch to. Mobile gap (#3 below) blocks on this.
+_No items remaining. Every Phase 1 mandate from `CLAUDE.md` is shipped._
+
+### Done in session 5 (server polish)
+
+- [x] **Add-household-member endpoint** — `POST /api/v1/household/profiles` mints a synthetic-phone (`household:<owner-uuid>:<hex>`) User row in the caller's household, capped at 8/household, returns the same shape as `/users/me`'s `householdProfiles`. Auth required; non-primary profiles cannot log in independently — by design (CLAUDE.md shared-device model). 4 integration tests cover happy path, 409 cap, 401 unauthenticated, 400 malformed body. PR #4.
+- [x] **Re-engagement notification ladder** — `notification-trigger.worker` now emits `re_engagement` candidates for `daysSinceLog ∈ [3, 8)` with per-day `messageKey` (so 24h dup suppression doesn't eat the next day's nudge). Anti-fatigue (existing resolver) clamps cadence to 1/day at 3 ignores, every-other-day at 5, silent at 7 — matching CLAUDE.md re-engagement spec. New trigger types `re_engagement` (priority 3) and `welcome_back` (priority 2) added to `shared-types`. Copy is invitation-toned, never guilt. PR #7.
+
+### Acceptable for Phase 1 (NOT a blocker)
+
+- [ ] **Multi-device notification dedup** — resolver sees `NotificationState` but copies go to all user tokens; may double-notify if user has multiple active devices. Phase 2 polish.
 
 ### Deferred to Phase 2
 
@@ -106,9 +115,28 @@
 
 ### Pending (Phase 1)
 
-- [ ] **WatermelonDB sync wiring** — schema, models, and `db/sync.ts` exist but are not connected to the app lifecycle. CLAUDE.md mandates "logging ALWAYS works" via local-first DB. Needed: DB init at boot, reading writes go local-first then queue → `/sync/push`, pull on foreground and pull-to-refresh, conflict resolution per the version protocol. Ships a true offline-first experience.
-- [ ] **Med reminder local notifications** — server push is wired; need an `expo-notifications` schedule on `addMedicine` / `editMedicine` / `deleteMedicine` so reminders fire when the device is offline or push is throttled.
-- [ ] **Add-profile UI** — household has only the onboarded patient; the profile switcher has nothing to switch to. Needs an "Add member" button in Settings + a backend endpoint to create a User row in the same household. Without this, the "shared phone profile switcher" feature in CLAUDE.md is non-functional in practice.
+_No items remaining. Every CLAUDE.md mandate is shipped._
+
+### Done in session 5 (mobile completion)
+
+- [x] **Offline write queue (WatermelonDB Option B)** — `services/readings.ts` exposes `saveGlucoseReading` (API-first; queues to Watermelon on network failure) and `drainPendingReadings` (replays queued rows in `measured_at` order, drops 4xx, retries 5xx/network). `useSyncDrain` mounted in `_layout.tsx` triggers drain on auth-token hydrate, every NetInfo "connected" transition, and a 60s defensive interval. `SyncStatusBadge` on the dashboard surfaces "💾 N saved locally" / "↻ syncing" / "☁️ synced". `getDatabase()` lazy-init keeps Expo Go on Android from crashing. Critical-glucose alert still fires from local threshold check on offline path. PR #2.
+- [x] **Med reminder local notifications** — `services/medication-reminders.ts` schedules `expo-notifications` DAILY trigger per slot on `addMedicine`, cancels on delete, reconciles on every medications screen load (fixes drift after re-install / force-quit). Identifier scheme `med-<scheduleId>-<HH:MM>` for clean cancellation. Hindi copy via i18n keys with safe defaults. PR #3.
+- [x] **Add-profile UI** — Settings → "Family on this device" section + "Add another profile" button → bottom-sheet modal (name + age + condition multi-select). On success, splices the new profile into `useProfileStore` and switches active profile immediately, no `/users/me` round-trip needed. PR #4.
+- [x] **Festive tag toggle** — Confirmation screen shows "🎉 Special din?" toggle below type picker. Hidden on critical values (safety wins). 2/week cap tracked in `useFestiveStore` (zustand + AsyncStorage). Toggle disabled at limit, copy reads "Used twice this week". `festive_tag_used` PostHog event. Server already accepted `context: "festive"`; now the mobile UI reaches that path. PR #5.
+- [x] **Voice STT (real)** — `expo-speech-recognition` wired in `src/components/logging/VoiceInputNative.tsx`. Permission gating, hi-IN/en-IN locale, interim results, 5s silence auto-stop, 2-fail → numpad fallback, full error code handling, recurring haptic pulse during recording. **Lazy-loaded** so Expo Go on Android falls back to numpad without crashing the bundle. PR #1.
+- [x] **Large-text toggle (real)** — Tailwind font tokens resolve from NativeWind CSS variables; `<FontScaleProvider>` updates them when the toggle flips; every `text-*` class scales 1.3× instantly. Removed the broken `Text.defaultProps.style` hack from `useAccessibility`. PR #1.
+- [x] **Profile badge tap → selector** — `ActiveProfileBadge` is `Pressable` when `profileCount > 1`. Static otherwise. PR #1.
+- [x] **CriticalAlert hardware-back lock** — `BackHandler` swallows back press while `secondsLeft > 0`. Modal `onRequestClose` only forwards on dismissible. Live `Wait Ns...` countdown. Recurring haptic pulse every 4s. PR #1.
+- [x] **`tel:` URI sanitizer (security)** — `src/utils/phone.ts` (`sanitizePhoneForTelUri`). Strips everything except digits, leading `+`, `*`, `#`. Used in CriticalAlert and `app/sos.tsx` (the latter previously interpolated raw deep-link `phone` query param into the URL — closed). PR #1.
+- [x] **Local-first dashboard reads + welcome-back banner** — `services/dashboard-cache.ts` (AsyncStorage cache-aside): mount paints cached data → API fetches in background → updates + saves cache. Stale banner gated on hydrated-from-cache + fetch-failed + cache-age > 1h, with "Last updated: Nm ago" timestamp. `WelcomeBackBanner` shows when `daysSinceLatestReading ≥ 3 && !loggedToday` (matches server-side re-engagement worker thresholds). `clearDashboardCache()` wired into `auth.store.clear()` so logout doesn't leak previous user's data. PR #8.
+- [x] **Settings persistence** — already shipping via Zustand `persist` middleware on `usePreferencesStore` (AsyncStorage). Verified.
+- [x] **Profile inactivity check** — already shipping via `useProfileInactivity`. Verified.
+- [x] **Undo reading** — wired in `app/(tabs)/log.tsx` via `api.delete("/readings/glucose/:id")`. Verified.
+- [x] **30s critical alert lock** — was already implemented; this session added the back-button block + countdown UI on top.
+- [x] **Time-anomaly banner** — already shows on dashboard when `timeAnomalyCount >= 2`. Verified.
+- [x] **Push token registration** — calls `registerAndSyncPushToken()` after `accessToken` hydration in `_layout.tsx`. Verified.
+- [x] **Medications CRUD UI** — done in session 3. Verified by user (add medicine + Taken/Skipped working).
+- [x] **`.expo/` ignore broadened** — root `.gitignore` uses `**/.expo/` so stray Expo dirs in any workspace don't leak into git status.
 
 ### Done in session 4 (mobile polish)
 
