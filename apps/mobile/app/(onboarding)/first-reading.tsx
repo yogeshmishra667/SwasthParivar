@@ -6,9 +6,7 @@ import { NumpadInput } from "@/components/logging/NumpadInput";
 import { ConfirmationScreen } from "@/components/logging/ConfirmationScreen";
 import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
-import { logError, track } from "@/services/analytics";
-import "react-native-get-random-values";
-import { v4 as uuidv4 } from "uuid";
+import { logError } from "@/services/analytics";
 import { saveGlucoseReading } from "@/services/readings";
 import { useAuthStore } from "@/stores/auth.store";
 import { hapticCelebrate } from "@/utils/haptics";
@@ -30,38 +28,36 @@ export default function FirstReadingScreen(): JSX.Element {
   ): Promise<void> => {
     if (value === null || saving || !userId) return;
     setSaving(true);
+
+    // Single source of truth for the save: routes through
+    // `saveGlucoseReading` which handles online + offline-queue paths,
+    // so the onboarding flow always advances even on poor networks.
     const result = await saveGlucoseReading({
       userId,
       valueMgDl: value,
       readingType: type,
-      context: "normal",
+      context,
       source: "manual",
       measuredAtIso: new Date().toISOString(),
     });
+
     if (result.kind === "rejected") {
       logError("onboarding/first-reading", new Error(result.message));
-      // Stay on the confirmation; user can edit + retry. Falling through
-      // would skip celebration AND advance the step, which is worse.
+      // Stay on the confirmation; user can edit + retry. Falling
+      // through would skip celebration AND advance the step.
       setSaving(false);
       return;
     }
-    // Best-effort step bump — if the patch fails (e.g. truly offline),
-    // the next dashboard mount also bumps via `/users/me`.
+
+    // Best-effort onboarding-step bump — if the patch fails (truly
+    // offline), the next dashboard mount also reads /users/me and
+    // routes to the right step.
     try {
-      await api.post("/readings/glucose", {
-        clientUuid: uuidv4(),
-        valueMgDl: value,
-        readingType: type,
-        context,
-        source: "manual",
-        measuredAt: new Date().toISOString(),
-        version: 1,
-      });
-      track("reading_logged", { type, source: "manual", value });
       await api.patch("/users/me", { onboardingStep: 4 });
     } catch (e) {
       logError("onboarding/first-reading.step", e);
     }
+
     setSaving(false);
     setSavedOffline(result.kind === "queued");
     hapticCelebrate();

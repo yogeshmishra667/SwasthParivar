@@ -2,8 +2,6 @@ import { useState } from "react";
 import { View, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import "react-native-get-random-values";
-import { v4 as uuidv4 } from "uuid";
 import { isCriticalGlucose } from "@swasth/shared-types";
 import type { GlucoseReadingType } from "@swasth/shared-types";
 import type { VoiceParseResult } from "@swasth/domain-logic";
@@ -29,16 +27,6 @@ interface Parsed {
   value: number;
   type: GlucoseReadingType;
   uncertain: boolean;
-}
-
-interface SaveResponse {
-  success: boolean;
-  data: {
-    reading: { id: string };
-    streak: { currentStreakDays: number; milestoneReached: string | null };
-    feedback: { tone: string; messageKey: string; params: Record<string, unknown> };
-    critical: { isCritical: boolean; direction?: "low" | "high" };
-  };
 }
 
 export default function LogScreen(): JSX.Element {
@@ -75,34 +63,54 @@ export default function LogScreen(): JSX.Element {
     setStage("confirm");
   };
 
-  const save = async (type: GlucoseReadingType, context: "normal" | "festive"): Promise<void> => {
+  const save = async (
+    type: GlucoseReadingType,
+    context: "normal" | "festive",
+  ): Promise<void> => {
     if (!parsed || !userId) return;
     hapticSave();
     setSaveError(null);
-    try {
-      const res = await api.post<SaveResponse>("/readings/glucose", {
-        clientUuid: uuidv4(),
-        valueMgDl: parsed.value,
-        readingType: type,
-        context,
-        source: mode,
-        measuredAt: new Date().toISOString(),
-        version: 1,
-      });
-      track("reading_logged", { type, source: mode, value: parsed.value });
 
-      const { reading, streak, feedback, critical } = res.data;
-      setLastReadingId(reading.id);
-      setStreakDays(streak.currentStreakDays);
-      setFeedbackMsg(t(`feedback.${feedback.tone}`, { defaultValue: t("logging.saved") }));
+    const result = await saveGlucoseReading({
+      userId,
+      valueMgDl: parsed.value,
+      readingType: type,
+      context,
+      // `mode` is the input affordance (voice|numpad). Server `source`
+      // is broader (manual|voice|device); numpad maps to manual.
+      source: mode === "voice" ? "voice" : "manual",
+      measuredAtIso: new Date().toISOString(),
+    });
 
-      if (critical.isCritical && critical.direction) {
-        setCriticalAlert({ visible: true, value: parsed.value, direction: critical.direction });
+    if (result.kind === "synced") {
+      setLastReadingId(result.readingId);
+      setStreakDays(result.streak.currentStreakDays);
+      setFeedbackMsg(
+        t(`feedback.${result.feedback.tone}`, { defaultValue: t("logging.saved") }),
+      );
+      setSavedOffline(false);
+      if (result.critical.isCritical && result.critical.direction) {
+        setCriticalAlert({
+          visible: true,
+          value: parsed.value,
+          direction: result.critical.direction,
+        });
         track("critical_bypass_triggered", { value: parsed.value });
       }
       setUndoVisible(true);
       setStage("saved");
-    } catch (error) {
+      return;
+    }
+
+    if (result.kind === "queued") {
+      // Offline path — queued in WatermelonDB; the drain hook will
+      // push it later. Make the offline status clear.
+      setLastReadingId(null);
+      setSavedOffline(true);
+      setStreakDays(0);
+      setFeedbackMsg(t("logging.savedOffline"));
+      // Critical-value safety still fires from the local check —
+      // patient shouldn't lose the alert just because they're offline.
       if (isCriticalGlucose(parsed.value)) {
         const dir = parsed.value < 65 ? "low" : "high";
         setCriticalAlert({ visible: true, value: parsed.value, direction: dir });
@@ -112,8 +120,8 @@ export default function LogScreen(): JSX.Element {
       return;
     }
 
-    // Server rejected — surface a real error. Critical-value alert
-    // still fires regardless of the rejection reason.
+    // Server rejected the reading (4xx, validation, auth, conflict).
+    // Critical-value alert still fires regardless of rejection reason.
     if (isCriticalGlucose(parsed.value)) {
       const dir = parsed.value < 65 ? "low" : "high";
       setCriticalAlert({ visible: true, value: parsed.value, direction: dir });
