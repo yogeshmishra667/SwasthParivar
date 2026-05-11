@@ -4,6 +4,7 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
+import { markNotificationSeen } from "@/services/notification-dedup";
 
 const isExpoGo = Constants.appOwnership === "expo";
 
@@ -11,13 +12,27 @@ const isExpoGo = Constants.appOwnership === "expo";
 // Only register the handler in development builds / standalone apps.
 if (!isExpoGo) {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
+    handleNotification: async (notification) => {
+      const id = (notification.request.content.data as { notificationId?: string } | null)
+        ?.notificationId;
+      const isNew = await markNotificationSeen(id);
+      if (!isNew) {
+        return {
+          shouldShowAlert: false,
+          shouldShowBanner: false,
+          shouldShowList: false,
+          shouldPlaySound: false,
+          shouldSetBadge: false,
+        };
+      }
+      return {
+        shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      };
+    },
   });
 }
 

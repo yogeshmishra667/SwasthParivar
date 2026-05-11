@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { View, Text } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
 
@@ -26,13 +28,32 @@ export default function ConditionScreen(): JSX.Element {
   };
 
   return (
-    <View className="flex-1 justify-center gap-4 bg-white p-6">
-      <Text className="text-hero font-bold">{t("onboarding.selectCondition")}</Text>
-      <Button
-        label={t("onboarding.diabetes")}
-        onPress={() => void select("diabetes")}
-        disabled={saving}
-      />
-    </View>
+    <SafeAreaView className="flex-1 bg-white">
+      <View className="flex-1 items-center justify-center px-6">
+        {/* Header */}
+        <View className="mb-10 items-center">
+          <View className="mb-4 h-24 w-24 items-center justify-center rounded-full bg-blue-50">
+            <Icon name="heart" size={48} color="#2563EB" />
+          </View>
+          <Text className="text-3xl font-bold tracking-tight text-gray-900">
+            {t("onboarding.selectCondition")}
+          </Text>
+          <Text className="mt-2 text-center text-body text-gray-500">
+            {t("onboarding.conditionSubtitle", {
+              defaultValue: "Aapki condition chunein taaki hum sahi tracking set kar sakein.",
+            })}
+          </Text>
+        </View>
+
+        {/* Condition */}
+        <View className="w-full gap-3">
+          <Button
+            label={t("onboarding.diabetes")}
+            onPress={() => void select("diabetes")}
+            disabled={saving}
+          />
+        </View>
+      </View>
+    </SafeAreaView>
   );
 }

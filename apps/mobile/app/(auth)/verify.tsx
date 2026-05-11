@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { View, Text, TextInput, Alert } from "react-native";
+import { View, Text, TextInput, Alert, KeyboardAvoidingView, Platform, ScrollView, Pressable } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
 import { useAuthStore } from "@/stores/auth.store";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
@@ -47,19 +49,57 @@ export default function VerifyScreen(): JSX.Element {
   };
 
   return (
-    <View className="flex-1 justify-center gap-6 bg-white p-6">
-      <Text className="text-important">{t("auth.enterOtp")}</Text>
-      <TextInput
-        value={otp}
-        onChangeText={setOtp}
-        keyboardType="number-pad"
-        maxLength={6}
-        placeholder="6 digit"
-        accessibilityLabel="OTP input"
-        style={{ minHeight: TOUCH_TARGET_MIN }}
-        className="rounded-2xl border border-neutral px-4 text-hero"
-      />
-      <Button label={t("auth.verify")} onPress={() => void verify()} disabled={loading} />
-    </View>
+    <SafeAreaView className="flex-1 bg-white">
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }}>
+          
+          <Pressable 
+            onPress={() => router.back()} 
+            className="absolute left-6 top-6 z-10"
+            style={{ minHeight: TOUCH_TARGET_MIN, minWidth: TOUCH_TARGET_MIN }}
+            accessibilityLabel="Back"
+          >
+            <Icon name="arrow-back" size={28} color="#374151" />
+          </Pressable>
+
+          <View className="mb-10 items-center">
+            <View className="mb-4 h-24 w-24 items-center justify-center rounded-full bg-blue-50">
+              <Icon name="chatbubble-ellipses" size={48} color="#2563EB" />
+            </View>
+            <Text className="text-3xl font-bold tracking-tight text-gray-900">
+              {t("auth.otpSentTitle", { defaultValue: "OTP Sent" })}
+            </Text>
+            <Text className="mt-2 text-center text-body text-gray-500">
+              {t("auth.otpSentSubtitle", { defaultValue: `We have sent a 6-digit code to +91 ${phone || ""}` })}
+            </Text>
+          </View>
+
+          <View className="mb-6">
+            <Text className="mb-2 text-important font-semibold text-gray-800">{t("auth.enterOtp")}</Text>
+            <TextInput
+              value={otp}
+              onChangeText={(v) => setOtp(v.replace(/[^0-9]/g, ""))}
+              keyboardType="number-pad"
+              maxLength={6}
+              placeholder="000000"
+              placeholderTextColor="#9CA3AF"
+              accessibilityLabel="OTP input"
+              style={{ minHeight: TOUCH_TARGET_MIN, letterSpacing: 8 }}
+              className="rounded-2xl border border-gray-300 bg-gray-50 px-4 py-4 text-center text-2xl font-bold tracking-widest text-gray-900"
+            />
+          </View>
+
+          <Button 
+            label={t("auth.verify")} 
+            onPress={() => void verify()} 
+            disabled={loading || otp.length < 6} 
+          />
+
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }

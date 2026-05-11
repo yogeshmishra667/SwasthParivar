@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Worker } from "bullmq";
 import { createWorker, createQueue, QUEUE_NAMES } from "../shared/queue.js";
 import { prisma } from "../shared/database.js";
@@ -41,6 +42,7 @@ export const medReminderWorker: Worker<MedReminderJob> = createWorker<MedReminde
 
     if (tokens.length > 0) {
       const copy = MED_REMINDER_COPY(schedule.medicineName);
+      const notificationId = randomUUID();
       await sendExpoPush(
         tokens.map((t) => ({
           to: t.token,
@@ -49,7 +51,7 @@ export const medReminderWorker: Worker<MedReminderJob> = createWorker<MedReminde
           sound: "default",
           priority: "high",
           channelId: "medications",
-          data: { type: "med_reminder", scheduleId, timeSlot },
+          data: { notificationId, type: "med_reminder", scheduleId, timeSlot },
         })),
       );
     }
@@ -73,7 +75,7 @@ export const medMissedAlertWorker: Worker<MedMissedAlertJob> = createWorker<MedM
       where: { id: scheduleId },
       select: { medicineName: true, isCritical: true, active: true },
     });
-    if (!schedule || !schedule.active) return;
+    if (!schedule?.active) return;
 
     const windowMs = 30 * 60 * 1000;
     const log = await prisma.medicationLog.findFirst({

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { BypassDecision } from "@swasth/domain-logic";
 import type { Worker } from "bullmq";
 import { createWorker, QUEUE_NAMES } from "../shared/queue.js";
@@ -81,7 +82,7 @@ export const criticalAlertWorker: Worker<CriticalAlertJob> = createWorker<Critic
       where: { id: userId },
       select: { name: true },
     });
-    const patientName = patient?.name || "Patient";
+    const patientName = patient?.name ?? "Patient";
 
     const reading = await prisma.glucoseReading.findFirst({
       where: { id: readingId },
@@ -97,6 +98,7 @@ export const criticalAlertWorker: Worker<CriticalAlertJob> = createWorker<Critic
     if (decision.triggerPush && decision.pushTargets.length > 0) {
       const tokens = await resolveGuardianPushTokens(userId, decision.pushTargets);
       if (tokens.length > 0) {
+        const notificationId = randomUUID();
         const messages: ExpoPushMessage[] = tokens.map((t) => ({
           to: t,
           title: copy.title,
@@ -104,7 +106,7 @@ export const criticalAlertWorker: Worker<CriticalAlertJob> = createWorker<Critic
           sound: "default",
           priority: "high",
           channelId: "critical",
-          data: { type: "critical_alert", readingId, userId, severity: decision.severity },
+          data: { notificationId, type: "critical_alert", readingId, userId, severity: decision.severity },
         }));
         const results = await sendExpoPush(messages);
         results.forEach((r) => {

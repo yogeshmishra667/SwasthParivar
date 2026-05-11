@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Worker } from "bullmq";
 import { resolveNotification } from "@swasth/domain-logic";
 import type {
@@ -225,6 +226,7 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
   }
 
   const copy = COPY[result.chosen.trigger](result.chosen.params);
+  const notificationId = randomUUID();
   await sendExpoPush(
     ctx.tokens.map((t) => ({
       to: t,
@@ -234,6 +236,7 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
       priority: "high",
       channelId: "reminders",
       data: {
+        notificationId,
         type: result.chosen.trigger,
         messageKey: result.chosen.messageKey,
       },

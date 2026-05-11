@@ -4,7 +4,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
-import { ProfileSwitcher } from "@/components/profile/ProfileSwitcher";
 import { SyncStatusBadge } from "@/components/shared/SyncStatusBadge";
 import { WelcomeBackBanner } from "@/components/dashboard/WelcomeBackBanner";
 import { Card } from "@/components/ui/Card";
@@ -154,7 +153,6 @@ export default function DashboardScreen(): JSX.Element {
           <ActiveProfileBadge />
         </View>
       </View>
-      <ProfileSwitcher />
 
       <ScrollView
         contentContainerStyle={{ padding: 16, gap: 16 }}

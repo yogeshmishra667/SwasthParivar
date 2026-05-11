@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, View, Text, TextInput, ScrollView, Pressable } from "react-native";
+import { Modal, View, Text, TextInput, ScrollView, Pressable, KeyboardAvoidingView, Platform } from "react-native";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -88,8 +88,12 @@ export const AddProfileModal = ({ visible, onClose, onSuccess }: Props): JSX.Ele
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      <View className="flex-1 justify-end bg-black/40">
-        <View className="rounded-t-3xl bg-white p-6">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+        style={{ flex: 1 }}
+      >
+        <View className="flex-1 justify-end bg-black/60">
+          <View className="w-full rounded-t-3xl bg-white p-6">
           <View className="mb-4 flex-row items-center justify-between">
             <Text className="text-hero font-bold">
               {t("settings.addProfile", { defaultValue: "Add another profile" })}
@@ -111,10 +115,11 @@ export const AddProfileModal = ({ visible, onClose, onSuccess }: Props): JSX.Ele
               value={name}
               onChangeText={setName}
               placeholder={t("onboarding.namePlaceholder")}
+              placeholderTextColor="#9CA3AF"
               autoCorrect={false}
               accessibilityLabel={t("onboarding.namePlaceholder")}
               style={{ minHeight: TOUCH_TARGET_MIN }}
-              className="mb-3 rounded-xl border border-neutral px-3 py-3 text-body"
+              className="mb-3 rounded-xl border border-gray-300 bg-gray-50 px-3 py-3 text-body text-gray-900"
             />
 
             <Text className="mb-1 text-body">{t("onboarding.agePlaceholder")}</Text>
@@ -122,11 +127,12 @@ export const AddProfileModal = ({ visible, onClose, onSuccess }: Props): JSX.Ele
               value={age}
               onChangeText={(v) => setAge(v.replace(/[^0-9]/g, ""))}
               placeholder={t("onboarding.agePlaceholder")}
+              placeholderTextColor="#9CA3AF"
               keyboardType="number-pad"
               maxLength={3}
               accessibilityLabel={t("onboarding.agePlaceholder")}
               style={{ minHeight: TOUCH_TARGET_MIN }}
-              className="mb-3 rounded-xl border border-neutral px-3 py-3 text-body"
+              className="mb-3 rounded-xl border border-gray-300 bg-gray-50 px-3 py-3 text-body text-gray-900"
             />
 
             <Text className="mb-1 text-body">
@@ -180,7 +186,8 @@ export const AddProfileModal = ({ visible, onClose, onSuccess }: Props): JSX.Ele
             </View>
           </View>
         </View>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };

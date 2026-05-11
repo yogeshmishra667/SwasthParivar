@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, ScrollView } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { NumpadInput } from "@/components/logging/NumpadInput";
 import { ConfirmationScreen } from "@/components/logging/ConfirmationScreen";
 import { Icon } from "@/components/ui/Icon";
+import { Button } from "@/components/ui/Button";
 import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
 import { saveGlucoseReading } from "@/services/readings";
@@ -64,46 +66,82 @@ export default function FirstReadingScreen(): JSX.Element {
     setCelebrated(true);
   };
 
+  // ── Celebration state ──
   if (celebrated) {
     return (
-      <View className="flex-1 items-center justify-center gap-4 bg-white p-6">
-        <Icon name="trophy" size={72} color="#8B5CF6" accessibilityLabel="Celebration" />
-        <Text className="text-hero font-bold text-center">{t("onboarding.celebrate")}</Text>
-        {savedOffline && (
-          <Text className="text-body text-warning text-center">
-            {t("logging.savedOffline")}
+      <SafeAreaView className="flex-1 bg-white">
+        <View className="flex-1 items-center justify-center px-6">
+          <View className="mb-6 h-28 w-28 items-center justify-center rounded-full bg-purple-50">
+            <Icon name="trophy" size={64} color="#8B5CF6" accessibilityLabel="Celebration" />
+          </View>
+          <Text className="text-3xl font-bold tracking-tight text-center text-gray-900">
+            {t("onboarding.celebrate")}
           </Text>
-        )}
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push("/(onboarding)/medications")}
-          style={{ minHeight: TOUCH_TARGET_MIN }}
-          className="mt-4 items-center justify-center px-4"
-        >
-          <Text className="text-important font-semibold text-primary underline">
-            {t("common.next")}
+          <Text className="mt-3 text-center text-body text-gray-500">
+            {t("onboarding.celebrateSubtitle", {
+              defaultValue: "Bahut acche! Aapne apni pehli reading log kar li. 🎉",
+            })}
           </Text>
-        </Pressable>
-      </View>
+          {savedOffline && (
+            <View className="mt-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+              <Text className="text-body text-amber-800 text-center">
+                {t("logging.savedOffline")}
+              </Text>
+            </View>
+          )}
+          <View className="mt-8 w-full">
+            <Button
+              label={t("common.next")}
+              onPress={() => router.push("/(onboarding)/medications")}
+            />
+          </View>
+        </View>
+      </SafeAreaView>
     );
   }
 
+  // ── Numpad entry state ──
   if (value === null) {
     return (
-      <View className="flex-1 bg-white p-6">
-        <Text className="mb-4 text-hero font-bold">{t("onboarding.firstReading")}</Text>
-        <NumpadInput onSubmit={setValue} />
-      </View>
+      <SafeAreaView className="flex-1 bg-white">
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, padding: 24 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header */}
+          <View className="mb-6 items-center">
+            <View className="mb-4 h-24 w-24 items-center justify-center rounded-full bg-blue-50">
+              <Icon name="fitness" size={48} color="#2563EB" />
+            </View>
+            <Text className="text-3xl font-bold tracking-tight text-center text-gray-900">
+              {t("onboarding.firstReading")}
+            </Text>
+            <Text className="mt-2 text-center text-body text-gray-500">
+              {t("onboarding.firstReadingSubtitle", {
+                defaultValue: "Apne glucometer se reading dekhein aur neeche type karein.",
+              })}
+            </Text>
+          </View>
+
+          <NumpadInput onSubmit={setValue} />
+        </ScrollView>
+      </SafeAreaView>
     );
   }
 
+  // ── Confirmation state ──
   return (
-    <ConfirmationScreen
-      value={value}
-      type="fasting"
-      uncertainType={false}
-      onConfirm={(type, ctx) => void saveReading(type, ctx)}
-      onEdit={() => setValue(null)}
-    />
+    <SafeAreaView className="flex-1 bg-white">
+      <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 16 }}>
+        <ConfirmationScreen
+          value={value}
+          type="fasting"
+          uncertainType={false}
+          onConfirm={(type, ctx) => void saveReading(type, ctx)}
+          onEdit={() => setValue(null)}
+        />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
+
