@@ -10,6 +10,8 @@ export const glucoseCreateSchema = z.object({
   source: z.enum(["manual", "voice", "device"]),
   measuredAt: z.string().datetime(),
   version: z.number().int().positive().default(1),
+  /** Shared-phone profile switcher: log on behalf of a household member. */
+  targetUserId: z.string().uuid().optional(),
 });
 
 export const glucoseVoiceSchema = z.object({
@@ -21,6 +23,7 @@ export const glucoseVoiceSchema = z.object({
   confirmedValue: z.number().int().min(GLUCOSE_VALID_MIN).max(GLUCOSE_VALID_MAX),
   confirmedType: z.enum(["fasting", "pre_meal", "post_meal", "random", "bedtime"]),
   context: z.enum(["normal", "festive"]).default("normal"),
+  targetUserId: z.string().uuid().optional(),
 });
 
 export const listReadingsQuerySchema = z.object({
@@ -28,4 +31,5 @@ export const listReadingsQuerySchema = z.object({
   to: z.string().datetime().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   cursor: z.string().optional(),
+  targetUserId: z.string().uuid().optional(),
 });

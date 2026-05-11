@@ -74,6 +74,7 @@ const recordPayload = (
   source: SaveReadingInput["source"];
   measuredAt: string;
   version: number;
+  targetUserId: string;
 } => ({
   clientUuid,
   valueMgDl: input.valueMgDl,
@@ -83,6 +84,9 @@ const recordPayload = (
   source: input.source,
   measuredAt: input.measuredAtIso,
   version: 1,
+  // Server uses targetUserId for the shared-phone profile switcher.
+  // The server verifies it's a household member of the auth user.
+  targetUserId: input.userId,
 });
 
 const isNetworkOrServerError = (err: unknown): boolean => {
@@ -240,6 +244,8 @@ export const drainPendingReadings = async (): Promise<{ pushed: number; failed: 
       source: row.source,
       measuredAt: new Date(row.measuredAt).toISOString(),
       version: row.version,
+      // Preserve the profile the reading was originally logged for.
+      targetUserId: row.userId,
     };
     try {
       await api.post<ServerSaveResponse>("/readings/glucose", body);

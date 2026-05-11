@@ -13,10 +13,11 @@ import { ConfirmationScreen } from "@/components/logging/ConfirmationScreen";
 import { CriticalAlert } from "@/components/logging/CriticalAlert";
 import { UndoToast } from "@/components/shared/UndoToast";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
 import { saveGlucoseReading } from "@/services/readings";
-import { useAuthStore } from "@/stores/auth.store";
+import { useActiveProfile } from "@/hooks/useActiveProfile";
 import { hapticSave } from "@/utils/haptics";
 import { track } from "@/services/analytics";
 
@@ -32,7 +33,8 @@ interface Parsed {
 export default function LogScreen(): JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
-  const userId = useAuthStore((s) => s.userId);
+  const activeProfile = useActiveProfile();
+  const userId = activeProfile?.id ?? null;
   const [stage, setStage] = useState<Stage>("input");
   const [mode, setMode] = useState<InputMode>("voice");
   const [parsed, setParsed] = useState<Parsed | null>(null);
@@ -156,22 +158,67 @@ export default function LogScreen(): JSX.Element {
   }
 
   if (stage === "saved") {
+    const resetForNext = (): void => {
+      setUndoVisible(false);
+      setLastReadingId(null);
+      setParsed(null);
+      setFeedbackMsg(null);
+      setStreakDays(0);
+      setSavedOffline(false);
+      setSaveError(null);
+      setMode("voice");
+      setStage("input");
+    };
+
     return (
-      <SafeAreaView className="flex-1 items-center justify-center gap-4 bg-white p-6">
-        <Icon
-          name={savedOffline ? "cloud-offline" : "checkmark-circle"}
-          size={72}
-          color={savedOffline ? "#D97706" : "#16A34A"}
-          accessibilityLabel={savedOffline ? "Saved locally" : "Saved"}
-        />
-        <Text className="text-important text-center">{feedbackMsg ?? t("logging.saved")}</Text>
-        {streakDays > 0 && (
-          <View className="flex-row items-center gap-2">
-            <Icon name="flame" size={20} color="#F59E0B" />
-            <Text className="text-body">{t("logging.streakCount", { count: streakDays })}</Text>
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <View className="flex-row items-center justify-between px-4 py-3">
+          <Text className="text-hero font-bold">{t("logging.savedTitle", { defaultValue: "Saved" })}</Text>
+          <ActiveProfileBadge />
+        </View>
+
+        <View className="flex-1 justify-center gap-4 px-4">
+          <Card>
+            <View className="items-center gap-3 py-2">
+              <Icon
+                name={savedOffline ? "cloud-offline" : "checkmark-circle"}
+                size={64}
+                color={savedOffline ? "#D97706" : "#16A34A"}
+                accessibilityLabel={savedOffline ? "Saved locally" : "Saved"}
+              />
+              {parsed && (
+                <Text className="text-hero font-bold">
+                  {parsed.value}{" "}
+                  <Text className="text-body font-normal text-neutral">mg/dL</Text>
+                </Text>
+              )}
+              {feedbackMsg !== null && (
+                <Text className="text-important text-center">{feedbackMsg}</Text>
+              )}
+              {streakDays > 0 && (
+                <View className="flex-row items-center gap-2">
+                  <Icon name="flame" size={20} color="#F59E0B" />
+                  <Text className="text-body">
+                    {t("logging.streakCount", { count: streakDays })}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </Card>
+
+          <View className="gap-2">
+            <Button
+              label={t("logging.logAnother", { defaultValue: "Ek aur reading log karein" })}
+              onPress={resetForNext}
+            />
+            <Button
+              label={t("common.dashboard")}
+              variant="ghost"
+              onPress={() => router.replace("/(tabs)/dashboard")}
+            />
           </View>
-        )}
-        <Button label={t("common.dashboard")} onPress={() => router.replace("/(tabs)/dashboard")} />
+        </View>
+
         {/* Undo only when we have a server id — offline rows live in the
             local queue and the dashboard can edit them once synced. */}
         {!savedOffline && (
