@@ -44,7 +44,7 @@ export const sendExpoPush = async (
     "Accept-Encoding": "gzip, deflate",
   };
   if (env.EXPO_ACCESS_TOKEN) {
-    headers["Authorization"] = `Bearer ${env.EXPO_ACCESS_TOKEN}`;
+    headers.Authorization = `Bearer ${env.EXPO_ACCESS_TOKEN}`;
   }
 
   try {

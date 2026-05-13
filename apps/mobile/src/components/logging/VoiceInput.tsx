@@ -14,7 +14,7 @@ interface VoiceInputProps {
 // In Expo Go on Android the native module isn't present and the import
 // crashes the bundle, so we lazy-load the implementation only when the
 // runtime supports it (any custom dev build, or Expo Go on iOS).
-const isExpoGo = Constants.appOwnership === "expo";
+const isExpoGo = String(Constants.appOwnership) === "expo";
 const voiceUnavailable = isExpoGo && Platform.OS === "android";
 
 const VoiceUnavailable = ({ onFail }: VoiceInputProps): JSX.Element => {

@@ -8,7 +8,7 @@ let hydrating: Promise<void> | null = null;
 
 const hydrate = async (): Promise<void> => {
   if (seen) return;
-  if (hydrating) return hydrating;
+  if (hydrating) return await hydrating;
   hydrating = (async () => {
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
@@ -17,12 +17,14 @@ const hydrate = async (): Promise<void> => {
       seen = [];
     }
   })();
-  return hydrating;
+  return await hydrating;
 };
 
 const persist = (): void => {
   if (!seen) return;
-  void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(seen)).catch(() => {});
+  void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(seen)).catch(() => {
+    // swallow persistence errors — dedup is best-effort
+  });
 };
 
 /**

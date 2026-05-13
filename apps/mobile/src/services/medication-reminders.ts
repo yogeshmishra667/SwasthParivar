@@ -29,7 +29,7 @@ import { logError } from "@/services/analytics";
  *   - Simulator / non-physical Device.isDevice → no-op.
  */
 
-const isExpoGo = Constants.appOwnership === "expo";
+const isExpoGo = String(Constants.appOwnership) === "expo";
 const ID_PREFIX = "med-";
 
 const idFor = (scheduleId: string, slotHHMM: string): string =>
@@ -43,9 +43,9 @@ const isOurReminderId = (id: string, scheduleId?: string): boolean =>
 const ensurePermission = async (): Promise<boolean> => {
   if (isExpoGo || !Device.isDevice) return false;
   const existing = await Notifications.getPermissionsAsync();
-  if (existing.status === "granted") return true;
+  if (String(existing.status) === "granted") return true;
   const next = await Notifications.requestPermissionsAsync();
-  return next.status === "granted";
+  return String(next.status) === "granted";
 };
 
 const parseSlot = (slot: string): { hour: number; minute: number } | null => {

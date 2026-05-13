@@ -45,18 +45,20 @@ const doRefresh = async (): Promise<boolean> => {
   }
 };
 
-client.interceptors.response.use(undefined, async (error) => {
-  const original = error.config as InternalAxiosRequestConfig & { _retried?: boolean };
-  if (error.response?.status !== 401 || original._retried || original.url?.includes("/auth/")) {
+client.interceptors.response.use(undefined, async (error: unknown) => {
+  const axiosErr = error as {
+    config?: InternalAxiosRequestConfig & { _retried?: boolean };
+    response?: { status?: number };
+  };
+  const original = axiosErr.config as InternalAxiosRequestConfig & { _retried?: boolean };
+  if (axiosErr.response?.status !== 401 || original._retried || original.url?.includes("/auth/")) {
     throw error;
   }
   original._retried = true;
 
-  if (!refreshPromise) {
-    refreshPromise = doRefresh().finally(() => {
-      refreshPromise = null;
-    });
-  }
+  refreshPromise ??= doRefresh().finally(() => {
+    refreshPromise = null;
+  });
 
   const ok = await refreshPromise;
   if (!ok) throw error;
@@ -65,7 +67,7 @@ client.interceptors.response.use(undefined, async (error) => {
   if (newToken) {
     original.headers.set("authorization", `Bearer ${newToken}`);
   }
-  return client(original);
+  return await client(original);
 });
 
 // --- Public API ---

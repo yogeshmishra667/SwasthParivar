@@ -43,7 +43,7 @@ export default function RootLayout(): JSX.Element | null {
     if (!ready || !accessToken) return;
     // Dynamic import: expo-notifications crashes Expo Go on SDK 53+
     // when imported at the top level, so we load it lazily.
-    const isExpoGo = Constants.appOwnership === "expo";
+    const isExpoGo = String(Constants.appOwnership) === "expo";
     if (isExpoGo) return;
     void import("@/services/notifications").then(({ registerAndSyncPushToken }) => {
       void registerAndSyncPushToken();

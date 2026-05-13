@@ -49,4 +49,4 @@ export const sendSms = async (msg: SmsMessage): Promise<SmsResult> => {
 };
 
 export const sendSmsBatch = async (messages: SmsMessage[]): Promise<SmsResult[]> =>
-  Promise.all(messages.map(sendSms));
+  await Promise.all(messages.map(sendSms));

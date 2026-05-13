@@ -43,7 +43,6 @@ export default [
       "**/.expo/**",
       "**/coverage/**",
       "**/*.config.{js,mjs,cjs}",
-      "apps/mobile/**",
     ],
   },
 ];

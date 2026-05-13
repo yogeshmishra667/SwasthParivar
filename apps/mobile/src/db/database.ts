@@ -31,7 +31,7 @@ export const getDatabase = (): Database | null => {
   if (cached !== undefined) return cached;
 
   try {
-    /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
+    /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/consistent-type-imports */
     const wmdb = require("@nozbe/watermelondb") as typeof import("@nozbe/watermelondb");
     const SQLiteAdapter = (
       require("@nozbe/watermelondb/adapters/sqlite") as {
@@ -47,7 +47,7 @@ export const getDatabase = (): Database | null => {
       require("./models/MedicationLog") as typeof import("./models/MedicationLog");
     const { UserStreakModel } =
       require("./models/UserStreak") as typeof import("./models/UserStreak");
-    /* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
+    /* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/consistent-type-imports */
 
     const adapter = new SQLiteAdapter({
       schema: dbSchema,

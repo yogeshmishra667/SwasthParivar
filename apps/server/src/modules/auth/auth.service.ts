@@ -107,7 +107,7 @@ export const upsertPushToken = async (params: {
   return { id: row.id };
 };
 
-export const refreshTokens = async (
+export const refreshTokens = (
   refreshToken: string,
 ): Promise<{ accessToken: string; refreshToken: string }> => {
   let payload: { sub: string; householdId: string; type: string };
@@ -130,5 +130,5 @@ export const refreshTokens = async (
     env.JWT_REFRESH_SECRET,
     { expiresIn: "30d" },
   );
-  return { accessToken, refreshToken: newRefresh };
+  return Promise.resolve({ accessToken, refreshToken: newRefresh });
 };
