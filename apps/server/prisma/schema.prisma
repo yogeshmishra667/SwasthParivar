@@ -92,6 +92,20 @@ enum FeedbackType {
   festive
 }
 
+enum InsightPatternType {
+  spike
+  trend
+  meal_correlation
+  anomaly
+  cross_condition
+}
+
+enum InsightSeverityLevel {
+  info
+  warn
+  critical
+}
+
 // ─────────────────────────────────────────────────────────────
 // Users & Household (Phase 1)
 // ─────────────────────────────────────────────────────────────
@@ -125,6 +139,7 @@ model User {
   glucoseReadings      GlucoseReading[]
   bpReadings           BPReading[]
   mealLogs             MealLog[]
+  insights             InsightEvent[]
   medicationSchedules  MedicationSchedule[]
   medicationLogs       MedicationLog[]
   streak               UserStreak?
@@ -250,6 +265,45 @@ model MealLog {
   @@index([userId, loggedAt])
   @@index([userId, mealCategory, loggedAt])
   @@map("meal_logs")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Insights (Phase 2)
+// ─────────────────────────────────────────────────────────────
+
+model InsightEvent {
+  id                 String               @default(uuid()) @db.Uuid
+  userId             String               @db.Uuid @map("user_id")
+  patternType        InsightPatternType   @map("pattern_type")
+  // string[] rather than Condition[] — detectors may surface a category
+  // (e.g. "glucose", "bp") that isn't a `Condition` enum value.
+  conditionsInvolved String[]             @map("conditions_involved")
+  severityScore      Int                  @map("severity_score") // 0-100
+  severityLevel      InsightSeverityLevel @map("severity_level")
+  messageKey         String               @map("message_key")
+  messageParams      Json                 @default("{}") @map("message_params")
+  // Reading ids that triggered this insight (JSON array of UUIDs).
+  // Stored as JSON not String[] because mixed types possible later
+  // (e.g. {glucose: [...], bp: [...]}).
+  triggerReadings    Json                 @default("[]") @map("trigger_readings")
+  evidence           Json                 @default("{}")
+  // Confidence < 0.7 → still persisted but `acknowledged: false` and
+  // suppressed from the mobile feed (analytics-only).
+  confidence         Float                @default(1.0)
+  acknowledged       Boolean              @default(false)
+  helpful            Boolean?
+  createdAt          DateTime             @default(now()) @map("created_at")
+  expiresAt          DateTime?            @map("expires_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Composite PK matches the TimescaleDB hypertable pattern. Test setup
+  // calls `create_hypertable('insight_events', 'created_at')` after
+  // `prisma migrate deploy`.
+  @@id([id, createdAt])
+  @@index([userId, createdAt])
+  @@index([userId, acknowledged, createdAt])
+  @@map("insight_events")
 }
 
 // ─────────────────────────────────────────────────────────────
