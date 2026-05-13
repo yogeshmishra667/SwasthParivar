@@ -6,4 +6,5 @@ export * from "./notifications.js";
 export * from "./errors.js";
 export * from "./profile.js";
 export * from "./medications.js";
+export * from "./meals.js";
 export * from "./insights.js";
