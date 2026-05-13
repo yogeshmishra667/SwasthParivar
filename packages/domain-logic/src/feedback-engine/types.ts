@@ -6,7 +6,7 @@ export interface FeedbackComputeInput {
   context: ReadingContext;
   userStageDays: number;
   isFirstReading: boolean;
-  sameTypeReadingsLast7d: Array<{ valueMgDl: number; measuredAt: string }>;
+  sameTypeReadingsLast7d: { valueMgDl: number; measuredAt: string }[];
   lastSameTypeValue: number | null;
   recentVariantIds: string[];
   currentStreakDays: number;

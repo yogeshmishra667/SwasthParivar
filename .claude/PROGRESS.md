@@ -1,8 +1,8 @@
 # SwasthParivar — Build Progress
 
-**Last updated:** 2026-05-11 (session 6, end)
-**Status:** ✅ **Phase 1 complete.** Phase 2 may begin.
-**Branch:** main (9 PRs merged + 2 open: `chore/server-boot-banner`, `fix/profile-aware-saves`)
+**Last updated:** 2026-05-13 (session 7, end-of-day)
+**Status:** ✅ **Phase 1 complete.** 🚧 **Phase 2 in progress** — steps 0 + 1 + 2 + 3a shipped as PRs awaiting review.
+**Branch:** main (9 Phase 1 PRs merged) + 5 open Phase 2 PRs: `chore/domain-logic-purity-tsconfig` (#14, step 0), `feat/bp-readings-server` (#15, step 1), `docs/progress-phase-2-step-1` (#16, interim doc — supersedable), `feat/meal-logs-server` (#17, step 2 + docs), `feat/insight-engine-foundation` (step 3a — InsightEvent + stats helpers + insights module).
 
 ## Dependency versions
 
@@ -99,6 +99,54 @@ _No items remaining. Every Phase 1 mandate from `CLAUDE.md` is shipped._
 
 ---
 
+## Backend — Phase 2 (in progress)
+
+### Build order (locked-in via plan skill, 2026-05-13)
+
+1. ✅ **Step 0 — Domain-logic purity hard-lock** (PR #14)
+2. ✅ **Step 1 — BP readings module (server)** (PR #15)
+3. ✅ **Step 2 — MealLog module (server)** (PR #17)
+4. 🚧 **Step 3 — Insight engine** — split into 3 sub-PRs to keep diff ≤ 600 lines each:
+   - ✅ **3a — Foundation**: `InsightEvent` model + insights module (GET / POST acknowledge) + detector primitives (`stats.ts` with median, IQR, stdDev, linear regression, rollingMedian helpers) + types — branch `feat/insight-engine-foundation`
+   - ⏭️ 3b — `detectSpike` + `detectTrend` pure functions consuming 3a helpers
+   - ⏭️ 3c — `detectMealCorrelation` + `detectAnomaly` + `ANALYZE_READING` BullMQ worker wiring (runs all 4 detectors post-glucose-insert, persists InsightEvent rows)
+5. ⏭️ Step 4 — HbA1c estimator
+6. ⏭️ Step 5 — Daily HealthScore job + `HealthScore` model
+7. ⏭️ Step 6 — Hindi/English dashboard summary card (rule-based)
+8. ⏭️ Step 7 — Guardian read-only view (`FamilyLink` + `GET /api/v1/family/patients/:id/dashboard`)
+
+Each step ships as its own branch + PR; `git-workflow` skill conventions (squash merge, conventional commits, no Co-Authored-By trailer).
+
+### Completed
+
+- [x] **Step 0 — domain-logic purity lock-down** — tsconfig `paths` block redirects @prisma/\_, ioredis, bullmq, express, axios, node:fs/net/http/https/child_process to `src/_blocked.d.ts` (empty-export stub). Forbidden imports error at typecheck (TS2305). `/verify` grep widened to match. Incidental array-type lint autofixes. PR #14.
+- [x] **Step 1 — BP readings module (server)** — `BPReading` Prisma model mirrors glucose hypertable shape. Endpoints POST/GET/DELETE `/api/v1/readings/bp` with same auth + `resolveHouseholdMember` middleware. Validation: systolic 60-250, diastolic 40-150, pulse 30-250 optional, `systolic > diastolic` required. Sync conflict → 409 `READING_STALE_VERSION`. Response shape `{ reading }` only — no streak/feedback/critical bypass for BP this phase. 7-case integration suite. PR #15.
+- [x] **Step 2 — MealLog module (server)** — `MealLog` model + `MealType` (breakfast/lunch/dinner/snack) + `MealCategory` (light/normal/heavy_fried) enums. Endpoints POST/GET (with `mealCategory` filter)/DELETE `/api/v1/meals`. 3-bucket category captures glycemic-load signal without demanding carb estimation. New ErrorCodes: `MEAL_STALE_VERSION`, `MEAL_NOT_FOUND`. 7-case integration suite. PR #17.
+- [x] **Step 3a — Insight engine foundation** — `InsightEvent` Prisma model with composite PK `(id, created_at)` (TimescaleDB-ready), `InsightPatternType` + `InsightSeverityLevel` enums. New module `apps/server/src/modules/insights/` mounted at `/api/v1/insights` with GET list (cursor pagination, filters by `severity` / `acknowledged` / `patternType`, **suppresses confidence < 0.7 from the feed**) and POST `/:id/acknowledge` (ownership-checked, captures optional `helpful` boolean). Detector primitives in `@swasth/domain-logic/detectors/` — `types.ts` (`DetectorResult` + `TypedReading` shapes) and `stats.ts` (pure helpers: `mean`, `median`, `stdDev`, `iqr` with Tukey hinges, `linearRegression` with R², `rollingMedian`, `daysBetween`). All math is empty-input-safe (returns 0 / null, never NaN, never throws). 76/76 domain-logic tests pass (31 new tests added: 23 cases + 4 property-based via fast-check; 100% line+branch coverage on stats.ts). `INSIGHT_NOT_FOUND` ErrorCode added. Branch `feat/insight-engine-foundation`.
+
+### Pending (Phase 2)
+
+- [ ] Step 3b — `detectSpike` (14-day rolling median + σ thresholds: mild/significant/severe) + `detectTrend` (linear regression, R² > 0.5 gate, 5/14/30-day windows) pure functions in `@swasth/domain-logic/detectors/`. Both filter to single `readingType` (same-type comparisons only — medical-correctness rule).
+- [ ] Step 3c — `detectMealCorrelation` (groups post_meal readings by `MealCategory` in 7-calendar-day window, min 5 per category) + `detectAnomaly` (median + IQR, min 21 days) + `ANALYZE_READING` BullMQ worker fired post-glucose-insert (3 retries, exp backoff). Worker runs all 4 detectors in parallel; below-floor results persist with `confidence < 0.7` (suppressed from feed); above-floor results visible.
+- [ ] Step 4 — `estimateHbA1c` pure function (weights: 30d ×1.5, 30d ×1.0, 30d ×0.5) + `GET /api/v1/hba1c/estimate`, Redis-cached 1h, 422 `INSUFFICIENT_DATA` < 30 readings.
+- [ ] Step 5 — `HealthScore` model + `DAILY_HEALTH_SCORE` repeatable BullMQ (`0 6 * * *` Asia/Kolkata) + `computeHealthScore` pure function (logging 20 + stability 25 + trend 25 + med 20 + streak 10).
+- [ ] Step 6 — `composeDashboardSummary` pure function + `DAILY_DASHBOARD_SUMMARY` job + extend `GET /api/v1/dashboard` response with `summary`, `bpLatest`, `mealsToday`, `insightsUnacknowledgedCount`, `healthScore`.
+- [ ] Step 7 — `FamilyLink` model + family module. PII-stripped dashboard reuse via `readOnly: true` + `viewerUserId`.
+
+### Architectural decisions locked-in
+
+- **TimescaleDB hypertable conversion** stays in test setup + production runbook, **not** in migration files — keeps migrations runnable on plain Postgres, matches the existing `glucose_readings` pattern. Applied to `bp_readings`, `meal_logs`, and `insight_events`.
+- **BP storage today, BP intelligence later.** Step 1 ships BP as storage-only; streak credit + feedback for BP needs domain-logic changes (`computeStreak` / `computeFeedback` are currently glucose-specific) and is gated behind `feat/bp-streak-feedback`. Step 3 detectors will read `bp_readings` without needing streak unification.
+- **No BP critical bypass.** `CLAUDE.md` hardcodes critical bypass thresholds for glucose only. BP critical thresholds wait until Phase 3 guardian alerts.
+- **Meal categories: 3 buckets, not carb counts** — captures enough glycemic-load signal for the correlation detector without medical literacy demands. Hindi labels (halka / normal / bhaari) live on the mobile side.
+- **Confidence < 0.7 → store but suppress.** Below-floor insights are persisted (analytics surface) but never reach the patient feed. The Prisma `confidence` column lets us tune thresholds without a migration.
+- **Detector statistics live in their own pure module** (`packages/domain-logic/src/detectors/stats.ts`) — all math is empty-input-safe, deterministic, time-as-parameter. Tested to 100% line+branch coverage. Stat helpers are the shared bedrock for 3b/3c; changing thresholds means tweaking detectors, never the math.
+- **Express 5 native async error propagation** — do not add `express-async-errors`.
+- **Dashboard summary card uses rule-based templates, not Claude.** Phase 3 owns AI chat.
+- **PROGRESS.md updates ship inside the same PR as the feature** they document.
+
+---
+
 ## Frontend — Phase 1
 
 ### Completed
@@ -186,6 +234,19 @@ _No items remaining. Every CLAUDE.md mandate is shipped._
 
 ---
 
+## Frontend — Phase 2 (pending)
+
+Tracked in dedicated follow-up branches, each gated on the corresponding server step landing:
+
+- [ ] `feat/bp-mobile` — log screen segmented control (Sugar / BP / Khana), `BPConfirmation` component, `services/bp.ts` offline write queue. Depends on PR #15.
+- [ ] `feat/meals-mobile` — halka / normal / bhaari quick-entry after a post_meal glucose log. Depends on PR #17.
+- [ ] `feat/insights-tab` — new tab listing `InsightEvent` rows grouped by severity; acknowledge + 👍/👎 actions. Empty state Hindi-first. Depends on step 3c (full detector pipeline producing rows).
+- [ ] `feat/dashboard-summary-card` — renders server-provided `summary.hi` + `HealthScoreCard` + `BPLatestCard` + unacknowledged-insights pill.
+- [ ] `feat/guardian-mobile` — `app/(guardian)/patients.tsx` + `[id]/dashboard.tsx` read-only route group.
+- [ ] i18n additions: `bp.*`, `meals.*`, `insights.*`, `summary.*`, `healthScore.*`, `guardian.*` sections.
+
+---
+
 ## Critical patterns
 
 - Prisma 7: datasource URL in prisma.config.ts, PrismaPg adapter
@@ -216,6 +277,36 @@ UPDATE users SET name='', age=0, conditions='{}', onboarding_complete=false, onb
 ---
 
 ## Changelog
+
+### Session 7 (2026-05-13) — Phase 2 kickoff: steps 0 + 1 + 2 + 3a
+
+Plan skill invoked at session start; Phase 2 plan revised against `CLAUDE.md` + `.claude/skills/` + `.claude/commands/`. Five PRs opened.
+
+**Step 0 — purity hard-lock (PR #14)** — tsconfig `paths` block + `_blocked.d.ts` stub. `/verify` grep widened. Probe import confirmed TS2305 fires.
+
+**Step 1 — BP readings server module (PR #15, 622 lines)** — `BPReading` Prisma model, migration, POST/GET/DELETE `/api/v1/readings/bp`, validation (medical ranges + systolic > diastolic), 7-case integration suite.
+
+**Step 2 — MealLog server module (PR #17, 606 lines)** — `MealLog` model + `MealType` + `MealCategory` enums, POST/GET/DELETE `/api/v1/meals` with `mealCategory` filter, two new ErrorCodes, 7-case integration suite. Three-bucket category (`light` / `normal` / `heavy_fried`) captures glycemic-load signal without demanding carb estimation.
+
+**Step 3a — Insight engine foundation (branch `feat/insight-engine-foundation`)** — split from step 3 to keep diffs reviewable. Lands:
+
+- `InsightEvent` Prisma model with composite PK `(id, created_at)`, `InsightPatternType` + `InsightSeverityLevel` enums. Migration `20260513020000_insight_events`.
+- New module `apps/server/src/modules/insights/`:
+  - GET `/api/v1/insights` — cursor pagination, filters by `severity` / `acknowledged` / `patternType`, **suppresses confidence < 0.7 from the feed**.
+  - POST `/api/v1/insights/:id/acknowledge` — ownership-checked via `resolveHouseholdMember`, captures optional `helpful` boolean.
+- Pure-function detector primitives in `packages/domain-logic/src/detectors/`:
+  - `types.ts` — `DetectorResult`, `TypedReading`, `Detector<TInput>` contract.
+  - `stats.ts` — empty-input-safe helpers: `mean`, `median`, `stdDev` (population), `iqr` (Tukey hinges with linear interpolation), `linearRegression` (slope + intercept + R²), `rollingMedian`, `daysBetween`. All math returns 0/null on empty, never NaN, never throws.
+  - 31 new tests (23 cases + 4 property-based via fast-check). Domain-logic suite now 76/76 green.
+- `INSIGHT_NOT_FOUND` ErrorCode added.
+- `INSIGHT_CONFIDENCE_FLOOR` (0.7) + `INSIGHT_MIN_DATA_DAYS` exported from `@swasth/shared-types`.
+- 7-case integration suite for the endpoints (filters, ack flow, ownership rejection, low-confidence suppression).
+
+**Verified locally:** `pnpm -F @swasth/server typecheck`, `pnpm -F @swasth/shared-types typecheck`, `pnpm -F @swasth/domain-logic typecheck`, `pnpm -F @swasth/domain-logic test --run` (76/76), ESLint clean on all new files.
+
+**Not verified locally:** integration tests across all 4 PRs (Docker not running on dev box; no GitHub Actions yet). Flagged for reviewer Docker-up verification.
+
+**Status:** Phase 1 closed. 5 Phase 2 PRs open (#14, #15, #16, #17, plus step 3a). Next: step 3b (`detectSpike` + `detectTrend` consuming the stats helpers).
 
 ### Session 4 (2026-05-10) — Phase 1 hardening
 
