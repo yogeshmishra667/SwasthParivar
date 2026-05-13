@@ -1,6 +1,7 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import prettier from "eslint-config-prettier";
+import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
   js.configs.recommended,
@@ -28,6 +29,15 @@ export default [
       "eqeqeq": ["error", "always", { null: "ignore" }],
     },
   },
+  // React Hooks rules — applied only to mobile (the only React codebase in the workspace)
+  {
+    files: ["apps/mobile/**/*.{ts,tsx}"],
+    plugins: { "react-hooks": reactHooks },
+    rules: {
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+    },
+  },
   {
     files: ["**/*.test.ts", "**/*.spec.ts", "**/tests/**/*.ts"],
     rules: {
@@ -43,7 +53,6 @@ export default [
       "**/.expo/**",
       "**/coverage/**",
       "**/*.config.{js,mjs,cjs}",
-      "apps/mobile/**",
     ],
   },
 ];

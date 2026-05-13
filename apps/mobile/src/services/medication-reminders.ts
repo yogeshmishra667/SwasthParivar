@@ -1,8 +1,8 @@
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
-import Constants from "expo-constants";
 import { i18n } from "@/i18n/config";
 import { logError } from "@/services/analytics";
+import { isExpoGo } from "@/utils/runtime";
 
 /**
  * Local medication-reminder scheduling.
@@ -29,7 +29,6 @@ import { logError } from "@/services/analytics";
  *   - Simulator / non-physical Device.isDevice → no-op.
  */
 
-const isExpoGo = Constants.appOwnership === "expo";
 const ID_PREFIX = "med-";
 
 const idFor = (scheduleId: string, slotHHMM: string): string =>
@@ -43,9 +42,9 @@ const isOurReminderId = (id: string, scheduleId?: string): boolean =>
 const ensurePermission = async (): Promise<boolean> => {
   if (isExpoGo || !Device.isDevice) return false;
   const existing = await Notifications.getPermissionsAsync();
-  if (existing.status === "granted") return true;
+  if (existing.granted) return true;
   const next = await Notifications.requestPermissionsAsync();
-  return next.status === "granted";
+  return next.granted;
 };
 
 const parseSlot = (slot: string): { hour: number; minute: number } | null => {

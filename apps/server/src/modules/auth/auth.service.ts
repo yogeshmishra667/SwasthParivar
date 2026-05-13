@@ -107,9 +107,9 @@ export const upsertPushToken = async (params: {
   return { id: row.id };
 };
 
-export const refreshTokens = async (
+export const refreshTokens = (
   refreshToken: string,
-): Promise<{ accessToken: string; refreshToken: string }> => {
+): { accessToken: string; refreshToken: string } => {
   let payload: { sub: string; householdId: string; type: string };
   try {
     payload = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as typeof payload;

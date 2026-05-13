@@ -5,8 +5,7 @@ import { Platform } from "react-native";
 import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
 import { markNotificationSeen } from "@/services/notification-dedup";
-
-const isExpoGo = Constants.appOwnership === "expo";
+import { isExpoGo } from "@/utils/runtime";
 
 // Remote notification APIs were removed from Expo Go in SDK 53+.
 // Only register the handler in development builds / standalone apps.
@@ -56,17 +55,17 @@ export const registerForPushNotificationsAsync = async (): Promise<string | null
     });
   }
 
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let status = existingStatus;
-  if (existingStatus !== "granted") {
+  const existing = await Notifications.getPermissionsAsync();
+  let granted = existing.granted;
+  if (!granted) {
     const req = await Notifications.requestPermissionsAsync();
-    status = req.status;
+    granted = req.granted;
   }
-  if (status !== "granted") return null;
+  if (!granted) return null;
 
-  const projectId =
-    Constants.expoConfig?.extra?.["eas"]?.["projectId"] ??
-    Constants.easConfig?.projectId;
+  const extra = Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined;
+  const easConfig = Constants.easConfig as { projectId?: string } | null | undefined;
+  const projectId: string | undefined = extra?.eas?.projectId ?? easConfig?.projectId;
   const token = await Notifications.getExpoPushTokenAsync(
     projectId ? { projectId } : undefined,
   );
@@ -93,7 +92,7 @@ export const scheduleMedicationReminder = async (
   body: string,
   date: Date,
 ): Promise<string> =>
-  Notifications.scheduleNotificationAsync({
+  await Notifications.scheduleNotificationAsync({
     identifier: id,
     content: { title, body, sound: true },
     trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },

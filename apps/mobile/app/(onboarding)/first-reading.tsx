@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, Pressable, ScrollView } from "react-native";
+import { View, Text, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
@@ -12,7 +12,6 @@ import { logError } from "@/services/analytics";
 import { saveGlucoseReading } from "@/services/readings";
 import { useAuthStore } from "@/stores/auth.store";
 import { hapticCelebrate } from "@/utils/haptics";
-import { TOUCH_TARGET_MIN } from "@/utils/constants";
 import type { GlucoseReadingType } from "@swasth/shared-types";
 
 export default function FirstReadingScreen(): JSX.Element {

@@ -1,4 +1,9 @@
-import axios, { type AxiosInstance, type AxiosRequestConfig, type InternalAxiosRequestConfig } from "axios";
+import axios, {
+  type AxiosError,
+  type AxiosInstance,
+  type AxiosRequestConfig,
+  type InternalAxiosRequestConfig,
+} from "axios";
 import Constants from "expo-constants";
 import { useAuthStore } from "@/stores/auth.store";
 import { TIMEOUTS } from "@/utils/constants";
@@ -45,18 +50,23 @@ const doRefresh = async (): Promise<boolean> => {
   }
 };
 
-client.interceptors.response.use(undefined, async (error) => {
-  const original = error.config as InternalAxiosRequestConfig & { _retried?: boolean };
-  if (error.response?.status !== 401 || original._retried || original.url?.includes("/auth/")) {
+client.interceptors.response.use(undefined, async (error: AxiosError) => {
+  const original = error.config as
+    | (InternalAxiosRequestConfig & { _retried?: boolean })
+    | undefined;
+  if (
+    error.response?.status !== 401 ||
+    !original ||
+    original._retried === true ||
+    original.url?.includes("/auth/") === true
+  ) {
     throw error;
   }
   original._retried = true;
 
-  if (!refreshPromise) {
-    refreshPromise = doRefresh().finally(() => {
-      refreshPromise = null;
-    });
-  }
+  refreshPromise ??= doRefresh().finally(() => {
+    refreshPromise = null;
+  });
 
   const ok = await refreshPromise;
   if (!ok) throw error;
@@ -65,7 +75,7 @@ client.interceptors.response.use(undefined, async (error) => {
   if (newToken) {
     original.headers.set("authorization", `Bearer ${newToken}`);
   }
-  return client(original);
+  return await client(original);
 });
 
 // --- Public API ---

@@ -48,6 +48,8 @@ const VoiceInputNative = ({ onParsed, onFail }: Props): JSX.Element => {
     unlock();
   };
 
+  // Unmount-only cleanup; intentionally excludes stopAndUnlock to prevent re-firing.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => () => stopAndUnlock(), []);
 
   useSpeechRecognitionEvent("result", (event) => {

@@ -222,9 +222,9 @@ export const drainPendingReadings = async (): Promise<{ pushed: number; failed: 
 
   setPhase("draining");
 
-  /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
+  /* eslint-disable @typescript-eslint/no-require-imports */
   const { Q } = require("@nozbe/watermelondb") as { Q: typeof QType };
-  /* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
+  /* eslint-enable @typescript-eslint/no-require-imports */
 
   const collection = db.collections.get<GlucoseReadingModel>(TABLE);
   const pending = await collection
@@ -288,9 +288,9 @@ export const drainPendingReadings = async (): Promise<{ pushed: number; failed: 
 export const refreshPendingCount = async (): Promise<number> => {
   const db = getDatabase();
   if (!db) return 0;
-  /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
+  /* eslint-disable @typescript-eslint/no-require-imports */
   const { Q } = require("@nozbe/watermelondb") as { Q: typeof QType };
-  /* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
+  /* eslint-enable @typescript-eslint/no-require-imports */
   const collection = db.collections.get<GlucoseReadingModel>(TABLE);
   const count = await collection.query(Q.where("synced_at", null)).fetchCount();
   useSyncStore.getState().setPendingCount(count);

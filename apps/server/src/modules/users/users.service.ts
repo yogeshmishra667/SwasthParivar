@@ -42,7 +42,7 @@ export const updateProfile = async (userId: string, input: UpdateProfileInput) =
   if (input.onboardingStep !== undefined) data.onboardingStep = input.onboardingStep;
   if (input.onboardingComplete !== undefined) data.onboardingComplete = input.onboardingComplete;
 
-  return prisma.user.update({
+  return await prisma.user.update({
     where: { id: userId },
     data,
     select: {

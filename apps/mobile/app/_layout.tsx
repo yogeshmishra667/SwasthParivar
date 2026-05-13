@@ -14,7 +14,7 @@ import { useSyncDrain } from "@/hooks/useSyncDrain";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { FontScaleProvider } from "@/components/shared/FontScaleProvider";
 import { ProfileSelectorModal } from "@/components/profile/ProfileSelectorModal";
-import Constants from "expo-constants";
+import { isExpoGo } from "@/utils/runtime";
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -43,7 +43,6 @@ export default function RootLayout(): JSX.Element | null {
     if (!ready || !accessToken) return;
     // Dynamic import: expo-notifications crashes Expo Go on SDK 53+
     // when imported at the top level, so we load it lazily.
-    const isExpoGo = Constants.appOwnership === "expo";
     if (isExpoGo) return;
     void import("@/services/notifications").then(({ registerAndSyncPushToken }) => {
       void registerAndSyncPushToken();
