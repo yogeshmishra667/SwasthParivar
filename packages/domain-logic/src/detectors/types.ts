@@ -21,6 +21,18 @@ export interface TypedReading {
 }
 
 /**
+ * Meal log shape the meal-correlation detector consumes. Mirrors the
+ * server `MealLog` Prisma model minus DB-internal fields. Kept here so
+ * the detector stays pure — caller maps Prisma rows to this shape at
+ * the service boundary.
+ */
+export interface MealEntry {
+  id: string;
+  mealCategory: "light" | "normal" | "heavy_fried";
+  loggedAt: string;
+}
+
+/**
  * Uniform output shape for every detector. Returning `null` is how a
  * detector says "not enough data" or "below confidence floor" — it is
  * NOT an error and the caller never logs it. Persisting null-results
