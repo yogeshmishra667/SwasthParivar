@@ -13,44 +13,58 @@ Run the full SwasthParivar verification pipeline. Delegate to the `build-validat
 ## Pipeline — run in order, stop on first failure
 
 ### 1. TypeScript strict
+
 ```
 pnpm -r typecheck
 ```
+
 No `any`, no `@ts-ignore`, no `@ts-expect-error` without a linked issue comment.
 
 ### 2. ESLint
+
 ```
 pnpm -r lint
 ```
+
 Zero warnings. Treat warnings as errors.
 
 ### 3. Domain-logic purity check
-`packages/domain-logic/` must NEVER import the following. Run:
+
+Defense in depth — tsconfig `paths` redirects every forbidden module to `src/_blocked.d.ts` (a stub with no exports), so any forbidden import fails at typecheck (TS2305). The grep below is the secondary gate; both must be clean.
+
 ```
-grep -rE "from ['\"]@prisma/|from ['\"]ioredis|from ['\"]bullmq|from ['\"]express|from ['\"]node:fs" packages/domain-logic/src/
+grep -rE "from ['\"]@prisma/|from ['\"]ioredis|from ['\"]bullmq|from ['\"]express|from ['\"]axios|from ['\"]node:fs|from ['\"]node:net|from ['\"]node:http|from ['\"]node:child_process" packages/domain-logic/src/
 ```
+
 Any hit → FAIL. Pure functions only.
 
-Also verify no `Date.now()` or `new Date()` calls inside exported domain functions:
+Also verify no `Date.now()`, `new Date()`, or `Math.random()` calls inside exported domain functions:
+
 ```
-grep -rnE "Date\.now\(\)|new Date\(\)" packages/domain-logic/src/
+grep -rnE "Date\.now\(\)|new Date\(\)|Math\.random\(\)" packages/domain-logic/src/
 ```
-Time must be passed as a parameter. Any hit → FAIL.
+
+Time and randomness must be passed as parameters. Any hit → FAIL.
 
 ### 4. Tests
+
 ```
 pnpm -r test -- --run
 pnpm -r test -- --coverage
 ```
+
 Enforce coverage thresholds from `vitest.config.ts`:
+
 - `packages/domain-logic/**`: 100% lines + branches
 - `critical-bypass*`: 100% branches
 - Global: 80% lines
 
 ### 5. Build
+
 ```
 pnpm -r build
 ```
+
 All workspace packages must build.
 
 ## Reporting
