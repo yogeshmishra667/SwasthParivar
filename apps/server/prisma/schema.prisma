@@ -64,6 +64,19 @@ enum MedicationLogStatus {
   delayed
 }
 
+enum MealType {
+  breakfast
+  lunch
+  dinner
+  snack
+}
+
+enum MealCategory {
+  light
+  normal
+  heavy_fried
+}
+
 enum FeedbackTone {
   celebrate
   neutral
@@ -111,6 +124,7 @@ model User {
   household            Household             @relation(fields: [householdId], references: [id])
   glucoseReadings      GlucoseReading[]
   bpReadings           BPReading[]
+  mealLogs             MealLog[]
   medicationSchedules  MedicationSchedule[]
   medicationLogs       MedicationLog[]
   streak               UserStreak?
@@ -200,13 +214,42 @@ model BPReading {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Composite primary key matches the TimescaleDB hypertable pattern used
-  // on glucose_readings. Test setup calls `create_hypertable()` after
-  // `prisma migrate deploy`; production wiring is the same.
+  // Composite primary key matches the TimescaleDB hypertable pattern
+  // used on glucose_readings. Test setup calls `create_hypertable()`
+  // after `prisma migrate deploy`; production wiring is the same.
   @@id([id, measuredAt])
   @@unique([clientUuid, measuredAt])
   @@index([userId, measuredAt])
   @@map("bp_readings")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Meal logs (Phase 2) — context for the meal-correlation detector
+// ─────────────────────────────────────────────────────────────
+
+model MealLog {
+  id              String       @default(uuid()) @db.Uuid
+  clientUuid      String       @db.Uuid @map("client_uuid")
+  userId          String       @db.Uuid @map("user_id")
+  mealType        MealType     @map("meal_type")
+  mealCategory    MealCategory @map("meal_category")
+  foodDescription String?      @map("food_description")
+  loggedAt        DateTime     @map("logged_at")
+  version         Int          @default(1)
+  syncedAt        DateTime?    @map("synced_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Composite primary key matches the TimescaleDB hypertable pattern.
+  // Test setup calls `create_hypertable()` after `prisma migrate deploy`;
+  // production wiring is the same as glucose_readings and bp_readings.
+  @@id([id, loggedAt])
+  @@unique([clientUuid, loggedAt])
+  @@index([userId, loggedAt])
+  @@index([userId, mealCategory, loggedAt])
+  @@map("meal_logs")
 }
 
 // ─────────────────────────────────────────────────────────────

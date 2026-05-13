@@ -16,10 +16,12 @@ const statusFor = (code: ErrorCode): number => {
       return 403;
     case "MED_SCHEDULE_NOT_FOUND":
     case "READING_NOT_FOUND":
+    case "MEAL_NOT_FOUND":
       return 404;
     case "FAMILY_LINK_EXISTS":
     case "SOS_ALREADY_ACTIVE":
     case "READING_STALE_VERSION":
+    case "MEAL_STALE_VERSION":
     case "HOUSEHOLD_PROFILE_LIMIT":
       return 409;
     case "CHAT_RATE_LIMITED":
