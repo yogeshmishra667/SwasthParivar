@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { View, Text, TextInput, Alert, KeyboardAvoidingView, Platform, ScrollView, Pressable } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { View, Text, TextInput, Alert, KeyboardAvoidingView, Platform, ScrollView, Pressable, Keyboard } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
@@ -26,35 +26,53 @@ export default function VerifyScreen(): JSX.Element {
   const setTokens = useAuthStore((s) => s.setTokens);
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
+  const submittedRef = useRef(false);
 
-  const verify = async (): Promise<void> => {
-    if (otp.length !== 6) {
+  const verify = async (otpToSend: string = otp): Promise<void> => {
+    if (otpToSend.length !== 6) {
       Alert.alert("6 digit OTP dalein");
       return;
     }
+    if (submittedRef.current || loading) return;
+    submittedRef.current = true;
     setLoading(true);
+    Keyboard.dismiss();
     try {
       const res = await api.post<VerifyResponse, { phone: string; otp: string }>(
         "/auth/verify-otp",
-        { phone: `+91${phone ?? ""}`, otp },
+        { phone: `+91${phone ?? ""}`, otp: otpToSend },
       );
       await setTokens(res.data.accessToken, res.data.refreshToken, res.data.userId);
       // Let index.tsx resolve the correct destination based on onboardingComplete + step
       router.replace("/");
     } catch {
+      submittedRef.current = false;
       Alert.alert("OTP galat hai");
     } finally {
       setLoading(false);
     }
   };
 
+  // Auto-submit as soon as the user fills 6 digits (paste, autofill, or
+  // the last keypress). The submittedRef guard prevents double-fires.
+  useEffect(() => {
+    if (otp.length === 6 && !submittedRef.current) {
+      void verify(otp);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otp]);
+
   return (
     <SafeAreaView className="flex-1 bg-white">
       <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        behavior="padding"
         style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
       >
-        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }}>
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24, paddingBottom: 48 }}
+          keyboardShouldPersistTaps="handled"
+        >
           
           <Pressable 
             onPress={() => router.back()} 
@@ -87,6 +105,10 @@ export default function VerifyScreen(): JSX.Element {
               placeholder="000000"
               placeholderTextColor="#9CA3AF"
               accessibilityLabel="OTP input"
+              autoFocus
+              textContentType="oneTimeCode"
+              autoComplete="sms-otp"
+              importantForAutofill="yes"
               style={{ minHeight: TOUCH_TARGET_MIN, letterSpacing: 8 }}
               className="rounded-2xl border border-gray-300 bg-gray-50 px-4 py-4 text-center text-2xl font-bold tracking-widest text-gray-900"
             />

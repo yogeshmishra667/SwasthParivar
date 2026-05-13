@@ -2,11 +2,11 @@ export interface BypassDecisionInput {
   glucoseValueMgDl: number;
   nowIso: string;
   lastBypassTriggeredAtIso: string | null;
-  emergencyContacts: ReadonlyArray<{
+  emergencyContacts: readonly {
     contactId: string;
     priority: number;
     isGuardian: boolean;
-  }>;
+  }[];
 }
 
 export interface BypassDecision {
