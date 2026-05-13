@@ -13,7 +13,7 @@ export default function MedicationsOnboarding(): JSX.Element {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
 
-  const completeOnboarding = async (): Promise<void> => {
+  const completeOnboarding = async (destination: "dashboard" | "medications"): Promise<void> => {
     setSaving(true);
     try {
       await api.patch("/users/me", {
@@ -24,7 +24,9 @@ export default function MedicationsOnboarding(): JSX.Element {
       logError("onboarding/medications", e);
     }
     setSaving(false);
-    router.replace("/(tabs)/dashboard");
+    router.replace(
+      destination === "medications" ? "/(tabs)/medications" : "/(tabs)/dashboard",
+    );
   };
 
   return (
@@ -47,13 +49,13 @@ export default function MedicationsOnboarding(): JSX.Element {
         <View className="w-full gap-3">
           <Button
             label={t("medications.addMedicines")}
-            onPress={() => router.push("/(tabs)/medications")}
+            onPress={() => void completeOnboarding("medications")}
             disabled={saving}
           />
           <Button
             label={t("common.skip")}
             variant="ghost"
-            onPress={() => void completeOnboarding()}
+            onPress={() => void completeOnboarding("dashboard")}
             disabled={saving}
           />
         </View>
