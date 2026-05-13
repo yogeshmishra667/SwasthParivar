@@ -33,10 +33,14 @@ export default function LoginScreen(): JSX.Element {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        behavior="padding"
         style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
       >
-        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }}>
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24, paddingBottom: 48 }}
+          keyboardShouldPersistTaps="handled"
+        >
           
           <View className="mb-10 items-center">
             <View className="mb-4 h-24 w-24 items-center justify-center rounded-full bg-blue-50">
