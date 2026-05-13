@@ -18,7 +18,7 @@ export const getInsights = async (req: Request, res: Response): Promise<void> =>
   const result = await service.listInsights({
     userId,
     ...(q.severity ? { severity: q.severity } : {}),
-    ...(q.acknowledged !== undefined ? { acknowledged: q.acknowledged } : {}),
+    ...(q.acknowledged !== undefined ? { acknowledged: String(q.acknowledged) === "true" } : {}),
     ...(q.patternType ? { patternType: q.patternType } : {}),
     limit: Number(q.limit ?? 50),
     ...(q.cursor ? { cursor: q.cursor } : {}),
