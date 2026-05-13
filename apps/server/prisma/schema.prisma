@@ -123,6 +123,7 @@ model User {
 
   household            Household             @relation(fields: [householdId], references: [id])
   glucoseReadings      GlucoseReading[]
+  bpReadings           BPReading[]
   mealLogs             MealLog[]
   medicationSchedules  MedicationSchedule[]
   medicationLogs       MedicationLog[]
@@ -189,6 +190,37 @@ model GlucoseReading {
   @@index([userId, readingType, measuredAt])
   @@index([userId, streakCreditedTo])
   @@map("glucose_readings")
+}
+
+// ─────────────────────────────────────────────────────────────
+// BP (Phase 2)
+// ─────────────────────────────────────────────────────────────
+
+model BPReading {
+  id         String         @default(uuid()) @db.Uuid
+  clientUuid String         @db.Uuid @map("client_uuid")
+  userId     String         @db.Uuid @map("user_id")
+  systolic   Int
+  diastolic  Int
+  pulse      Int?
+  context    ReadingContext @default(normal)
+  notes      String?
+  source     ReadingSource
+  measuredAt DateTime       @map("measured_at")
+  version    Int            @default(1)
+  syncedAt   DateTime?      @map("synced_at")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Composite primary key matches the TimescaleDB hypertable pattern
+  // used on glucose_readings. Test setup calls `create_hypertable()`
+  // after `prisma migrate deploy`; production wiring is the same.
+  @@id([id, measuredAt])
+  @@unique([clientUuid, measuredAt])
+  @@index([userId, measuredAt])
+  @@map("bp_readings")
 }
 
 // ─────────────────────────────────────────────────────────────
