@@ -127,9 +127,10 @@ export default function DashboardScreen(): JSX.Element {
     setRefreshing(false);
   };
 
-  const greeting = profile?.name
-    ? t("dashboard.greeting", { name: profile.name })
-    : t("dashboard.greetingDefault");
+  const profileName = profile?.name && profile.name.trim().length > 0 ? profile.name : null;
+  const greeting = profileName
+    ? t("dashboard.greeting", { name: profileName })
+    : t("dashboard.greetingDefault", { defaultValue: "Namaste 🙏" });
   const streak = data.streak.currentStreakDays;
   const latest = data.latestReading;
 
@@ -189,33 +190,53 @@ export default function DashboardScreen(): JSX.Element {
           loggedToday={data.todayReadingCount > 0}
         />
 
-        <Card>
-          <Text className="text-body text-neutral">{t("dashboard.todayStreak")}</Text>
-          <View className="mt-1 flex-row items-center gap-2">
-            <Icon name="flame" size={28} color="#F59E0B" />
-            <Text className="text-hero font-bold">{streak}</Text>
-            <Text className="text-body text-neutral">{t("common.days")}</Text>
-          </View>
-        </Card>
-
+        {/* Hero — latest reading (most actionable signal) */}
         <Card>
           <Text className="text-body text-neutral">{t("dashboard.lastReading")}</Text>
           {latest ? (
             <>
-              <Text className="text-hero font-bold">{latest.valueMgDl} mg/dL</Text>
-              <Text className="text-body text-neutral">
-                {latest.readingType === "fasting" ? t("logging.fasting") : t("logging.postMeal")}
-              </Text>
+              <View className="mt-1 flex-row items-baseline gap-2">
+                <Text className="text-5xl font-bold tracking-tight text-gray-900">
+                  {latest.valueMgDl}
+                </Text>
+                <Text className="text-important text-neutral">mg/dL</Text>
+              </View>
+              <View className="mt-2 self-start rounded-full bg-blue-50 px-3 py-1">
+                <Text className="text-body font-semibold text-blue-700">
+                  {latest.readingType === "fasting"
+                    ? t("logging.fasting")
+                    : latest.readingType === "post_meal"
+                      ? t("logging.postMeal")
+                      : latest.readingType}
+                </Text>
+              </View>
             </>
           ) : (
-            <Text className="text-body text-neutral">{t("dashboard.noReadings")}</Text>
+            <Text className="mt-2 text-important text-neutral">
+              {t("dashboard.noReadings")}
+            </Text>
           )}
         </Card>
 
-        <Card>
-          <Text className="text-body text-neutral">{t("dashboard.todayReadings")}</Text>
-          <Text className="text-hero font-bold">{data.todayReadingCount}</Text>
-        </Card>
+        {/* Stat strip — streak | today's logs */}
+        <View className="flex-row gap-3">
+          <View className="flex-1">
+            <Card>
+              <Text className="text-body text-neutral">{t("dashboard.todayStreak")}</Text>
+              <View className="mt-1 flex-row items-center gap-1.5">
+                <Icon name="flame" size={24} color="#F59E0B" />
+                <Text className="text-3xl font-bold">{streak}</Text>
+                <Text className="text-body text-neutral">{t("common.days")}</Text>
+              </View>
+            </Card>
+          </View>
+          <View className="flex-1">
+            <Card>
+              <Text className="text-body text-neutral">{t("dashboard.todayReadings")}</Text>
+              <Text className="mt-1 text-3xl font-bold">{data.todayReadingCount}</Text>
+            </Card>
+          </View>
+        </View>
 
         <Button label={t("dashboard.logReading")} onPress={() => router.push("/(tabs)/log")} />
       </ScrollView>
