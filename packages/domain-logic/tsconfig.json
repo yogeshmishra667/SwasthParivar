@@ -4,7 +4,22 @@
     "rootDir": "src",
     "outDir": "dist",
     "module": "ESNext",
-    "moduleResolution": "Bundler"
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@prisma/client": ["./src/_blocked.d.ts"],
+      "@prisma/*": ["./src/_blocked.d.ts"],
+      "ioredis": ["./src/_blocked.d.ts"],
+      "bullmq": ["./src/_blocked.d.ts"],
+      "express": ["./src/_blocked.d.ts"],
+      "express/*": ["./src/_blocked.d.ts"],
+      "axios": ["./src/_blocked.d.ts"],
+      "node:fs": ["./src/_blocked.d.ts"],
+      "node:fs/*": ["./src/_blocked.d.ts"],
+      "node:net": ["./src/_blocked.d.ts"],
+      "node:http": ["./src/_blocked.d.ts"],
+      "node:https": ["./src/_blocked.d.ts"],
+      "node:child_process": ["./src/_blocked.d.ts"]
+    }
   },
   "include": ["src/**/*"]
 }

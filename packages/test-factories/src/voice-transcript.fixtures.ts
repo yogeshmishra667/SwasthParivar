@@ -8,7 +8,7 @@ export interface VoiceFixture {
   notes?: string;
 }
 
-export const VOICE_FIXTURES: ReadonlyArray<VoiceFixture> = [
+export const VOICE_FIXTURES: readonly VoiceFixture[] = [
   {
     label: "colloquial-sava-sau",
     transcript: "meri sugar sava sau hai",

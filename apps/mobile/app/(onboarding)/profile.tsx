@@ -7,11 +7,15 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
+import { useProfileStore } from "@/stores/profile.store";
+import { useAuthStore } from "@/stores/auth.store";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 
 export default function ProfileScreen(): JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
+  const userId = useAuthStore((s) => s.userId);
+  const setHousehold = useProfileStore((s) => s.setHousehold);
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
   const [saving, setSaving] = useState(false);
@@ -21,13 +25,38 @@ export default function ProfileScreen(): JSX.Element {
   const submit = async (): Promise<void> => {
     setSaving(true);
     try {
-      await api.patch("/users/me", {
-        name: name.trim(),
-        age: Number(age),
-        onboardingStep: 3,
-      });
+      const res = await api.patch<{ success: boolean; data: { householdId: string } }>(
+        "/users/me",
+        {
+          name: name.trim(),
+          age: Number(age),
+          onboardingStep: 3,
+        },
+      );
+      // Seed the profile store so the next screen (first-reading) can
+      // show the user's name in the confirmation card.
+      const hId = res?.data?.householdId ?? userId ?? "onboarding";
+      setHousehold(hId, [
+        {
+          id: userId ?? "self",
+          name: name.trim(),
+          avatarColor: "#2563EB",
+          conditions: [],
+        },
+      ]);
     } catch (e) {
       logError("onboarding/profile", e);
+      // Still seed the store locally so the name is visible even if
+      // the API call failed (offline-first).
+      const hId = userId ?? "onboarding";
+      setHousehold(hId, [
+        {
+          id: userId ?? "self",
+          name: name.trim(),
+          avatarColor: "#2563EB",
+          conditions: [],
+        },
+      ]);
     }
     setSaving(false);
     router.push("/(onboarding)/first-reading");
@@ -36,11 +65,12 @@ export default function ProfileScreen(): JSX.Element {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
         style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }}
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24, paddingBottom: 48 }}
           keyboardShouldPersistTaps="handled"
         >
           {/* Header */}
