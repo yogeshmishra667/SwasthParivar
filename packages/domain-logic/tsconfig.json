@@ -5,6 +5,8 @@
     "outDir": "dist",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "composite": true,
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
     "paths": {
       "@prisma/client": ["./src/_blocked.d.ts"],
       "@prisma/*": ["./src/_blocked.d.ts"],

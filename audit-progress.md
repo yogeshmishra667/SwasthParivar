@@ -1,8 +1,8 @@
 # Audit Progress
 
 > Source plan: `~/.claude/plans/flickering-wiggling-sundae.md`
-> Last updated: 2026-05-14 (all Immediate items 1–5 done; all Short term items 6–13 done)
-> Current session focus: Short term complete. Next session: Long term bucket (items 14–19).
+> Last updated: 2026-05-14 (Immediate 1–5 + Short term 6–13 + Long term 14, 15, 16, 19 done; 17 + 18 deferred until a second repo exists)
+> Current session focus: Audit roadmap complete except deferred items.
 
 ## Status Legend
 
@@ -32,12 +32,12 @@
 
 ## Long term (1–2 months)
 
-- [ ] 14. **[P1]** Full critical-bypass integration test (real BullMQ + Testcontainers Redis + mocked push provider)
-- [ ] 15. **[X-cut]** `docs/runbooks/rollback.md` + quarterly DR restore drill log
-- [ ] 16. **[X-cut]** Project references (`composite: true`) on `packages/*` for incremental typecheck
-- [ ] 17. **[X-cut]** Extract `@swasth/tsconfig`, `@swasth/eslint-config`, `@swasth/observability`, `@swasth/env`, `@swasth/health` packages
-- [ ] 18. **[X-cut]** Reusable GitHub Actions: `reusable-node-quality.yml`, `reusable-migration-parity.yml`, `reusable-domain-purity.yml`, `reusable-cve-gate.yml`
-- [ ] 19. **[X-cut]** Plop / shell scaffold: `pnpm new-module`, `pnpm new-detector`, `pnpm new-migration`
+- [x] 14. **[P1]** Critical-bypass full-chain integration test. New file `critical-bypass-chain.test.ts` with 5 cases: push-succeeds-no-SMS, push-fails-SMS-fallback, requestId propagation, normal-range-no-enqueue, 65/64 threshold boundary. To make it work I split the worker into `critical-alert.processor.ts` (pure function, importable for tests) + `critical-alert.worker.ts` (createWorker side effect, for production). Test uses `vi.hoisted` for the spy instances + `vi.mock` for expo-push/msg91-sms. All 8 integration test files / 48 tests pass.
+- [x] 15. **[X-cut]** `docs/runbooks/rollback.md`. Five sections (image revert / migration revert / provider kill switch / PITR / full-stack outage) — each with trigger, steps, safety asserts. Quarterly DR drill checklist with a drill log table. RTO 30min / RPO 5min targets called out as aspirational until first rehearsal.
+- [x] 16. **[X-cut]** Project references on `packages/*`. Composite + `tsBuildInfoFile` added to `packages/{shared-types,domain-logic,test-factories}/tsconfig.json`. `apps/server/tsconfig{.json,.build.json}` get `references` arrays. Root `tsconfig.json` converted to solution-style (`files: []` + references). `pnpm build` still works; `tsc -b` from root incremental-rebuilds in 0.18s. Mobile stays independent (Expo base is opinionated; composite mode would force changes without ROI).
+- [!] 17. **DEFERRED** Extract `@swasth/{tsconfig,eslint-config,observability,env,health}` reusable packages. **Reason**: this audit's own roadmap said "only worth doing once a second repo will consume them"; there is currently only one repo. Premature extraction is on the audit's own overengineering-warnings list. Revisit when a second repo (admin web, doctor dashboard, partner integration) exists.
+- [!] 18. **DEFERRED** Reusable GitHub Actions. **Reason**: same as 17 — there's no second repo to call a reusable workflow. The current `.github/workflows/ci.yml` is already well-organised and could become a reusable-workflow caller with minimal churn the moment a second repo lands. Revisit alongside item 17.
+- [x] 19. **[X-cut]** Scaffold scripts under `scripts/scaffold/` + root `pnpm` aliases: `new-module`, `new-detector`, `new-migration`. Slug-validated, idempotent (refuses to clobber), prints next-step checklist. Portable for macOS bash 3.2 (no `${X^}` parameter expansion).
 
 ## Deferred — added when their phase begins
 
@@ -72,3 +72,4 @@
 - 2026-05-14: bundled commit `43f84f8` "chore(audit): immediate bucket — Sentry, idempotency, TS pin, coverage, env guard" landed on `chore/quality-gate-hardening`. 12 files, +389/-37. Next: Short term bucket (items 6–13).
 - 2026-05-14: bundled commit `497bca4` "chore(audit): short-term batch 1 — PostHog, requestId, dependabot, squawk, danger" — items 6, 8, 9, 10, 12. 15 files, +573/-13. Remaining short-term: 7 (Dockerfile), 11 (mobile Sentry + EAS + ErrorBoundary), 13 (flag service) — each ~2h. Natural pause for review.
 - 2026-05-14: short-term batch 2 (items 7, 11, 13). New files: `apps/server/Dockerfile`, `.dockerignore`, `apps/mobile/eas.json`, `apps/mobile/src/services/sentry.ts`, `apps/mobile/src/components/shared/ErrorBoundary.tsx`, `apps/server/src/shared/flags/{flags,index}.ts`, `apps/server/src/shared/middleware/admin-auth.ts`, `apps/server/src/modules/admin/{admin.routes,flags.controller,flags.validation}.ts`, integration test for admin flags. ci.yml gets an `image-smoke` job. Workspace typecheck + lint + format all green. **Short term bucket complete (8/8).**
+- 2026-05-14: long-term bucket (items 14, 15, 16, 19). Critical-bypass full-chain integration test with 5 cases (push-OK/SMS-skip, push-fail/SMS-fallback, requestId propagation, normal-range no-enqueue, 65/64 threshold boundary) — required splitting `critical-alert.worker.ts` into a side-effect-free `.processor.ts` + the thin worker binding. Project references on `packages/*` (incremental `tsc -b` no-op rebuild 0.18s; per-package typecheck flow unchanged). `docs/runbooks/rollback.md` with 5 sections + quarterly DR drill checklist. Scaffold scripts (`pnpm new-module / new-detector / new-migration`). **Items 17 + 18 explicitly DEFERRED** — extracting reusable packages and workflows would be premature with only one consumer repo (audit's own overengineering-warning). 8/8 server integration tests, 48/48 cases green.

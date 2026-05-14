@@ -21,6 +21,9 @@
     "test:integration": "pnpm --filter=@swasth/server run test:integration",
     "test:coverage": "pnpm -r --parallel run test:coverage",
     "clean": "pnpm -r run clean && rm -rf node_modules",
+    "new-module": "bash scripts/scaffold/new-module.sh",
+    "new-detector": "bash scripts/scaffold/new-detector.sh",
+    "new-migration": "bash scripts/scaffold/new-migration.sh",
     "prepare": "husky"
   },
   "lint-staged": {

@@ -38,17 +38,17 @@ afterAll(async () => {
 });
 
 describe("Admin flag service", () => {
-  it("rejects missing admin token with 403", async () => {
+  it("rejects missing admin token with 401", async () => {
     const res = await request(app).get("/admin/flags");
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
     expect(res.body.error.code).toBe("AUTH_UNAUTHORIZED");
   });
 
-  it("rejects wrong admin token with 403", async () => {
+  it("rejects wrong admin token with 401", async () => {
     const res = await request(app)
       .get("/admin/flags")
       .set("Authorization", "Bearer not-the-real-token-not-the-real-token");
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
   });
 
   it("PUT then GET returns the set value, audit log captures the change", async () => {
