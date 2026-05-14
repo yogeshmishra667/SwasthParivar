@@ -4,9 +4,7 @@
     "rootDir": "src",
     "outDir": "dist",
     "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "composite": true,
-    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    "moduleResolution": "Bundler"
   },
   "include": ["src/**/*"]
 }

@@ -4,13 +4,8 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "noEmit": false,
-    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    "noEmit": false
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "node_modules", "**/*.test.ts", "tests/**/*"],
-  "references": [
-    { "path": "../../packages/shared-types" },
-    { "path": "../../packages/domain-logic" }
-  ]
+  "exclude": ["dist", "node_modules", "**/*.test.ts", "tests/**/*"]
 }

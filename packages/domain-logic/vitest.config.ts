@@ -1,4 +1,12 @@
+import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
+
+// Workspace dep aliasing — shared-types' package.json `main` points at
+// `./dist/index.js` for production Node resolution, but tests want
+// source so a fresh checkout works without a prior build.
+const workspaceAliases = {
+  "@swasth/shared-types": resolve(__dirname, "../shared-types/src/index.ts"),
+};
 
 /**
  * Coverage policy — per-file ratchets active.
@@ -22,6 +30,7 @@ import { defineConfig } from "vitest/config";
  * adjust both the test and CLAUDE.md.
  */
 export default defineConfig({
+  resolve: { alias: workspaceAliases },
   test: {
     name: "domain-logic",
     environment: "node",

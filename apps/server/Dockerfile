@@ -29,7 +29,10 @@ COPY apps/mobile/package.json apps/mobile/package.json
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # Bring in source for the projects the server actually needs.
-COPY tsconfig.base.json tsconfig.json ./
+# Note: root `tsconfig.json` is gitignored on this project (Expo legacy)
+# — apps/server/tsconfig.build.json extends tsconfig.base.json directly,
+# so we only need to copy the base.
+COPY tsconfig.base.json ./
 COPY apps/server apps/server
 COPY packages/domain-logic packages/domain-logic
 COPY packages/shared-types packages/shared-types

@@ -9,10 +9,5 @@
     "noEmit": true
   },
   "include": ["src/**/*", "tests/**/*"],
-  "exclude": ["dist", "node_modules"],
-  "references": [
-    { "path": "../../packages/shared-types" },
-    { "path": "../../packages/domain-logic" },
-    { "path": "../../packages/test-factories" }
-  ]
+  "exclude": ["dist", "node_modules"]
 }
