@@ -1,0 +1,11 @@
+{
+  "//": "Build-only config. Emits dist/ from src/ only. Run via `pnpm build`.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "noEmit": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["dist", "node_modules", "**/*.test.ts", "tests/**/*"]
+}

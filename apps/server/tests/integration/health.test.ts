@@ -7,7 +7,6 @@ import request from "supertest";
 let postgresContainer: StartedPostgreSqlContainer;
 let redisContainer: StartedRedisContainer;
 let app: any;
-let _prisma: any;
 
 beforeAll(async () => {
   // 1. Start containers
@@ -38,7 +37,9 @@ beforeAll(async () => {
   const dbModule = await import("../../src/shared/database.js");
 
   app = appModule.buildApp();
-  _prisma = dbModule.prisma;
+  // Touch the dbModule.prisma reference to ensure the import has its
+  // side effects (Prisma client init) without keeping an unused binding.
+  void dbModule.prisma;
 }, 60000);
 
 afterAll(async () => {
