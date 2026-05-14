@@ -199,7 +199,11 @@ jobs:
   # Domain-logic unit tests (pure functions, no Docker needed).
   # ──────────────────────────────────────────────────────────
   unit-tests:
-    name: Unit tests (domain-logic, with coverage)
+    # NOTE: name must stay "Unit tests (domain-logic)" because branch
+    # protection on main pins this exact string as a required check.
+    # Renaming it leaves the required check stuck in "expected" forever
+    # and blocks every merge. The job now also runs coverage — see step.
+    name: Unit tests (domain-logic)
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
