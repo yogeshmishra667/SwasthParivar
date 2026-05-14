@@ -57,10 +57,16 @@ export default defineConfig({
         "src/detectors/stats.ts": { lines: 100, functions: 100, branches: 80, statements: 98 },
         "src/detectors/trend.ts": { lines: 95, functions: 95, branches: 85, statements: 95 },
         "src/voice-parser/parser.ts": {
-          lines: 95,
-          functions: 93,
-          branches: 85,
-          statements: 89,
+          // Ratchet raised 2026-05-14 after the voice-flow soft audit:
+          // added word-boundary matching + intent-gating + 11 new test
+          // cases. CLAUDE.md target is ≥95 across the board — we're at
+          // 94.44 on branches/functions; close the last gap in a
+          // follow-up by writing tests for the still-uncovered lines
+          // (parser.ts:114, 147, 164, 173).
+          lines: 100,
+          functions: 94,
+          branches: 94,
+          statements: 96,
         },
         "src/voice-parser/dictionary.ts": {
           lines: 95,
