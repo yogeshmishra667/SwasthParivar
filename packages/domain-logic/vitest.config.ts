@@ -1,9 +1,9 @@
 import { defineConfig } from "vitest/config";
 
 /**
- * Coverage policy.
+ * Coverage policy — per-file ratchets active.
  *
- * CLAUDE.md "Coverage Targets" (the ratchet destination):
+ * CLAUDE.md "Coverage Targets" (the destination):
  *   - critical-bypass/**: 100% lines + branches  (safety-critical)
  *   - streak-engine/**:   100%
  *   - voice-parser/**:    ≥ 95%
@@ -11,16 +11,15 @@ import { defineConfig } from "vitest/config";
  *   - notification-resolver/**: ≥ 90%
  *   - detectors/**:       ≥ 95%
  *
- * Current state (2026-05-14, this branch): the global 95% aggregate
- * is enforced and passes; per-file ratchets are *not* yet active
- * because notification-resolver, streak-engine, feedback-engine,
- * voice-parser, and detectors/stats still sit at 80-88% on branches.
+ * Current state (2026-05-14): critical-bypass is at 100% and locked.
+ * Other files are below CLAUDE.md target; per-file ratchet floors are
+ * pinned at their CURRENT measured values so coverage can only move
+ * UP. Closing the gap to CLAUDE.md targets is tracked as a follow-up
+ * (`chore/coverage-ratchet`).
  *
- * Follow-up: ship `chore/coverage-ratchet` to (a) close the per-file
- * gaps with targeted tests and (b) flip `perFile: true` plus add the
- * path-specific overrides below. Until then, this config still
- * enforces an aggregate floor — which catches gross regressions —
- * and CI runs `test:coverage` so the floor cannot silently slide.
+ * Editing rule: never lower a floor. If a test removal genuinely
+ * drops coverage on purpose, raise the question in PR review and
+ * adjust both the test and CLAUDE.md.
  */
 export default defineConfig({
   test: {
@@ -33,13 +32,51 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       exclude: ["src/**/*.test.ts", "src/**/index.ts", "src/**/*.types.ts", "src/_blocked.d.ts"],
       thresholds: {
-        // Aggregate floor — gross-regression catcher. Per-file
-        // enforcement is queued in `chore/coverage-ratchet`.
+        // Aggregate floor — gross-regression catcher across the package.
         lines: 95,
         functions: 90,
         branches: 85,
         statements: 90,
         perFile: false,
+
+        // Safety-critical: locked at CLAUDE.md target. Never lower.
+        "src/critical-bypass/**": { 100: true },
+
+        // Ratchet floors at CURRENT measured values (2026-05-14 baseline).
+        // Raise these as tests close the gap to CLAUDE.md targets.
+        "src/detectors/spike.ts": { lines: 100, functions: 100, branches: 95, statements: 100 },
+        "src/detectors/stats.ts": { lines: 100, functions: 100, branches: 80, statements: 98 },
+        "src/detectors/trend.ts": { lines: 95, functions: 95, branches: 85, statements: 95 },
+        "src/voice-parser/parser.ts": {
+          lines: 95,
+          functions: 93,
+          branches: 85,
+          statements: 89,
+        },
+        "src/voice-parser/dictionary.ts": {
+          lines: 95,
+          functions: 90,
+          branches: 85,
+          statements: 90,
+        },
+        "src/feedback-engine/engine.ts": {
+          lines: 95,
+          functions: 100,
+          branches: 82,
+          statements: 93,
+        },
+        "src/notification-resolver/resolver.ts": {
+          lines: 89,
+          functions: 78,
+          branches: 69,
+          statements: 87,
+        },
+        "src/streak-engine/engine.ts": {
+          lines: 88,
+          functions: 90,
+          branches: 83,
+          statements: 84,
+        },
       },
     },
   },

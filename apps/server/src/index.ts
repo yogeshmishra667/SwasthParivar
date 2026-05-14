@@ -1,3 +1,6 @@
+import { initSentry, captureUnhandled, warnIfMisconfigured } from "./shared/observability/sentry.js";
+initSentry();
+
 import os from "node:os";
 import { buildApp } from "./app.js";
 import { env, isDev } from "./config/env.js";
@@ -6,6 +9,8 @@ import { prisma, disconnectDatabase } from "./shared/database.js";
 import { redis, disconnectRedis } from "./shared/redis.js";
 import { closeQueueConnection } from "./shared/queue.js";
 import { startWorkers, stopWorkers, workerNames } from "./workers/index.js";
+
+warnIfMisconfigured((msg) => logger.warn(msg));
 
 const lanAddresses = (): string[] => {
   const out: string[] = [];
@@ -96,4 +101,10 @@ process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("unhandledRejection", (reason) => {
   logger.error({ reason }, "unhandled rejection");
+  captureUnhandled(reason, { source: "unhandledRejection" });
+});
+
+process.on("uncaughtException", (err) => {
+  logger.error({ err }, "uncaught exception");
+  captureUnhandled(err, { source: "uncaughtException" });
 });

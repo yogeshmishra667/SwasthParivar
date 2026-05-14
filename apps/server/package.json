@@ -23,6 +23,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",
     "@prisma/client": "^7.7.0",
+    "@sentry/node": "^10.53.1",
     "@swasth/domain-logic": "workspace:*",
     "@swasth/shared-types": "workspace:*",
     "bcryptjs": "^3.0.3",

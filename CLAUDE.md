@@ -1,5 +1,7 @@
 # SwasthParivar — Claude Code Instructions
 
+> **Production audit in progress.** If `audit-progress.md` exists at the repo root, read it before any audit / quality-gate / infra work and update it as items land. It tracks the rollout of the production-engineering audit (Sentry, idempotency, coverage ratchets, Dockerfile, dependabot, flag service, etc.) across sessions. The full audit lives at `~/.claude/plans/flickering-wiggling-sundae.md` on the author's machine — `audit-progress.md` is the portable, in-repo continuation.
+
 ## Project
 
 Chronic condition health companion for Indian families. Patients (elderly, 50-70) manage diabetes, BP, asthma, cardiac. Guardians (adult children, 25-40) monitor remotely. Hindi-first, offline-first, accuracy-first.

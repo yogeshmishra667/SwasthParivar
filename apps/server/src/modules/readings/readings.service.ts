@@ -5,7 +5,7 @@ import {
   decideCriticalBypass,
   type BypassDecision,
 } from "@swasth/domain-logic";
-import type { GlucoseReading, Prisma } from "@prisma/client";
+import { Prisma, type GlucoseReading } from "@prisma/client";
 import { prisma } from "../../shared/database.js";
 import { logger } from "../../shared/logger.js";
 import { createQueue, QUEUE_NAMES } from "../../shared/queue.js";
@@ -48,6 +48,57 @@ export interface CreateReadingResult {
 
 const ist = (): number => 330;
 
+// Idempotent replay response — fired when a client retries a POST with the
+// same {clientUuid, version} we already persisted. Returns the existing
+// reading and current downstream state without re-running streak/feedback
+// side effects or re-enqueuing the critical alert.
+const buildReplayResult = async (
+  reading: GlucoseReading,
+  userId: string,
+): Promise<CreateReadingResult> => {
+  const [streakState, feedbackEvent, contacts, lastBypassEvent] = await Promise.all([
+    prisma.userStreak.findUnique({ where: { userId } }),
+    prisma.feedbackEvent.findFirst({
+      where: { readingId: reading.id },
+      orderBy: { shownAt: "desc" },
+    }),
+    prisma.emergencyContact.findMany({ where: { userId }, orderBy: { priority: "asc" } }),
+    prisma.feedbackEvent.findFirst({
+      where: {
+        userId,
+        feedbackType: "critical_warn",
+        shownAt: { gte: new Date(Date.now() - 30 * 60_000) },
+      },
+      orderBy: { shownAt: "desc" },
+    }),
+  ]);
+
+  const critical = decideCriticalBypass({
+    glucoseValueMgDl: reading.valueMgDl,
+    nowIso: reading.measuredAt.toISOString(),
+    lastBypassTriggeredAtIso: lastBypassEvent?.shownAt.toISOString() ?? null,
+    emergencyContacts: contacts.map((c) => ({
+      contactId: c.id,
+      priority: c.priority,
+      isGuardian: c.isGuardian,
+    })),
+  });
+
+  return {
+    reading,
+    streak: {
+      currentStreakDays: streakState?.currentStreakDays ?? 0,
+      milestoneReached: null,
+    },
+    feedback: {
+      tone: feedbackEvent?.tone ?? "neutral",
+      messageKey: feedbackEvent?.messageKey ?? "reading.noted",
+      params: (feedbackEvent?.messageParams as Record<string, unknown>) ?? {},
+    },
+    critical,
+  };
+};
+
 export const createGlucoseReading = async (
   input: CreateReadingInput,
 ): Promise<CreateReadingResult> => {
@@ -61,8 +112,13 @@ export const createGlucoseReading = async (
   });
 
   if (existing) {
-    if (input.version <= existing.version) {
+    if (input.version < existing.version) {
       throw new DomainError("READING_STALE_VERSION", "incoming version not newer than stored");
+    }
+    if (input.version === existing.version) {
+      // Idempotent replay — same {clientUuid, version} we already stored.
+      // Return the prior result without re-running side effects.
+      return await buildReplayResult(existing, input.userId);
     }
   }
 
@@ -192,27 +248,48 @@ export const createGlucoseReading = async (
   // partition key for the TimescaleDB hypertable). The user-facing edit
   // flow updates value/type/notes — not the medical timestamp. Anything
   // that would shift measuredAt should go through DELETE + create.
-  const reading = existing
-    ? await prisma.glucoseReading.update({
-        where: {
-          clientUuid_measuredAt: {
-            clientUuid: existing.clientUuid,
-            measuredAt: existing.measuredAt,
-          },
+  let reading: GlucoseReading;
+  if (existing) {
+    reading = await prisma.glucoseReading.update({
+      where: {
+        clientUuid_measuredAt: {
+          clientUuid: existing.clientUuid,
+          measuredAt: existing.measuredAt,
         },
-        data: {
-          valueMgDl: input.valueMgDl,
-          readingType: input.readingType,
-          context: input.context,
-          ...(input.notes !== undefined ? { notes: input.notes } : {}),
-          source: input.source,
-          streakCreditedTo: new Date(streakResult.streakCreditedTo),
-          streakCreditedAtServerTime: useServerTimeForStreak,
-          antiCheatFlags: streakResult.antiCheatFlags,
-          version: input.version,
-        },
-      })
-    : await prisma.glucoseReading.create({ data });
+      },
+      data: {
+        valueMgDl: input.valueMgDl,
+        readingType: input.readingType,
+        context: input.context,
+        ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        source: input.source,
+        streakCreditedTo: new Date(streakResult.streakCreditedTo),
+        streakCreditedAtServerTime: useServerTimeForStreak,
+        antiCheatFlags: streakResult.antiCheatFlags,
+        version: input.version,
+      },
+    });
+  } else {
+    try {
+      reading = await prisma.glucoseReading.create({ data });
+    } catch (err) {
+      // P2002 on (clientUuid, measuredAt) means a concurrent request lost
+      // the findFirst race and arrived first. Re-fetch and treat as replay.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        const winner = await prisma.glucoseReading.findFirst({
+          where: { clientUuid: input.clientUuid },
+        });
+        if (winner) {
+          logger.info(
+            { clientUuid: input.clientUuid, userId: input.userId },
+            "concurrent create resolved as idempotent replay",
+          );
+          return await buildReplayResult(winner, input.userId);
+        }
+      }
+      throw err;
+    }
+  }
 
   await prisma.userStreak.update({
     where: { userId: input.userId },
