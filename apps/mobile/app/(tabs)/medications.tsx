@@ -129,82 +129,82 @@ export default function MedicationsScreen(): JSX.Element {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
       >
-      <ScrollView
-        contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 120 }}
-        keyboardShouldPersistTaps="handled"
-      >
-        {loading ? (
-          <ActivityIndicator />
-        ) : schedules.length === 0 && !showForm ? (
-          <Card>
-            <Text className="text-important">{t("medications.noMedicines")}</Text>
-            <Text className="text-body text-neutral">{t("medications.addFromSettings")}</Text>
-          </Card>
-        ) : (
-          schedules.map((s) => (
-            <Card key={s.id}>
-              <View className="flex-row items-start justify-between">
-                <View className="flex-1">
-                  <Text className="text-important font-semibold">{s.medicineName}</Text>
-                  {s.dosage && <Text className="text-body text-neutral">{s.dosage}</Text>}
-                  <Text className="text-body mt-1">{s.timeSlots.join(" · ")}</Text>
-                </View>
-                <Pressable
-                  onPress={() => handleDelete(s)}
-                  accessibilityRole="button"
-                  accessibilityLabel={t("medications.remove")}
-                  style={{ minHeight: TOUCH_TARGET_MIN, minWidth: TOUCH_TARGET_MIN }}
-                  className="items-center justify-center"
-                >
-                  <Icon name="trash-outline" size={24} color="#DC2626" />
-                </Pressable>
-              </View>
-              <View className="mt-3 flex-row gap-2">
-                <View className="flex-1">
-                  <Button
-                    label={
-                      loggedIds.has(`${s.id}-taken`)
-                        ? t("medications.logged")
-                        : t("medications.markTaken")
-                    }
-                    variant="primary"
-                    onPress={() => void handleLog(s, "taken")}
-                  />
-                </View>
-                <View className="flex-1">
-                  <Button
-                    label={
-                      loggedIds.has(`${s.id}-skipped`)
-                        ? t("medications.logged")
-                        : t("medications.markSkipped")
-                    }
-                    variant="ghost"
-                    onPress={() => void handleLog(s, "skipped")}
-                  />
-                </View>
-              </View>
+        <ScrollView
+          contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 120 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {loading ? (
+            <ActivityIndicator />
+          ) : schedules.length === 0 && !showForm ? (
+            <Card>
+              <Text className="text-important">{t("medications.noMedicines")}</Text>
+              <Text className="text-body text-neutral">{t("medications.addFromSettings")}</Text>
             </Card>
-          ))
-        )}
+          ) : (
+            schedules.map((s) => (
+              <Card key={s.id}>
+                <View className="flex-row items-start justify-between">
+                  <View className="flex-1">
+                    <Text className="text-important font-semibold">{s.medicineName}</Text>
+                    {s.dosage && <Text className="text-body text-neutral">{s.dosage}</Text>}
+                    <Text className="text-body mt-1">{s.timeSlots.join(" · ")}</Text>
+                  </View>
+                  <Pressable
+                    onPress={() => handleDelete(s)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("medications.remove")}
+                    style={{ minHeight: TOUCH_TARGET_MIN, minWidth: TOUCH_TARGET_MIN }}
+                    className="items-center justify-center"
+                  >
+                    <Icon name="trash-outline" size={24} color="#DC2626" />
+                  </Pressable>
+                </View>
+                <View className="mt-3 flex-row gap-2">
+                  <View className="flex-1">
+                    <Button
+                      label={
+                        loggedIds.has(`${s.id}-taken`)
+                          ? t("medications.logged")
+                          : t("medications.markTaken")
+                      }
+                      variant="primary"
+                      onPress={() => void handleLog(s, "taken")}
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <Button
+                      label={
+                        loggedIds.has(`${s.id}-skipped`)
+                          ? t("medications.logged")
+                          : t("medications.markSkipped")
+                      }
+                      variant="ghost"
+                      onPress={() => void handleLog(s, "skipped")}
+                    />
+                  </View>
+                </View>
+              </Card>
+            ))
+          )}
 
-        {showForm ? (
-          <AddMedicineForm
-            onCancel={() => setShowForm(false)}
-            onSaved={(s) => {
-              setSchedules((prev) => [...prev, s]);
-              setShowForm(false);
-              // Schedule the local reminder on every slot. Async, no
-              // need to block the UI — schedule failure is logged but
-              // the schedule itself is persisted server-side.
-              void syncMedReminders(s.id, s.medicineName, s.timeSlots);
-            }}
-            onError={() => setError(t("medications.saveFailed"))}
-            invalidTimeMsg={t("medications.invalidTime")}
-          />
-        ) : (
-          <Button label={`+ ${t("medications.addNew")}`} onPress={() => setShowForm(true)} />
-        )}
-      </ScrollView>
+          {showForm ? (
+            <AddMedicineForm
+              onCancel={() => setShowForm(false)}
+              onSaved={(s) => {
+                setSchedules((prev) => [...prev, s]);
+                setShowForm(false);
+                // Schedule the local reminder on every slot. Async, no
+                // need to block the UI — schedule failure is logged but
+                // the schedule itself is persisted server-side.
+                void syncMedReminders(s.id, s.medicineName, s.timeSlots);
+              }}
+              onError={() => setError(t("medications.saveFailed"))}
+              invalidTimeMsg={t("medications.invalidTime")}
+            />
+          ) : (
+            <Button label={`+ ${t("medications.addNew")}`} onPress={() => setShowForm(true)} />
+          )}
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -328,11 +328,7 @@ function AddMedicineForm({ onCancel, onSaved, onError, invalidTimeMsg }: FormPro
           <Button label={t("common.cancel")} variant="ghost" onPress={onCancel} />
         </View>
         <View className="flex-1">
-          <Button
-            label={t("medications.save")}
-            onPress={() => void save()}
-            disabled={!canSave}
-          />
+          <Button label={t("medications.save")} onPress={() => void save()} disabled={!canSave} />
         </View>
       </View>
     </Card>

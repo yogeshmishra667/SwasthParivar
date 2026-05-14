@@ -26,10 +26,5 @@ export type VoiceParseResult =
     }
   | {
       kind: "rejected";
-      reason:
-        | "no_number"
-        | "past_tense_only"
-        | "negated_intent"
-        | "out_of_range"
-        | "no_intent";
+      reason: "no_number" | "past_tense_only" | "negated_intent" | "out_of_range" | "no_intent";
     };

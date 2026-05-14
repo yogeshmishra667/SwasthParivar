@@ -17,6 +17,4 @@ export interface StreakComputeResult {
   antiCheatFlags: AntiCheatFlag[];
 }
 
-export type AntiCheatFlag =
-  | "same_value_3_consecutive"
-  | "always_round_5_days";
+export type AntiCheatFlag = "same_value_3_consecutive" | "always_round_5_days";

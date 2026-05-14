@@ -38,11 +38,9 @@ const doRefresh = async (): Promise<boolean> => {
       data: { accessToken: string; refreshToken: string };
     }>(`${baseURL}/auth/refresh`, { refreshToken });
     const { accessToken: newAccess, refreshToken: newRefresh } = res.data.data;
-    await useAuthStore.getState().setTokens(
-      newAccess,
-      newRefresh,
-      useAuthStore.getState().userId ?? "",
-    );
+    await useAuthStore
+      .getState()
+      .setTokens(newAccess, newRefresh, useAuthStore.getState().userId ?? "");
     return true;
   } catch {
     await useAuthStore.getState().clear();
@@ -92,7 +90,7 @@ export async function apiCall<T>(
 }
 
 export const api = {
-  get: <T,>(url: string, config?: AxiosRequestConfig) =>
+  get: <T>(url: string, config?: AxiosRequestConfig) =>
     client.get<T>(url, config).then((r) => r.data),
   post: <T, B = unknown>(url: string, body?: B, config?: AxiosRequestConfig) =>
     client.post<T>(url, body, config).then((r) => r.data),
@@ -100,7 +98,7 @@ export const api = {
     client.put<T>(url, body, config).then((r) => r.data),
   patch: <T, B = unknown>(url: string, body?: B, config?: AxiosRequestConfig) =>
     client.patch<T>(url, body, config).then((r) => r.data),
-  delete: <T,>(url: string, config?: AxiosRequestConfig) =>
+  delete: <T>(url: string, config?: AxiosRequestConfig) =>
     client.delete<T>(url, config).then((r) => r.data),
 };
 

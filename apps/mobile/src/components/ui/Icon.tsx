@@ -10,7 +10,12 @@ interface IconProps {
   accessibilityLabel?: string;
 }
 
-export const Icon = ({ name, size = 20, color = "#111827", accessibilityLabel }: IconProps): JSX.Element => (
+export const Icon = ({
+  name,
+  size = 20,
+  color = "#111827",
+  accessibilityLabel,
+}: IconProps): JSX.Element => (
   <Ionicons
     name={name}
     size={size}

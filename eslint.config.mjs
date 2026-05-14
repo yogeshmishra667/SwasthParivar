@@ -38,11 +38,19 @@ export default [
       "react-hooks/exhaustive-deps": "warn",
     },
   },
+  // Test files: relax unsafe-any rules — supertest, vitest helpers, mocks
+  // legitimately return `any`, and forcing typed shims everywhere adds
+  // noise that hides real test bugs.
   {
     files: ["**/*.test.ts", "**/*.spec.ts", "**/tests/**/*.ts"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
     },
   },
   {
@@ -52,7 +60,9 @@ export default [
       "**/node_modules/**",
       "**/.expo/**",
       "**/coverage/**",
-      "**/*.config.{js,mjs,cjs}",
+      "**/*.config.{js,mjs,cjs,ts}",
+      "vitest.workspace.ts",
+      ".claude/worktrees/**",
     ],
   },
 ];

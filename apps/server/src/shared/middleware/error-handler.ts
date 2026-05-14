@@ -58,7 +58,11 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   if (err instanceof DomainError) {
     const body: ApiError = {
       success: false,
-      error: { code: err.code, message: err.message, ...(err.details ? { details: err.details } : {}) },
+      error: {
+        code: err.code,
+        message: err.message,
+        ...(err.details ? { details: err.details } : {}),
+      },
     };
     res.status(statusFor(err.code)).json(body);
     return;

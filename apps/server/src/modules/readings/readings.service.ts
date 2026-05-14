@@ -56,7 +56,9 @@ export const createGlucoseReading = async (
   const clockDeltaMs = Math.abs(serverNow.getTime() - measuredAtDate.getTime());
   const isAnomalousClock = clockDeltaMs > SERVER_TIME_FALLBACK_THRESHOLD_HOURS * MS_PER_HOUR;
 
-  const existing = await prisma.glucoseReading.findFirst({ where: { clientUuid: input.clientUuid } });
+  const existing = await prisma.glucoseReading.findFirst({
+    where: { clientUuid: input.clientUuid },
+  });
 
   if (existing) {
     if (input.version <= existing.version) {
@@ -89,9 +91,7 @@ export const createGlucoseReading = async (
     );
   }
   const useServerTimeForStreak = effectiveAnomalyCount >= TIME_ANOMALY_TRIGGER_COUNT;
-  const streakSourceIso = useServerTimeForStreak
-    ? serverNow.toISOString()
-    : input.measuredAt;
+  const streakSourceIso = useServerTimeForStreak ? serverNow.toISOString() : input.measuredAt;
 
   const state = await prisma.userStreak.upsert({
     where: { userId: input.userId },
@@ -131,9 +131,7 @@ export const createGlucoseReading = async (
   const firstReadingCount = await prisma.glucoseReading.count({ where: { userId: input.userId } });
   const isFirst = firstReadingCount === 0;
   const lastSameType = recentSameType[0]?.valueMgDl ?? null;
-  const userStageDays = Math.floor(
-    (Date.now() - user.createdAt.getTime()) / 86_400_000,
-  );
+  const userStageDays = Math.floor((Date.now() - user.createdAt.getTime()) / 86_400_000);
 
   const feedback = computeFeedback({
     currentValue: input.valueMgDl,
@@ -196,7 +194,12 @@ export const createGlucoseReading = async (
   // that would shift measuredAt should go through DELETE + create.
   const reading = existing
     ? await prisma.glucoseReading.update({
-        where: { clientUuid_measuredAt: { clientUuid: existing.clientUuid, measuredAt: existing.measuredAt } },
+        where: {
+          clientUuid_measuredAt: {
+            clientUuid: existing.clientUuid,
+            measuredAt: existing.measuredAt,
+          },
+        },
         data: {
           valueMgDl: input.valueMgDl,
           readingType: input.readingType,
@@ -240,7 +243,11 @@ export const createGlucoseReading = async (
   });
 
   if (critical.isCritical && !critical.withinCooldown) {
-    await criticalQueue.add("dispatch", { readingId: reading.id, userId: input.userId, decision: critical });
+    await criticalQueue.add("dispatch", {
+      readingId: reading.id,
+      userId: input.userId,
+      decision: critical,
+    });
   }
 
   if (streakResult.antiCheatFlags.length > 0) {
@@ -291,7 +298,12 @@ export const listGlucoseReadings = async (params: {
   const where: Prisma.GlucoseReadingWhereInput = {
     userId: params.userId,
     ...(params.from || params.to
-      ? { measuredAt: { ...(params.from ? { gte: params.from } : {}), ...(params.to ? { lte: params.to } : {}) } }
+      ? {
+          measuredAt: {
+            ...(params.from ? { gte: params.from } : {}),
+            ...(params.to ? { lte: params.to } : {}),
+          },
+        }
       : {}),
   };
 
@@ -299,12 +311,23 @@ export const listGlucoseReadings = async (params: {
     where,
     orderBy: { measuredAt: "desc" },
     take: params.limit + 1,
-    ...(params.cursor ? { skip: 1, cursor: { clientUuid_measuredAt: { clientUuid: params.cursor.split('_')[0]!, measuredAt: new Date(params.cursor.split('_')[1]!) } } } : {}),
+    ...(params.cursor
+      ? {
+          skip: 1,
+          cursor: {
+            clientUuid_measuredAt: {
+              clientUuid: params.cursor.split("_")[0]!,
+              measuredAt: new Date(params.cursor.split("_")[1]!),
+            },
+          },
+        }
+      : {}),
   });
 
   const hasMore = rows.length > params.limit;
   const data = hasMore ? rows.slice(0, params.limit) : rows;
   const lastItem = data[data.length - 1];
-  const cursor = hasMore && lastItem ? `${lastItem.clientUuid}_${lastItem.measuredAt.toISOString()}` : null;
+  const cursor =
+    hasMore && lastItem ? `${lastItem.clientUuid}_${lastItem.measuredAt.toISOString()}` : null;
   return { data, cursor, hasMore };
 };

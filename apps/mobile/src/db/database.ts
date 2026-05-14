@@ -46,7 +46,8 @@ export const getDatabase = (): Database | null => {
       }
     ).default;
     const { dbSchema } = require("./schema") as typeof SchemaModule;
-    const { GlucoseReadingModel } = require("./models/GlucoseReading") as typeof GlucoseReadingModule;
+    const { GlucoseReadingModel } =
+      require("./models/GlucoseReading") as typeof GlucoseReadingModule;
     const { MedicationScheduleModel } =
       require("./models/MedicationSchedule") as typeof MedicationScheduleModule;
     const { MedicationLogModel } = require("./models/MedicationLog") as typeof MedicationLogModule;

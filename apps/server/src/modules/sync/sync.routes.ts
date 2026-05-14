@@ -78,6 +78,10 @@ syncRouter.get(
       }),
     ]);
 
-    ok(res, { glucoseReadings: readings, medicationSchedules: schedules, serverTime: new Date().toISOString() });
+    ok(res, {
+      glucoseReadings: readings,
+      medicationSchedules: schedules,
+      serverTime: new Date().toISOString(),
+    });
   },
 );

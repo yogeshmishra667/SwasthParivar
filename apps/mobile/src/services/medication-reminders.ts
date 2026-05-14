@@ -35,9 +35,7 @@ const idFor = (scheduleId: string, slotHHMM: string): string =>
   `${ID_PREFIX}${scheduleId}-${slotHHMM}`;
 
 const isOurReminderId = (id: string, scheduleId?: string): boolean =>
-  scheduleId === undefined
-    ? id.startsWith(ID_PREFIX)
-    : id.startsWith(`${ID_PREFIX}${scheduleId}-`);
+  scheduleId === undefined ? id.startsWith(ID_PREFIX) : id.startsWith(`${ID_PREFIX}${scheduleId}-`);
 
 const ensurePermission = async (): Promise<boolean> => {
   if (isExpoGo || !Device.isDevice) return false;

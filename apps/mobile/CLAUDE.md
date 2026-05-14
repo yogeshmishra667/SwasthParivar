@@ -157,7 +157,7 @@ CONTRAST_RATIO     = 4.5:1 minimum (WCAG AA), 7:1 for high contrast mode (AAA)
 
 ```ts
 // Three modes, user-selectable:
-type Theme = 'light' | 'dark' | 'high-contrast';
+type Theme = "light" | "dark" | "high-contrast";
 
 // High contrast mode:
 //   - Black background, white text, yellow accents
@@ -328,6 +328,7 @@ Modal routes:
 Use React Native Testing Library (RNTL). Test behavior, not rendered output.
 
 **Critical test cases (from root CLAUDE.md):**
+
 - VoiceConfirmation: profile name shown, type toggle works, 3s delay on extreme values
 - ProfileSwitcher: mic locks switcher, recent switch → extra friction
 - FailSafe UI: spinner never >10s, backend down → cached data + stale warning
@@ -361,6 +362,7 @@ OTA updates (EAS Update) for JS-only changes — skip full build for bug fixes.
 ## What This File Does NOT Cover
 
 These are in root `/CLAUDE.md`:
+
 - Voice parser rules (Hindi dictionary, confidence, past-tense rejection)
 - Streak engine (3AM boundary, grace period, anti-cheat)
 - Feedback engine (same-type comparison, festive tag, noise floor)

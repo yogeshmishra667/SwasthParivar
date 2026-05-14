@@ -67,10 +67,15 @@ export default function ProfileScreen(): JSX.Element {
       <KeyboardAvoidingView
         behavior="padding"
         style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24, paddingBottom: 48 }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: "center",
+            padding: 24,
+            paddingBottom: 48,
+          }}
           keyboardShouldPersistTaps="handled"
         >
           {/* Header */}

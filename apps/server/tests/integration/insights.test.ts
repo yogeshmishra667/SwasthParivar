@@ -1,5 +1,5 @@
 // See readings.test.ts for the lint-disable rationale.
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
+ 
 import { describe, it, beforeAll, afterAll, expect } from "vitest";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
@@ -64,11 +64,9 @@ beforeAll(async () => {
     },
   });
   userId = user.id;
-  accessToken = jwt.sign(
-    { sub: user.id, householdId: user.householdId },
-    process.env.JWT_SECRET,
-    { expiresIn: "1h" },
-  );
+  accessToken = jwt.sign({ sub: user.id, householdId: user.householdId }, process.env.JWT_SECRET, {
+    expiresIn: "1h",
+  });
 }, 120_000);
 
 afterAll(async () => {

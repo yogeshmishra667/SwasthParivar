@@ -128,9 +128,7 @@ const writeLocalReading = async (
  * UI text for the `queued` and `rejected` cases is the caller's
  * responsibility (different screens have different copy).
  */
-export const saveGlucoseReading = async (
-  input: SaveReadingInput,
-): Promise<SaveReadingResult> => {
+export const saveGlucoseReading = async (input: SaveReadingInput): Promise<SaveReadingResult> => {
   const clientUuid = uuidv4();
   const payload = recordPayload(input, clientUuid);
 
@@ -163,7 +161,9 @@ export const saveGlucoseReading = async (
       // 4xx: stop, surface to caller. Don't queue.
       const axiosErr = isAxiosError(err) ? err : null;
       const status = axiosErr?.response?.status ?? 0;
-      const data = axiosErr?.response?.data as { error?: { code?: string; message?: string } } | undefined;
+      const data = axiosErr?.response?.data as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
       track("reading_logged", {
         type: input.readingType,
         source: input.source,
@@ -256,7 +256,12 @@ export const drainPendingReadings = async (): Promise<{ pushed: number; failed: 
       });
       pushed++;
     } catch (err) {
-      if (isAxiosError(err) && err.response && err.response.status >= 400 && err.response.status < 500) {
+      if (
+        isAxiosError(err) &&
+        err.response &&
+        err.response.status >= 400 &&
+        err.response.status < 500
+      ) {
         // Server rejected the row (validation, auth, version conflict).
         // Drop it locally — retrying won't fix bad data, and the server
         // already has it for 409 (idempotent on clientUuid).

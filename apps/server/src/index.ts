@@ -61,9 +61,7 @@ const printBanner = async (): Promise<void> => {
   lines.push(`│  → http://localhost:${env.PORT}`);
   for (const ip of lans) lines.push(`│  → http://${ip}:${env.PORT}   (LAN)`);
   lines.push(`│  → http://localhost:${env.PORT}/health`);
-  lines.push(
-    `│  env: ${env.NODE_ENV} · node: ${process.version} · pid: ${process.pid}`,
-  );
+  lines.push(`│  env: ${env.NODE_ENV} · node: ${process.version} · pid: ${process.pid}`);
   lines.push(`│  db:      ${db.ok ? `ok (${db.ms}ms)` : `FAIL — ${db.err ?? "unknown"}`}`);
   lines.push(`│  redis:   ${r.ok ? `ok (${r.ms}ms)` : `FAIL — ${r.err ?? "unknown"}`}`);
   lines.push(`│  workers: ${workerNames.length} (${workerNames.join(", ")})`);

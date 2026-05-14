@@ -23,10 +23,7 @@ const VARIANT_KEYS: Record<FeedbackTone, string[]> = {
   encourage: ["encourage.v1", "encourage.v2", "encourage.v3"],
 };
 
-const pickVariant = (
-  tone: FeedbackTone,
-  recent: string[],
-): { key: string; index: number } => {
+const pickVariant = (tone: FeedbackTone, recent: string[]): { key: string; index: number } => {
   const pool = VARIANT_KEYS[tone];
   const eligible = pool.filter((k) => !recent.includes(k));
   const chosen = eligible.length > 0 ? eligible[0]! : pool[0]!;

@@ -29,7 +29,9 @@ export default function TabsLayout(): JSX.Element {
         tabBarLabelStyle: { fontSize: 12 },
         tabBarActiveTintColor: "#2563EB",
         tabBarInactiveTintColor: "#6B7280",
-        tabBarIcon: ({ color, size }) => <Icon name={iconFor(route.name)} size={size} color={color} />,
+        tabBarIcon: ({ color, size }) => (
+          <Icon name={iconFor(route.name)} size={size} color={color} />
+        ),
       })}
     >
       <Tabs.Screen name="dashboard" options={{ title: t("tabs.home") }} />

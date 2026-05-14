@@ -13,7 +13,10 @@ interface CreateSchedule {
 }
 
 export const listSchedules = async (userId: string): Promise<MedicationSchedule[]> =>
-  await prisma.medicationSchedule.findMany({ where: { userId, active: true }, orderBy: { startedAt: "asc" } });
+  await prisma.medicationSchedule.findMany({
+    where: { userId, active: true },
+    orderBy: { startedAt: "asc" },
+  });
 
 export const createSchedule = async (input: CreateSchedule): Promise<MedicationSchedule> => {
   const schedule = await prisma.medicationSchedule.create({
@@ -50,10 +53,7 @@ export const logMedication = async (input: LogInput): Promise<MedicationLog> =>
     },
   });
 
-export const deleteSchedule = async (params: {
-  userId: string;
-  id: string;
-}): Promise<void> => {
+export const deleteSchedule = async (params: { userId: string; id: string }): Promise<void> => {
   const existing = await prisma.medicationSchedule.findFirst({
     where: { id: params.id, userId: params.userId },
   });

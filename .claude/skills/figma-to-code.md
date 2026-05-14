@@ -48,6 +48,7 @@ Tailwind base unit = 4px. Divide Figma px by 4.
 ```
 
 Non-standard values (e.g. 18px, 28px, 44px) → use arbitrary:
+
 ```
 18px → [18px]
 28px → [28px]

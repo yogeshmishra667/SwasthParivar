@@ -26,7 +26,12 @@ export default function SettingsScreen(): JSX.Element {
   const switchProfile = useProfileStore((s) => s.switchProfile);
   const [showAddProfile, setShowAddProfile] = useState(false);
 
-  const onProfileAdded = (created: { id: string; name: string; age: number; conditions: string[] }): void => {
+  const onProfileAdded = (created: {
+    id: string;
+    name: string;
+    age: number;
+    conditions: string[];
+  }): void => {
     if (!householdId) return;
     // Splice the newly-created profile into the local household list and
     // make it active immediately. Avoids a round-trip to /users/me.

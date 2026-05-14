@@ -3,9 +3,7 @@ import Constants from "expo-constants";
 
 const apiKey = (Constants.expoConfig?.extra as { posthogKey?: string } | undefined)?.posthogKey;
 
-export const analytics = apiKey
-  ? new PostHog(apiKey, { host: "https://app.posthog.com" })
-  : null;
+export const analytics = apiKey ? new PostHog(apiKey, { host: "https://app.posthog.com" }) : null;
 
 type JsonPrimitive = string | number | boolean | null;
 export type EventProps = Record<string, JsonPrimitive | JsonPrimitive[]>;

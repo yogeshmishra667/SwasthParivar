@@ -106,7 +106,13 @@ export const criticalAlertWorker: Worker<CriticalAlertJob> = createWorker<Critic
           sound: "default",
           priority: "high",
           channelId: "critical",
-          data: { notificationId, type: "critical_alert", readingId, userId, severity: decision.severity },
+          data: {
+            notificationId,
+            type: "critical_alert",
+            readingId,
+            userId,
+            severity: decision.severity,
+          },
         }));
         const results = await sendExpoPush(messages);
         results.forEach((r) => {
@@ -118,7 +124,8 @@ export const criticalAlertWorker: Worker<CriticalAlertJob> = createWorker<Critic
       }
     }
 
-    const smsTriggered = decision.triggerSmsFallback && (pushSuccessCount === 0 || pushFailures.length > 0);
+    const smsTriggered =
+      decision.triggerSmsFallback && (pushSuccessCount === 0 || pushFailures.length > 0);
 
     let smsSuccessCount = 0;
     if (smsTriggered) {

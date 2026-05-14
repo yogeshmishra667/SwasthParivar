@@ -48,3 +48,6 @@ apps/mobile/*.mobileprovision
 
 # Prisma generated client
 **/prisma/generated/
+
+# Claude Code transient state
+.claude/worktrees/

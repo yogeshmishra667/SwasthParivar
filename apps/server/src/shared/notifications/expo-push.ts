@@ -33,9 +33,7 @@ interface ExpoTicketError {
 
 type ExpoTicket = ExpoTicketOk | ExpoTicketError;
 
-export const sendExpoPush = async (
-  messages: ExpoPushMessage[],
-): Promise<ExpoPushResult[]> => {
+export const sendExpoPush = async (messages: ExpoPushMessage[]): Promise<ExpoPushResult[]> => {
   if (messages.length === 0) return [];
 
   const headers: Record<string, string> = {

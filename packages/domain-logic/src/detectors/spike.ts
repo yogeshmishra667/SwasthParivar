@@ -44,9 +44,7 @@ export const detectSpike = (input: SpikeDetectorInput): DetectorResult | null =>
 
   // Same-type filter is the medical-correctness rule — fasting baseline
   // never mixes with post_meal.
-  const sameType = input.readings.filter(
-    (r) => r.readingType === input.targetReadingType,
-  );
+  const sameType = input.readings.filter((r) => r.readingType === input.targetReadingType);
   if (sameType.length === 0) return null;
 
   const target = sameType.find((r) => r.id === input.targetReadingId);
@@ -64,9 +62,7 @@ export const detectSpike = (input: SpikeDetectorInput): DetectorResult | null =>
   if (history.length < 3) return null; // need a non-degenerate baseline
 
   // Minimum-data gate per CLAUDE.md: same-type readings must span ≥ 7d.
-  const oldestMs = Math.min(
-    ...history.map((r) => new Date(r.measuredAt).getTime()),
-  );
+  const oldestMs = Math.min(...history.map((r) => new Date(r.measuredAt).getTime()));
   const span = daysBetween(oldestMs, nowMs);
   if (span < SPIKE_MIN_DAYS) return null;
 

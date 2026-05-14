@@ -52,8 +52,7 @@ export const listInsights = async (params: {
   const hasMore = rows.length > params.limit;
   const data = hasMore ? rows.slice(0, params.limit) : rows;
   const last = data[data.length - 1];
-  const cursor =
-    hasMore && last ? `${last.id}_${last.createdAt.toISOString()}` : null;
+  const cursor = hasMore && last ? `${last.id}_${last.createdAt.toISOString()}` : null;
   return { data, cursor, hasMore };
 };
 

@@ -45,6 +45,7 @@ Add: regional languages, festival nudging, wearable integration
 **Parsing:** Input: raw transcript + confidence from expo-speech-recognition. Extract number from digits/Hindi words/Hinglish. Context keywords: "subah"/"morning" → fasting, "khana khane ke baad" → post_meal. No context → infer from clock (see Patch #8 time windows). Always allow 1-tap type toggle on confirmation screen.
 
 **Hindi Colloquial Dictionary (run BEFORE standard parsing):**
+
 ```
 "sava sau"→125  "dedh sau"→150  "paune do sau"→175  "do sau"→200
 "dhai sau"→250  "sava do sau"→225  "paune teen sau"→275  "teen sau"→300
@@ -68,12 +69,14 @@ Add: regional languages, festival nudging, wearable integration
 ## Critical-Low/High Bypass (Phase 1 — SAFETY)
 
 If glucose < 65 or > 315 — ALL 4 steps execute in PARALLEL (not if-else):
+
 1. Push notification to guardian (Expo push, primary) ← always
 2. SMS to ALL emergency contacts (MSG91, only if push fails) ← fallback
 3. In-app FULLSCREEN BLOCKING alert (cannot dismiss 30s) ← always
 4. "📞 Call now" button → opens native dialer ← always
 
 Thresholds HARDCODED. Not configurable. Medical safety.
+
 - Low (< 65): "⚠️ Sugar bahut kam hai ([value]). Abhi kuch meetha khayein — juice, glucose, mithai. Agar chakkar aa rahe hain to turant [contact] ko call karein."
 - High (> 315): "⚠️ Sugar bahut zyada hai ([value]). Pani peeyein. Dawai li hai check karein. [contact] ko call karein."
 
@@ -92,6 +95,7 @@ Home screen: profile avatars at top (like Netflix). Tap to switch. Each profile:
 **Best Time Detection:** Rolling 5-day avg of log timestamps per type. Send 10 min before avg. New user defaults: 7AM, 1:30PM, 8:30PM.
 
 **Copy (contextual):**
+
 - Morning: "Good morning Ramesh ji! Kal sugar [value] thi. Aaj check karein?"
 - Med: "Metformin ka time — kal li thi AUR reading achchi aayi thi"
 - Streak risk: "[N] din ki streak! Aaj [N+1] complete karein 🔥"
@@ -121,6 +125,7 @@ Home screen: profile avatars at top (like Netflix). Tap to switch. Each profile:
 **FeedbackEvent:** user_id, reading_id?, feedback_type, tone(celebrate|neutral|gentle_warn|encourage), message_key, message_variant_index, message_params(JSONB), shown_at
 
 **Post-Log Logic — CRITICAL: ALWAYS compare SAME reading type (fasting vs fasting ONLY, never mix):**
+
 - first_ever_reading → celebrate: "🎉 Pehli reading! [value] mg/dL note ho gaya."
 - user_stage < 7 days → find LAST READING of SAME TYPE. No same-type → "✅ [value] noted. [streak] din streak". delta = current - last_same_type. ≤ -10: celebrate | ≥ 10: gentle_warn | else: neutral
 - user_stage ≥ 7 days → 7-CALENDAR-DAY ROLLING MEDIAN of SAME TYPE. Only readings from last 7 calendar days. If < 3 same-type → fall back to last same-type comparison. delta = current - median. ≤ -10: celebrate | ≥ 10: gentle_warn | else: neutral
@@ -152,14 +157,14 @@ Opened but didn't log (5 min) → in-app banner "1 tap mein log karein ↓". 1/d
 
 NEVER show infinite spinner (max 10s timeout). NEVER show raw error messages. Logging ALWAYS works (WatermelonDB local-first).
 
-| Scenario | Fallback |
-|---|---|
-| Backend unreachable | Save locally, "✅ Save hua. Internet aane par sync hoga." Dashboard shows cached + "Last updated: [time]" |
-| Reading save fails (server reject) | "Save nahi ho paya. Retry karein?" + Retry button. Keep in local queue, auto-retry |
-| Dashboard load fails | Last cached dashboard + "⚠️ Purana data dikh raha hai". Never empty screen |
-| Voice parsing crashes | Auto-show numpad + "Voice mein dikkat hai, numpad use karein" |
-| Push service down | Local notifications for med reminders (expo-notifications scheduled locally) |
-| Any unhandled error | Sentry capture + "Kuch gadbad hui. App restart karein." Never stack trace |
+| Scenario                           | Fallback                                                                                                  |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Backend unreachable                | Save locally, "✅ Save hua. Internet aane par sync hoga." Dashboard shows cached + "Last updated: [time]" |
+| Reading save fails (server reject) | "Save nahi ho paya. Retry karein?" + Retry button. Keep in local queue, auto-retry                        |
+| Dashboard load fails               | Last cached dashboard + "⚠️ Purana data dikh raha hai". Never empty screen                                |
+| Voice parsing crashes              | Auto-show numpad + "Voice mein dikkat hai, numpad use karein"                                             |
+| Push service down                  | Local notifications for med reminders (expo-notifications scheduled locally)                              |
+| Any unhandled error                | Sentry capture + "Kuch gadbad hui. App restart karein." Never stack trace                                 |
 
 ## UX Constraints (ENFORCE)
 
@@ -211,22 +216,26 @@ swasth-parivar/
 ## Database Schema
 
 ### Users
+
 - **User:** id, name, age, gender, preferred_language, conditions[], timezone(pinned at onboarding), household_id, onboarding_complete, onboarding_step, tier(free|premium|family), time_anomaly_count(int default 0), created_at
 - **FamilyLink:** patient_id, guardian_id, relationship, alert_enabled, visible_conditions[], alert_sensitivity, status
 - **EmergencyContact:** user_id, name, phone, relationship, priority, is_guardian
 
 ### Streaks & Retention
+
 - **UserStreak:** user_id, current_streak_days, longest_streak_days, last_log_date, streak_started_at, total_log_days, broken_streak_length, grace_used_this_week(int default 0), milestones_reached(JSONB)
 - **FeedbackEvent:** user_id, reading_id?, feedback_type, tone, message_key, message_variant_index, message_params(JSONB), shown_at
 - **NotificationState:** user_id, fatigue_level(0-3), consecutive_ignores, last_notification_at, best_log_time_fasting, best_log_time_post_meal, notification_history_7d(JSONB), last_3_variant_ids(JSONB)
 
 ### Health Readings (TimescaleDB hypertables)
+
 - **GlucoseReading:** id, client_uuid, user_id, value_mg_dl, reading_type(fasting|pre_meal|post_meal|random|bedtime), meal_log_id?, context?(normal|festive), notes?, source(manual|voice|device), measured_at, streak_credited_to(DATE), updated_at, version(int default 1), synced_at — PK: @@id([id, measuredAt]) for TimescaleDB hypertable; uniqueness: @@unique([clientUuid, measuredAt]) (standalone @unique on clientUuid is incompatible with hypertable composite PK)
 - **BPReading:** id, client_uuid, user_id, systolic, diastolic, pulse?, context, measured_at, streak_credited_to, updated_at, version, synced_at
 - **CardiacLog:** user_id, heart_rate, rhythm_status, chest_pain, pain_severity?, exercise_tolerance, measured_at
 - **RespiratoryLog:** user_id, peak_flow?, inhaler_used, inhaler_type?, puffs?, trigger_note?, symptom_severity, measured_at
 
 ### Context
+
 - **MealLog:** user_id, meal_type, meal_category(light|normal|heavy_fried), food_description?, logged_at, synced_at
 - **MedicationSchedule:** user_id, medicine_name, dosage?, time_slots(JSONB), condition?, is_critical?, photo_url?, quantity_remaining?, active, started_at
 - **MedicationLog:** schedule_id, user_id, status(taken|skipped|missed_no_response|delayed), scheduled_for, responded_at?, skip_reason?, reminder_count, guardian_alerted
@@ -234,10 +243,12 @@ swasth-parivar/
 - **SleepLog:** user_id, date, sleep_start, sleep_end, duration_minutes, quality, source
 
 ### Scheduling
+
 - **HealthCheckSchedule:** user_id, check_type, frequency, scheduled_times(JSONB), reminder_enabled, active
 - **HealthCheckCompliance:** schedule_id, user_id, expected_at, completed_at?, reading_id?, status, reminder_count, guardian_notified
 
 ### Intelligence
+
 - **InsightEvent:** user_id, pattern_type, conditions_involved[], severity_score, severity_level, message_key, message_params(JSONB), trigger_readings(JSONB), evidence(JSONB), acknowledged, helpful?, created_at, expires_at
 - **ChatMessage:** user_id, session_id, role, content, language, referenced_readings(JSONB)?, tokens_used, response_tier, flagged, flag_reason?
 - **SilentGuardianSignal:** user_id, signal_source, signal_type, raw_evidence(JSONB), risk_contribution, decay_factor, detected_at, consumed_by_alert?
@@ -245,6 +256,7 @@ swasth-parivar/
 - **HealthScore:** user_id, score, components(JSONB), computed_for(DATE)
 
 ### Medical
+
 - **Prescription:** user_id, doctor_id?, original_photo_urls[], ocr_raw_result(JSONB), status, approved_by?, prescribed_date?
 - **PrescriptionItem:** prescription_id, ocr_medicine_name, ocr_dosage, ocr_frequency, ocr_confidence, ocr_alternatives(JSONB)?, verified_medicine_name?, medication_schedule_id?, status
 - **MedicinePhoto:** medication_schedule_id, photo_url, ai_read_name?, match_status, match_confidence, verified
@@ -252,60 +264,78 @@ swasth-parivar/
 - **DoctorAppointment:** user_id, doctor_id, scheduled_at, purpose, status, pre_visit_report_id?, reminder_sent_7d, reminder_sent_1d, reminder_sent_2h
 
 ### Emergency
+
 - **SOSEvent:** user_id, triggered_at, location_lat, location_lng, last_readings(JSONB), contacts_called(JSONB), resolved_at?, false_alarm
 - **IndianFoodItem:** name_en, name_hi, name_regional(JSONB), category, glycemic_index, glycemic_load, common_in_regions[]
 
 ## API Routes
 
 ### Auth
+
 POST /api/v1/auth/send-otp | POST /api/v1/auth/verify-otp | POST /api/v1/auth/refresh
 
 ### Readings
+
 POST /api/v1/readings/glucose | POST /api/v1/readings/glucose/voice | POST /api/v1/readings/bp | POST /api/v1/readings/cardiac | POST /api/v1/readings/respiratory | GET /api/v1/readings/:type?from=&to=&limit=&cursor= | PUT /api/v1/readings/:type/:id | DELETE /api/v1/readings/:type/:id
 
 ### Medications
+
 GET /api/v1/medications/schedule | POST /api/v1/medications/schedule | PUT /api/v1/medications/schedule/:id | POST /api/v1/medications/log | GET /api/v1/medications/adherence?days=
 
 ### Meals
+
 POST /api/v1/meals | GET /api/v1/meals?from=&to= | GET /api/v1/foods/search?q=&lang=
 
 ### Insights
+
 GET /api/v1/insights?severity=&limit=&cursor= | POST /api/v1/insights/:id/acknowledge | GET /api/v1/hba1c/estimate | GET /api/v1/health-score
 
 ### Chat
+
 POST /api/v1/chat/message | GET /api/v1/chat/sessions | GET /api/v1/chat/sessions/:id
 
 ### Streaks & Feedback
+
 GET /api/v1/streaks/current | GET /api/v1/streaks/milestones | POST /api/v1/feedback/insight/:id | POST /api/v1/feedback/chat/:id
 
 ### Prescriptions
+
 POST /api/v1/prescriptions/upload | GET /api/v1/prescriptions/:id | POST /api/v1/prescriptions/:id/approve | POST /api/v1/prescriptions/:id/reject | POST /api/v1/medicines/:id/photo
 
 ### Family & Profiles
+
 POST /api/v1/family/invite | POST /api/v1/family/accept | GET /api/v1/family/patients | GET /api/v1/family/patients/:id/dashboard | GET /api/v1/family/patients/:id/alerts | PUT /api/v1/family/privacy | GET /api/v1/household/profiles | POST /api/v1/household/switch/:userId
 
 ### Silent Guardian
+
 GET /api/v1/guardian/alerts?patient_id=&type= | POST /api/v1/guardian/alerts/:id/read | GET /api/v1/guardian/daily-summary/:patient_id
 
 ### Reports
+
 POST /api/v1/reports/generate | GET /api/v1/reports/:id/status | GET /api/v1/reports/:id/download
 
 ### Appointments
+
 POST /api/v1/appointments | GET /api/v1/appointments | PUT /api/v1/appointments/:id | POST /api/v1/appointments/:id/complete
 
 ### Activity
+
 POST /api/v1/activity/daily | GET /api/v1/activity?from=&to=
 
 ### SOS
+
 POST /api/v1/sos/trigger | POST /api/v1/sos/cancel | POST /api/v1/sos/resolve
 
 ### Sync
+
 POST /api/v1/sync/push | GET /api/v1/sync/pull?last_synced_at=
 
 ### Schedules
+
 GET /api/v1/schedules | POST /api/v1/schedules | PUT /api/v1/schedules/:id
 
 ### Dashboard & Health
+
 GET /api/v1/dashboard | GET /health | GET /health/deep
 
 ## BullMQ Jobs
@@ -431,6 +461,7 @@ DATABASE_URL, REDIS_URL, JWT_SECRET, JWT_REFRESH_SECRET, OTP_SECRET, CLAUDE_API_
 ## 1. Critical Alert Cooldown + Escalation
 
 critical_alert_cooldown = 30 min per user. If glucose < 65 or > 315:
+
 - **Outside cooldown:** full chain: push(primary) + SMS if push fails + fullscreen + call button. Start escalation timers.
 - **Within cooldown:** skip SMS/push. STILL show fullscreen + call button.
 
@@ -630,17 +661,17 @@ critical_bypass_triggered fires with correct shape {value, sms_success, push_suc
 
 ## Coverage Targets
 
-| Path | Target |
-|---|---|
-| packages/domain-logic/ | 100% lines+branches |
-| critical-bypass.service.ts | 100% branches |
-| streak-engine.ts | 100% |
-| voice-parser.ts | 95%+ |
-| feedback-engine.ts | 95%+ |
-| notification-resolver.ts | 90%+ |
-| apps/server/modules/readings/ | 80%+ |
-| apps/server/modules/auth/ | 80%+ |
-| apps/mobile/components/ | 70%+ |
+| Path                          | Target              |
+| ----------------------------- | ------------------- |
+| packages/domain-logic/        | 100% lines+branches |
+| critical-bypass.service.ts    | 100% branches       |
+| streak-engine.ts              | 100%                |
+| voice-parser.ts               | 95%+                |
+| feedback-engine.ts            | 95%+                |
+| notification-resolver.ts      | 90%+                |
+| apps/server/modules/readings/ | 80%+                |
+| apps/server/modules/auth/     | 80%+                |
+| apps/mobile/components/       | 70%+                |
 
 Vitest: v8 coverage, thresholds per path, reporters: text+lcov+html.
 

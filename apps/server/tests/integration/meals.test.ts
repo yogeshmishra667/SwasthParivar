@@ -2,7 +2,7 @@
 // to match the existing convention in readings.test.ts. The eslint
 // no-unsafe-* family triggers on every field access; tracked for cleanup
 // across all integration tests in the fix/lint-cleanup branch.
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call */
+ 
 import { describe, it, beforeAll, afterAll, expect } from "vitest";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
@@ -65,11 +65,9 @@ beforeAll(async () => {
       onboardingComplete: true,
     },
   });
-  accessToken = jwt.sign(
-    { sub: user.id, householdId: user.householdId },
-    process.env.JWT_SECRET,
-    { expiresIn: "1h" },
-  );
+  accessToken = jwt.sign({ sub: user.id, householdId: user.householdId }, process.env.JWT_SECRET, {
+    expiresIn: "1h",
+  });
 }, 120_000);
 
 afterAll(async () => {

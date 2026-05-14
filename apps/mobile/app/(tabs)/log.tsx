@@ -65,10 +65,7 @@ export default function LogScreen(): JSX.Element {
     setStage("confirm");
   };
 
-  const save = async (
-    type: GlucoseReadingType,
-    context: "normal" | "festive",
-  ): Promise<void> => {
+  const save = async (type: GlucoseReadingType, context: "normal" | "festive"): Promise<void> => {
     if (!parsed || !userId) return;
     hapticSave();
     setSaveError(null);
@@ -87,9 +84,7 @@ export default function LogScreen(): JSX.Element {
     if (result.kind === "synced") {
       setLastReadingId(result.readingId);
       setStreakDays(result.streak.currentStreakDays);
-      setFeedbackMsg(
-        t(`feedback.${result.feedback.tone}`, { defaultValue: t("logging.saved") }),
-      );
+      setFeedbackMsg(t(`feedback.${result.feedback.tone}`, { defaultValue: t("logging.saved") }));
       setSavedOffline(false);
       if (result.critical.isCritical && result.critical.direction) {
         setCriticalAlert({
@@ -173,7 +168,9 @@ export default function LogScreen(): JSX.Element {
     return (
       <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-row items-center justify-between px-4 py-3">
-          <Text className="text-hero font-bold">{t("logging.savedTitle", { defaultValue: "Saved" })}</Text>
+          <Text className="text-hero font-bold">
+            {t("logging.savedTitle", { defaultValue: "Saved" })}
+          </Text>
           <ActiveProfileBadge />
         </View>
 
@@ -188,8 +185,7 @@ export default function LogScreen(): JSX.Element {
               />
               {parsed && (
                 <Text className="text-hero font-bold">
-                  {parsed.value}{" "}
-                  <Text className="text-body font-normal text-neutral">mg/dL</Text>
+                  {parsed.value} <Text className="text-body font-normal text-neutral">mg/dL</Text>
                 </Text>
               )}
               {feedbackMsg !== null && (
