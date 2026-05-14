@@ -71,11 +71,7 @@ export const daysSinceLatestReading = (cache: CachedDashboard | null): number =>
   const lastMs = new Date(cache.latestReading.measuredAt).getTime();
   if (Number.isNaN(lastMs)) return Infinity;
   const today = new Date();
-  const todayMidnightMs = Date.UTC(
-    today.getUTCFullYear(),
-    today.getUTCMonth(),
-    today.getUTCDate(),
-  );
+  const todayMidnightMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
   const lastDate = new Date(lastMs);
   const lastMidnightMs = Date.UTC(
     lastDate.getUTCFullYear(),

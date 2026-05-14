@@ -25,20 +25,9 @@ export const HINDI_COLLOQUIAL: ReadonlyMap<string, number> = new Map([
 
 export const PAST_INDICATORS: readonly string[] = ["thi", "tha", "kal", "pichle", "last"];
 
-export const PRESENT_INDICATORS: readonly string[] = [
-  "hai",
-  "aayi",
-  "abhi",
-  "aaj",
-  "check ki",
-];
+export const PRESENT_INDICATORS: readonly string[] = ["hai", "aayi", "abhi", "aaj", "check ki"];
 
-export const NEGATED_INTENT: readonly string[] = [
-  "nahi ki",
-  "nahi hua",
-  "nahi li",
-  "check nahi",
-];
+export const NEGATED_INTENT: readonly string[] = ["nahi ki", "nahi hua", "nahi li", "check nahi"];
 
 export const UNCERTAINTY_WORDS: readonly string[] = [
   "shayad",

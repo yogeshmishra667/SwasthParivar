@@ -24,12 +24,8 @@ export default function LanguageScreen(): JSX.Element {
           <View className="mb-4 h-24 w-24 items-center justify-center rounded-full bg-blue-50">
             <Icon name="language" size={48} color="#2563EB" />
           </View>
-          <Text className="text-3xl font-bold tracking-tight text-gray-900">
-            Bhasha chunein
-          </Text>
-          <Text className="mt-2 text-center text-body text-gray-500">
-            Choose your language
-          </Text>
+          <Text className="text-3xl font-bold tracking-tight text-gray-900">Bhasha chunein</Text>
+          <Text className="mt-2 text-center text-body text-gray-500">Choose your language</Text>
         </View>
 
         {/* Buttons */}

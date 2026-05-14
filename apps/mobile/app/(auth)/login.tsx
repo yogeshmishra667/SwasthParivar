@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { View, Text, TextInput, Alert, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
@@ -32,29 +40,37 @@ export default function LoginScreen(): JSX.Element {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior="padding"
         style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24, paddingBottom: 48 }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: "center",
+            padding: 24,
+            paddingBottom: 48,
+          }}
           keyboardShouldPersistTaps="handled"
         >
-          
           <View className="mb-10 items-center">
             <View className="mb-4 h-24 w-24 items-center justify-center rounded-full bg-blue-50">
               <Icon name="medkit" size={48} color="#2563EB" />
             </View>
             <Text className="text-3xl font-bold text-gray-900 tracking-tight">SwasthParivar</Text>
             <Text className="mt-2 text-center text-body text-gray-500">
-              {t("auth.subtitle", { defaultValue: "Apni family ki health ka dhyan rakhein, asani se." })}
+              {t("auth.subtitle", {
+                defaultValue: "Apni family ki health ka dhyan rakhein, asani se.",
+              })}
             </Text>
           </View>
 
           <View className="mb-6">
-            <Text className="mb-2 text-important font-semibold text-gray-800">{t("auth.enterPhone")}</Text>
-            <View 
+            <Text className="mb-2 text-important font-semibold text-gray-800">
+              {t("auth.enterPhone")}
+            </Text>
+            <View
               style={{ minHeight: TOUCH_TARGET_MIN }}
               className="flex-row items-center overflow-hidden rounded-2xl border border-gray-300 bg-gray-50"
             >
@@ -74,12 +90,11 @@ export default function LoginScreen(): JSX.Element {
             </View>
           </View>
 
-          <Button 
-            label={t("auth.sendOtp")} 
-            onPress={() => void sendOtp()} 
-            disabled={loading || phone.length < 10} 
+          <Button
+            label={t("auth.sendOtp")}
+            onPress={() => void sendOtp()}
+            disabled={loading || phone.length < 10}
           />
-
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -40,7 +40,7 @@ syncRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const userId = req.auth!.sub;
     const body = req.body as z.infer<typeof pushSchema>;
-    const results: Array<{ clientUuid: string; status: "accepted" | "stale" | "error" }> = [];
+    const results: { clientUuid: string; status: "accepted" | "stale" | "error" }[] = [];
 
     for (const r of body.changes.glucoseReadings) {
       try {
@@ -64,7 +64,8 @@ syncRouter.get(
   validateQuery(pullQuerySchema),
   async (req: Request, res: Response): Promise<void> => {
     const userId = req.auth!.sub;
-    const since = req.query["lastSyncedAt"] ? new Date(String(req.query["lastSyncedAt"])) : new Date(0);
+    const { lastSyncedAt } = pullQuerySchema.parse(req.query);
+    const since = lastSyncedAt ? new Date(lastSyncedAt) : new Date(0);
 
     const [readings, schedules] = await Promise.all([
       prisma.glucoseReading.findMany({
@@ -77,6 +78,10 @@ syncRouter.get(
       }),
     ]);
 
-    ok(res, { glucoseReadings: readings, medicationSchedules: schedules, serverTime: new Date().toISOString() });
+    ok(res, {
+      glucoseReadings: readings,
+      medicationSchedules: schedules,
+      serverTime: new Date().toISOString(),
+    });
   },
 );

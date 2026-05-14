@@ -9,11 +9,7 @@ export const makeReading = (overrides: Partial<GlucoseReading> = {}): GlucoseRea
     clientUuid: faker.string.uuid(),
     userId: faker.string.uuid(),
     valueMgDl: faker.number.int({ min: 70, max: 250 }),
-    readingType: faker.helpers.arrayElement<GlucoseReadingType>([
-      "fasting",
-      "post_meal",
-      "random",
-    ]),
+    readingType: faker.helpers.arrayElement<GlucoseReadingType>(["fasting", "post_meal", "random"]),
     context: "normal",
     source: "manual",
     measuredAt,

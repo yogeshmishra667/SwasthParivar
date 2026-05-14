@@ -94,11 +94,7 @@ export const CriticalAlert = ({
             : "Paani peeyein. Dawai li hai check karein."}
         </Text>
         <View className="mt-6 w-full gap-3">
-          <Button
-            label={`${contactName} ko call karein`}
-            variant="primary"
-            onPress={handleCall}
-          />
+          <Button label={`${contactName} ko call karein`} variant="primary" onPress={handleCall} />
           <Button
             label={dismissible ? "Close" : `Wait ${secondsLeft}s...`}
             variant="ghost"

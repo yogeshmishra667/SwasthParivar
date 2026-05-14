@@ -94,5 +94,4 @@ export const addHouseholdProfile = async (
  * non-primary members. This guard prevents the synthetic prefix from
  * leaking to clients via any list endpoint that selects the column.
  */
-export const isSyntheticHouseholdPhone = (phone: string): boolean =>
-  phone.startsWith("household:");
+export const isSyntheticHouseholdPhone = (phone: string): boolean => phone.startsWith("household:");

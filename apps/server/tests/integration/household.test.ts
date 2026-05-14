@@ -19,9 +19,9 @@ const runPrisma = (args: string[], opts: { input?: string } = {}): void => {
 
 let postgresContainer: StartedPostgreSqlContainer;
 let redisContainer: StartedRedisContainer;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 let app: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 let prisma: any;
 let primaryUserId: string;
 let primaryHouseholdId: string;
@@ -43,8 +43,7 @@ beforeAll(async () => {
 
   runPrisma(["migrate", "deploy"]);
   runPrisma(["db", "execute", "--stdin"], {
-    input:
-      "SELECT create_hypertable('glucose_readings', 'measured_at', if_not_exists => TRUE);",
+    input: "SELECT create_hypertable('glucose_readings', 'measured_at', if_not_exists => TRUE);",
   });
 
   const appModule = await import("../../src/app.js");
@@ -64,11 +63,9 @@ beforeAll(async () => {
     },
   });
   primaryUserId = user.id;
-  primaryToken = jwt.sign(
-    { sub: user.id, householdId: user.householdId },
-    process.env.JWT_SECRET!,
-    { expiresIn: "1h" },
-  );
+  primaryToken = jwt.sign({ sub: user.id, householdId: user.householdId }, process.env.JWT_SECRET, {
+    expiresIn: "1h",
+  });
 }, 120_000);
 
 afterAll(async () => {

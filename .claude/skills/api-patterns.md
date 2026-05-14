@@ -25,31 +25,31 @@ apps/server/src/modules/readings/
 
 ```ts
 // readings.validation.ts
-import { z } from 'zod';
+import { z } from "zod";
 
 export const createGlucoseReadingSchema = z.object({
   body: z.object({
     client_uuid: z.string().uuid(),
     value_mg_dl: z.number().int().min(20).max(600),
-    reading_type: z.enum(['fasting', 'pre_meal', 'post_meal', 'random', 'bedtime']),
+    reading_type: z.enum(["fasting", "pre_meal", "post_meal", "random", "bedtime"]),
     measured_at: z.coerce.date(),
-    context: z.enum(['normal', 'festive']).optional(),
+    context: z.enum(["normal", "festive"]).optional(),
     notes: z.string().max(500).optional(),
-    source: z.enum(['manual', 'voice', 'device']),
+    source: z.enum(["manual", "voice", "device"]),
     version: z.number().int().positive(),
   }),
 });
 
-export type CreateGlucoseReadingInput = z.infer<typeof createGlucoseReadingSchema>['body'];
+export type CreateGlucoseReadingInput = z.infer<typeof createGlucoseReadingSchema>["body"];
 ```
 
 ### controller (thin, no try/catch — `express-async-errors` handles it)
 
 ```ts
 // readings.controller.ts
-import type { Request, Response } from 'express';
-import { createGlucoseReadingSchema } from './readings.validation';
-import * as readingsService from './readings.service';
+import type { Request, Response } from "express";
+import { createGlucoseReadingSchema } from "./readings.validation";
+import * as readingsService from "./readings.service";
 
 export async function createGlucoseReading(req: Request, res: Response) {
   const { body } = createGlucoseReadingSchema.parse({ body: req.body });
@@ -62,14 +62,14 @@ export async function createGlucoseReading(req: Request, res: Response) {
 
 ```ts
 // readings.service.ts
-import { prisma } from '../../shared/database/prisma';
-import { updateStreak } from '@swasth/domain-logic/streak-engine';
-import { computeFeedback } from '@swasth/domain-logic/feedback-engine';
+import { prisma } from "../../shared/database/prisma";
+import { updateStreak } from "@swasth/domain-logic/streak-engine";
+import { computeFeedback } from "@swasth/domain-logic/feedback-engine";
 
 export async function createGlucoseReading(userId: string, input: CreateGlucoseReadingInput) {
   const history = await prisma.glucoseReading.findMany({
     where: { user_id: userId, reading_type: input.reading_type },
-    orderBy: { measured_at: 'desc' },
+    orderBy: { measured_at: "desc" },
     take: 50,
   });
 
@@ -79,7 +79,9 @@ export async function createGlucoseReading(userId: string, input: CreateGlucoseR
   return prisma.$transaction(async (tx) => {
     const reading = await tx.glucoseReading.create({ data: { ...input, user_id: userId } });
     const streak = await tx.userStreak.update({ where: { user_id: userId }, data: streakUpdate });
-    await tx.feedbackEvent.create({ data: { ...feedback, user_id: userId, reading_id: reading.id } });
+    await tx.feedbackEvent.create({
+      data: { ...feedback, user_id: userId, reading_id: reading.id },
+    });
     return { reading, streak, feedback };
   });
   // enqueue BullMQ jobs AFTER the transaction resolves, in the caller.
@@ -90,14 +92,14 @@ export async function createGlucoseReading(userId: string, input: CreateGlucoseR
 
 ```ts
 // readings.routes.ts
-import { Router } from 'express';
-import { requireAuth } from '../../shared/middleware/auth';
-import * as controller from './readings.controller';
+import { Router } from "express";
+import { requireAuth } from "../../shared/middleware/auth";
+import * as controller from "./readings.controller";
 
 const router = Router();
 
-router.post('/glucose', requireAuth, controller.createGlucoseReading);
-router.get('/glucose', requireAuth, controller.listGlucoseReadings);
+router.post("/glucose", requireAuth, controller.createGlucoseReading);
+router.get("/glucose", requireAuth, controller.listGlucoseReadings);
 
 export default router;
 ```
@@ -105,8 +107,8 @@ export default router;
 Wire in `app.ts`:
 
 ```ts
-import readingsRoutes from './modules/readings/readings.routes';
-app.use('/api/v1/readings', readingsRoutes);
+import readingsRoutes from "./modules/readings/readings.routes";
+app.use("/api/v1/readings", readingsRoutes);
 ```
 
 ## Response envelope
@@ -128,10 +130,24 @@ Never leak stack traces. Typed error classes map to HTTP status:
 ```ts
 // shared/errors.ts
 export class TypedError extends Error {
-  constructor(public code: string, public status: number, message: string) { super(message); }
+  constructor(
+    public code: string,
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+  }
 }
-export class AuthOtpExpiredError   extends TypedError { constructor(){ super('AUTH_OTP_EXPIRED',   401, 'OTP expired'); } }
-export class ReadingInvalidValueError extends TypedError { constructor(){ super('READING_INVALID_VALUE', 400, 'Out of medical range'); } }
+export class AuthOtpExpiredError extends TypedError {
+  constructor() {
+    super("AUTH_OTP_EXPIRED", 401, "OTP expired");
+  }
+}
+export class ReadingInvalidValueError extends TypedError {
+  constructor() {
+    super("READING_INVALID_VALUE", 400, "Out of medical range");
+  }
+}
 // ... one class per error code from CLAUDE.md
 ```
 
@@ -141,14 +157,24 @@ Error middleware (last in `app.ts`):
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   const requestId = req.id;
   if (err instanceof TypedError) {
-    return res.status(err.status).json({ success: false, error: { code: err.code, message: err.message }, requestId });
+    return res
+      .status(err.status)
+      .json({ success: false, error: { code: err.code, message: err.message }, requestId });
   }
   if (err instanceof z.ZodError) {
-    return res.status(400).json({ success: false, error: { code: 'VALIDATION_FAILED', message: err.errors[0]?.message ?? 'Invalid input' }, requestId });
+    return res.status(400).json({
+      success: false,
+      error: { code: "VALIDATION_FAILED", message: err.errors[0]?.message ?? "Invalid input" },
+      requestId,
+    });
   }
   req.logger.error({ err });
   Sentry.captureException(err, { tags: { requestId } });
-  res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Kuch gadbad hui' }, requestId });
+  res.status(500).json({
+    success: false,
+    error: { code: "INTERNAL_ERROR", message: "Kuch gadbad hui" },
+    requestId,
+  });
 });
 ```
 
@@ -160,11 +186,11 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 
 ```ts
 // shared/middleware/request-id.ts
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from "node:crypto";
 
 export function requestIdMiddleware(req: Request, res: Response, next: NextFunction) {
-  req.id = (req.headers['x-request-id'] as string) ?? randomUUID();
-  res.setHeader('X-Request-Id', req.id);
+  req.id = (req.headers["x-request-id"] as string) ?? randomUUID();
+  res.setHeader("X-Request-Id", req.id);
   req.logger = logger.child({ requestId: req.id, method: req.method, path: req.path });
   next();
 }
@@ -191,8 +217,8 @@ Every route under `/api/v1/`. Version bumps are explicit — `/api/v2/` coexists
 ## Graceful shutdown
 
 ```ts
-process.on('SIGTERM', async () => {
-  req.logger?.info?.('SIGTERM received, draining');
+process.on("SIGTERM", async () => {
+  req.logger?.info?.("SIGTERM received, draining");
   server.close();
   await bullQueues.drain();
   await prisma.$disconnect();

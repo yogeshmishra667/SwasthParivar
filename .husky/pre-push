@@ -2,16 +2,31 @@
 
 # Quick safety net before code leaves the laptop:
 #   1. Workspace typecheck (mobile + server + domain-logic + shared-types)
-#   2. Domain-logic unit tests (~5s; 45 tests cover voice parser, streak,
-#      feedback, notification resolver, critical bypass)
+#   2. Workspace lint (zero warnings, every package)
+#   3. Domain-logic purity check (forbidden imports + Date.now / new Date()
+#      / Math.random calls at call site)
+#   4. Prettier format:check (every file)
+#   5. Domain-logic unit tests (cover voice parser, streak, feedback,
+#      notification resolver, critical bypass, detectors)
 #
 # Skipping with `git push --no-verify` is allowed in emergencies — CI runs
-# the same checks and will reject the PR.
+# the same checks plus build, integration tests, secret scan, and
+# dependency audit. The pre-push gate exists so those CI failures happen
+# rarely.
 
 set -e
 
 echo "▶ pre-push: typecheck"
 pnpm -r --parallel run typecheck
+
+echo "▶ pre-push: lint (zero warnings)"
+pnpm -r --parallel run lint
+
+echo "▶ pre-push: domain-logic purity"
+node scripts/check-domain-purity.mjs
+
+echo "▶ pre-push: format:check"
+pnpm format:check
 
 echo "▶ pre-push: domain-logic unit tests"
 pnpm --filter @swasth/domain-logic run test

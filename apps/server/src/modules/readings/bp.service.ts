@@ -74,10 +74,7 @@ export const createBPReading = async (input: CreateBPInput): Promise<CreateBPRes
   return { reading };
 };
 
-export const deleteBPReading = async (params: {
-  userId: string;
-  id: string;
-}): Promise<void> => {
+export const deleteBPReading = async (params: { userId: string; id: string }): Promise<void> => {
   const existing = await prisma.bPReading.findFirst({
     where: { id: params.id, userId: params.userId },
   });
@@ -147,7 +144,6 @@ export const listBPReadings = async (params: {
   const hasMore = rows.length > params.limit;
   const data = hasMore ? rows.slice(0, params.limit) : rows;
   const last = data[data.length - 1];
-  const cursor =
-    hasMore && last ? `${last.clientUuid}_${last.measuredAt.toISOString()}` : null;
+  const cursor = hasMore && last ? `${last.clientUuid}_${last.measuredAt.toISOString()}` : null;
   return { data, cursor, hasMore };
 };

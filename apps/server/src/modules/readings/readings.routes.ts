@@ -15,7 +15,11 @@ export const readingsRouter: Router = Router();
 readingsRouter.use(requireAuth);
 
 readingsRouter.post("/glucose", validateBody(glucoseCreateSchema), controller.postGlucose);
-readingsRouter.post("/glucose/voice", validateBody(glucoseVoiceSchema), controller.postGlucoseVoice);
+readingsRouter.post(
+  "/glucose/voice",
+  validateBody(glucoseVoiceSchema),
+  controller.postGlucoseVoice,
+);
 readingsRouter.get("/glucose", validateQuery(listReadingsQuerySchema), controller.getGlucose);
 readingsRouter.delete("/glucose/:id", controller.deleteGlucose);
 

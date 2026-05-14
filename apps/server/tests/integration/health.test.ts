@@ -7,14 +7,13 @@ import request from "supertest";
 let postgresContainer: StartedPostgreSqlContainer;
 let redisContainer: StartedRedisContainer;
 let app: any;
-let prisma: any;
 
 beforeAll(async () => {
   // 1. Start containers
   postgresContainer = await new PostgreSqlContainer("timescale/timescaledb:latest-pg16")
     .withDatabase("swasth_parivar_test")
     .start();
-  
+
   redisContainer = await new RedisContainer("redis:7-alpine").start();
 
   // 2. Override environment variables for app modules
@@ -23,22 +22,24 @@ beforeAll(async () => {
   process.env.NODE_ENV = "test";
 
   // 3. Run Prisma Migrations on Test DB
-  execSync("npx prisma migrate deploy", { 
+  execSync("npx prisma migrate deploy", {
     env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL },
-    stdio: "inherit"
+    stdio: "inherit",
   });
-  
+
   // 4. Inject TimescaleDB hypertable
   execSync(`npx prisma db execute --stdin`, {
-    input: "SELECT create_hypertable('glucose_readings', 'measured_at');"
+    input: "SELECT create_hypertable('glucose_readings', 'measured_at');",
   });
 
   // 5. Dynamically import App and DB AFTER env is set
   const appModule = await import("../../src/app.js");
   const dbModule = await import("../../src/shared/database.js");
-  
+
   app = appModule.buildApp();
-  prisma = dbModule.prisma;
+  // Touch the dbModule.prisma reference to ensure the import has its
+  // side effects (Prisma client init) without keeping an unused binding.
+  void dbModule.prisma;
 }, 60000);
 
 afterAll(async () => {

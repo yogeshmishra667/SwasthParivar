@@ -2,10 +2,7 @@
 // levels are re-exported from @swasth/shared-types so client + server +
 // domain-logic all agree on the contract.
 
-import type {
-  InsightPatternType,
-  InsightSeverityLevel,
-} from "@swasth/shared-types";
+import type { InsightPatternType, InsightSeverityLevel } from "@swasth/shared-types";
 
 /**
  * The minimum reading shape detectors need. Mirrors GlucoseReading /

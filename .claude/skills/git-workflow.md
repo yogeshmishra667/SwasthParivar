@@ -25,6 +25,7 @@ docs/add-api-readme
 ```
 
 Rules:
+
 - All lowercase, hyphens only (no underscores, no spaces)
 - Short but descriptive — someone should know what it does from the branch name alone
 - Always branch off `main`, never off another feature branch
@@ -54,16 +55,16 @@ Conventional Commits — required on every commit.
 
 ### Types
 
-| Type | When |
-|---|---|
-| `feat` | New feature or user-visible change |
-| `fix` | Bug fix |
-| `style` | CSS/UI changes — no logic change |
+| Type       | When                                  |
+| ---------- | ------------------------------------- |
+| `feat`     | New feature or user-visible change    |
+| `fix`      | Bug fix                               |
+| `style`    | CSS/UI changes — no logic change      |
 | `refactor` | Code restructure — no behavior change |
-| `types` | TypeScript type changes only |
-| `chore` | Config, deps, tooling |
-| `test` | Adding or fixing tests |
-| `docs` | README, comments, documentation |
+| `types`    | TypeScript type changes only          |
+| `chore`    | Config, deps, tooling                 |
+| `test`     | Adding or fixing tests                |
+| `docs`     | README, comments, documentation       |
 
 ### Scopes for Jewelry Project
 
@@ -123,19 +124,23 @@ style(layout): update header spacing to match Figma v2
 
 ```markdown
 ## What changed
+
 [2-3 sentences: what was built and the user-visible impact]
 
 ## How to test
+
 1. Go to [specific page]
 2. Do [specific action]
 3. Expected result: [what should happen]
 
 ## Screenshots
+
 | Mobile (375px) | Desktop (1280px) |
-|---|---|
-| [screenshot] | [screenshot] |
+| -------------- | ---------------- |
+| [screenshot]   | [screenshot]     |
 
 ## Checklist
+
 - [ ] `npm run type-check` passes
 - [ ] `npm run build` passes
 - [ ] Tested on mobile (375px)
@@ -152,6 +157,7 @@ style(layout): update header spacing to match Figma v2
 ### When to Open a Draft PR
 
 Open a draft PR early when:
+
 - You want feedback on the approach before finishing
 - It's a large feature spanning multiple sessions
 - You want CI to run on the branch
@@ -204,6 +210,7 @@ gh pr merge --squash --delete-branch
 ```
 
 The squash commit message should follow the same conventional commit format:
+
 ```
 feat(product): add mobile filter drawer with category support (#42)
 ```

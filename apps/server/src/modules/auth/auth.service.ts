@@ -12,8 +12,7 @@ const OTP_MAX_ATTEMPTS = 5;
 const otpKey = (phone: string): string => `otp:${phone}`;
 const attemptsKey = (phone: string): string => `otp:attempts:${phone}`;
 
-const generateOtp = (): string =>
-  String(crypto.randomInt(100_000, 1_000_000));
+const generateOtp = (): string => String(crypto.randomInt(100_000, 1_000_000));
 
 const hashOtp = (otp: string, phone: string): string =>
   crypto.createHmac("sha256", env.OTP_SECRET).update(`${phone}:${otp}`).digest("hex");
@@ -25,7 +24,10 @@ export const sendOtp = async (phone: string): Promise<{ sent: boolean }> => {
   await redis.del(attemptsKey(phone));
 
   // TODO: integrate MSG91 / WhatsApp Business API
-  logger.info({ phone, otp: env.NODE_ENV === "development" ? otp : "[REDACTED]" }, "OTP dispatched");
+  logger.info(
+    { phone, otp: env.NODE_ENV === "development" ? otp : "[REDACTED]" },
+    "OTP dispatched",
+  );
   return { sent: true };
 };
 
@@ -107,9 +109,9 @@ export const upsertPushToken = async (params: {
   return { id: row.id };
 };
 
-export const refreshTokens = async (
+export const refreshTokens = (
   refreshToken: string,
-): Promise<{ accessToken: string; refreshToken: string }> => {
+): { accessToken: string; refreshToken: string } => {
   let payload: { sub: string; householdId: string; type: string };
   try {
     payload = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as typeof payload;

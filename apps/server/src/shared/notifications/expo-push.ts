@@ -33,9 +33,7 @@ interface ExpoTicketError {
 
 type ExpoTicket = ExpoTicketOk | ExpoTicketError;
 
-export const sendExpoPush = async (
-  messages: ExpoPushMessage[],
-): Promise<ExpoPushResult[]> => {
+export const sendExpoPush = async (messages: ExpoPushMessage[]): Promise<ExpoPushResult[]> => {
   if (messages.length === 0) return [];
 
   const headers: Record<string, string> = {
@@ -44,7 +42,7 @@ export const sendExpoPush = async (
     "Accept-Encoding": "gzip, deflate",
   };
   if (env.EXPO_ACCESS_TOKEN) {
-    headers["Authorization"] = `Bearer ${env.EXPO_ACCESS_TOKEN}`;
+    headers.Authorization = `Bearer ${env.EXPO_ACCESS_TOKEN}`;
   }
 
   try {

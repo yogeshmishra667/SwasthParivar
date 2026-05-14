@@ -167,9 +167,7 @@ export default function DashboardScreen(): JSX.Element {
       >
         {showStale && cacheFetchedAt && (
           <View className="rounded-lg border border-warning bg-amber-50 p-3">
-            <Text className="text-body text-amber-900">
-              {t("dashboard.staleData")}
-            </Text>
+            <Text className="text-body text-amber-900">{t("dashboard.staleData")}</Text>
             <Text className="mt-0.5 text-body text-neutral">
               {t("dashboard.lastUpdated", {
                 time: formatRelativeTime(cacheFetchedAt),
@@ -212,9 +210,7 @@ export default function DashboardScreen(): JSX.Element {
               </View>
             </>
           ) : (
-            <Text className="mt-2 text-important text-neutral">
-              {t("dashboard.noReadings")}
-            </Text>
+            <Text className="mt-2 text-important text-neutral">{t("dashboard.noReadings")}</Text>
           )}
         </Card>
 

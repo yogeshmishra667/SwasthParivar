@@ -62,9 +62,147 @@ jobs:
         run: pnpm -r --parallel run typecheck
 
   # ──────────────────────────────────────────────────────────
+  # Lint: every workspace package, zero warnings. Catches gaps
+  # that lint-staged (commit-time, staged files only) can miss
+  # when commits are squashed or hooks are skipped.
+  # ──────────────────────────────────────────────────────────
+  lint:
+    name: Lint (workspace)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @swasth/server prisma:generate
+      - name: Lint
+        run: pnpm -r --parallel run lint
+
+  # ──────────────────────────────────────────────────────────
+  # Format check (Prettier). Catches whitespace/quote/line-break
+  # drift across the whole tree, not just commit-staged files.
+  # ──────────────────────────────────────────────────────────
+  format:
+    name: Prettier format:check
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Format check
+        run: pnpm format:check
+
+  # ──────────────────────────────────────────────────────────
+  # Domain-logic purity: forbidden imports + Date.now()/new Date()/
+  # Math.random() at call site. Comments stripped before search.
+  # Defense in depth — tsconfig path block is the primary gate.
+  # ──────────────────────────────────────────────────────────
+  purity:
+    name: Domain-logic purity
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Purity check
+        run: node scripts/check-domain-purity.mjs
+
+  # ──────────────────────────────────────────────────────────
+  # Build: every workspace package must compile to its dist/.
+  # Typecheck catches type errors; build catches bundler/declaration
+  # emit errors that only surface when output is actually written.
+  # ──────────────────────────────────────────────────────────
+  build:
+    name: Build (workspace)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @swasth/server prisma:generate
+      - name: Build
+        run: pnpm build
+
+  # ──────────────────────────────────────────────────────────
+  # Dependency vulnerability scan. Fails on HIGH or CRITICAL CVEs
+  # in the production dependency graph. Medical-grade requirement.
+  # ──────────────────────────────────────────────────────────
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Audit production deps (high+critical)
+        run: pnpm audit --prod --audit-level=high
+
+  # ──────────────────────────────────────────────────────────
+  # Secret scan. Catches API keys, JWT/OTP secrets, and cloud
+  # credentials accidentally committed. Full git history scanned.
+  # ──────────────────────────────────────────────────────────
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    # gitleaks-action queries pulls/<n>/commits to scope the diff on PRs.
+    # Without pull-requests:read it 403s and the job fails on permissions,
+    # not on a real leak. contents:read is required for the checkout.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ──────────────────────────────────────────────────────────
   # Domain-logic unit tests (pure functions, no Docker needed).
   # ──────────────────────────────────────────────────────────
   unit-tests:
+    # NOTE: name must stay "Unit tests (domain-logic)" because branch
+    # protection on main pins this exact string as a required check.
+    # Renaming it leaves the required check stuck in "expected" forever
+    # and blocks every merge. The job now also runs coverage — see step.
     name: Unit tests (domain-logic)
     runs-on: ubuntu-latest
     timeout-minutes: 8
@@ -83,8 +221,11 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Test
-        run: pnpm test:unit
+      # Run with coverage so the thresholds in vitest.config.ts are
+      # enforced. Same threshold lives there as a single source of
+      # truth — see the file's header comment for the ratchet plan.
+      - name: Test (with coverage thresholds)
+        run: pnpm --filter @swasth/domain-logic run test:coverage
 
   # ──────────────────────────────────────────────────────────
   # Server integration tests (Testcontainers Postgres + Redis).

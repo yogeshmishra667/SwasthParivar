@@ -90,150 +90,146 @@ export const ConfirmationScreen = ({
           contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}
           keyboardShouldPersistTaps="handled"
         >
-      <Card>
-        <View className="flex-row items-center gap-2">
-          <Icon name="person" size={16} color="#374151" />
-          <Text className="text-important font-semibold">
-            {profile?.name && profile.name.trim().length > 0
-              ? `${profile.name} ji ke liye save ho raha hai`
-              : "Aapke liye save ho raha hai"}
-          </Text>
-        </View>
-        {recentSwitch && (
-          <Text className="mt-1 text-body text-warning">
-            Abhi-abhi profile switch kiya — sahi profile hai na?
-          </Text>
-        )}
-      </Card>
+          <Card>
+            <View className="flex-row items-center gap-2">
+              <Icon name="person" size={16} color="#374151" />
+              <Text className="text-important font-semibold">
+                {profile?.name && profile.name.trim().length > 0
+                  ? `${profile.name} ji ke liye save ho raha hai`
+                  : "Aapke liye save ho raha hai"}
+              </Text>
+            </View>
+            {recentSwitch && (
+              <Text className="mt-1 text-body text-warning">
+                Abhi-abhi profile switch kiya — sahi profile hai na?
+              </Text>
+            )}
+          </Card>
 
-      <Card>
-        <Text className="text-body text-neutral">Glucose reading</Text>
-        <View className="mt-1 flex-row items-baseline gap-2">
-          <Text
-            className={`text-5xl font-bold tracking-tight ${
-              isCritical ? "text-critical" : "text-gray-900"
-            }`}
-          >
-            {value}
-          </Text>
-          <Text className="text-important text-neutral">mg/dL</Text>
-        </View>
-        {isCritical && (
-          <View className="mt-3 flex-row items-center gap-2 rounded-lg bg-red-50 px-3 py-2">
-            <Icon name="warning" size={20} color="#DC2626" />
-            <Text className="flex-1 text-important font-bold text-critical">
-              Yeh bahut {value > 315 ? "zyada" : "kam"} hai. Kya sahi hai?
-            </Text>
-          </View>
-        )}
-      </Card>
-
-      <Card>
-        <Text className="mb-3 text-body text-neutral">
-          {uncertainType ? "Fasting ya post-meal? Tap karein:" : "Reading type"}
-        </Text>
-        <View className="gap-2">
-          {TYPE_OPTIONS.map((opt) => {
-            const active = selectedType === opt;
-            return (
-              <Pressable
-                key={opt}
-                onPress={() => setSelectedType(opt)}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: active }}
-                style={{ minHeight: TOUCH_TARGET_MIN }}
-                className={`flex-row items-center justify-between rounded-xl border px-4 py-3 ${
-                  active
-                    ? "border-blue-600 bg-blue-50"
-                    : "border-gray-200 bg-white"
+          <Card>
+            <Text className="text-body text-neutral">Glucose reading</Text>
+            <View className="mt-1 flex-row items-baseline gap-2">
+              <Text
+                className={`text-5xl font-bold tracking-tight ${
+                  isCritical ? "text-critical" : "text-gray-900"
                 }`}
+              >
+                {value}
+              </Text>
+              <Text className="text-important text-neutral">mg/dL</Text>
+            </View>
+            {isCritical && (
+              <View className="mt-3 flex-row items-center gap-2 rounded-lg bg-red-50 px-3 py-2">
+                <Icon name="warning" size={20} color="#DC2626" />
+                <Text className="flex-1 text-important font-bold text-critical">
+                  Yeh bahut {value > 315 ? "zyada" : "kam"} hai. Kya sahi hai?
+                </Text>
+              </View>
+            )}
+          </Card>
+
+          <Card>
+            <Text className="mb-3 text-body text-neutral">
+              {uncertainType ? "Fasting ya post-meal? Tap karein:" : "Reading type"}
+            </Text>
+            <View className="gap-2">
+              {TYPE_OPTIONS.map((opt) => {
+                const active = selectedType === opt;
+                return (
+                  <Pressable
+                    key={opt}
+                    onPress={() => setSelectedType(opt)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                    style={{ minHeight: TOUCH_TARGET_MIN }}
+                    className={`flex-row items-center justify-between rounded-xl border px-4 py-3 ${
+                      active ? "border-blue-600 bg-blue-50" : "border-gray-200 bg-white"
+                    }`}
+                  >
+                    <View className="flex-1 pr-3">
+                      <Text
+                        className={`text-important font-semibold ${
+                          active ? "text-blue-700" : "text-gray-900"
+                        }`}
+                      >
+                        {TYPE_LABELS[opt] ?? opt}
+                      </Text>
+                      <Text className="mt-0.5 text-body text-neutral">{TYPE_HINTS[opt] ?? ""}</Text>
+                    </View>
+                    <View
+                      className={`h-5 w-5 items-center justify-center rounded-full border-2 ${
+                        active ? "border-blue-600 bg-blue-600" : "border-gray-300 bg-white"
+                      }`}
+                    >
+                      {active && <View className="h-2 w-2 rounded-full bg-white" />}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Card>
+
+          {/* Festive toggle. Hidden when critical (safety wins) or when
+          the user has burned both weekly slots — see CLAUDE.md "Festive
+          Tag: Disable After Limit". */}
+          {!isCritical && (
+            <Card>
+              <Pressable
+                onPress={() => festiveAvailable && setIsFestive((v) => !v)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: festiveActive, disabled: !festiveAvailable }}
+                disabled={!festiveAvailable}
+                style={{ minHeight: TOUCH_TARGET_MIN }}
+                className="flex-row items-center justify-between"
               >
                 <View className="flex-1 pr-3">
                   <Text
                     className={`text-important font-semibold ${
-                      active ? "text-blue-700" : "text-gray-900"
+                      festiveAvailable ? "" : "text-neutral"
                     }`}
                   >
-                    {TYPE_LABELS[opt] ?? opt}
+                    🎉 {t("logging.festiveToggle", { defaultValue: "Special din?" })}
                   </Text>
-                  <Text className="mt-0.5 text-body text-neutral">
-                    {TYPE_HINTS[opt] ?? ""}
-                  </Text>
+                  {!festiveCanUse ? (
+                    <Text className="mt-1 text-body text-neutral">
+                      {t("logging.festiveLimitReached", {
+                        defaultValue: "Is hafte 2 baar use ho chuka. Kal se phir.",
+                      })}
+                    </Text>
+                  ) : (
+                    <Text className="mt-1 text-body text-neutral">
+                      {t("logging.festiveHint", {
+                        used: festiveUsedThisWeek,
+                        max: FESTIVE_MAX_PER_WEEK,
+                        defaultValue: `Festival ho to enable karein (${festiveUsedThisWeek}/${FESTIVE_MAX_PER_WEEK} this week)`,
+                      })}
+                    </Text>
+                  )}
                 </View>
                 <View
-                  className={`h-5 w-5 items-center justify-center rounded-full border-2 ${
-                    active ? "border-blue-600 bg-blue-600" : "border-gray-300 bg-white"
-                  }`}
+                  className={`h-7 w-12 items-${festiveActive ? "end" : "start"} justify-center rounded-full px-1 ${
+                    festiveActive ? "bg-celebration" : "bg-gray-300"
+                  } ${festiveAvailable ? "" : "opacity-40"}`}
                 >
-                  {active && <View className="h-2 w-2 rounded-full bg-white" />}
+                  <View className="h-5 w-5 rounded-full bg-white" />
                 </View>
               </Pressable>
-            );
-          })}
-        </View>
-      </Card>
+            </Card>
+          )}
 
-      {/* Festive toggle. Hidden when critical (safety wins) or when
-          the user has burned both weekly slots — see CLAUDE.md "Festive
-          Tag: Disable After Limit". */}
-      {!isCritical && (
-        <Card>
-          <Pressable
-            onPress={() => festiveAvailable && setIsFestive((v) => !v)}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: festiveActive, disabled: !festiveAvailable }}
-            disabled={!festiveAvailable}
-            style={{ minHeight: TOUCH_TARGET_MIN }}
-            className="flex-row items-center justify-between"
-          >
-            <View className="flex-1 pr-3">
-              <Text
-                className={`text-important font-semibold ${
-                  festiveAvailable ? "" : "text-neutral"
-                }`}
-              >
-                🎉 {t("logging.festiveToggle", { defaultValue: "Special din?" })}
-              </Text>
-              {!festiveCanUse ? (
-                <Text className="mt-1 text-body text-neutral">
-                  {t("logging.festiveLimitReached", {
-                    defaultValue: "Is hafte 2 baar use ho chuka. Kal se phir.",
-                  })}
-                </Text>
-              ) : (
-                <Text className="mt-1 text-body text-neutral">
-                  {t("logging.festiveHint", {
-                    used: festiveUsedThisWeek,
-                    max: FESTIVE_MAX_PER_WEEK,
-                    defaultValue: `Festival ho to enable karein (${festiveUsedThisWeek}/${FESTIVE_MAX_PER_WEEK} this week)`,
-                  })}
-                </Text>
-              )}
+          <View className="flex-row gap-3">
+            <View className="flex-1">
+              <Button label="Edit" variant="ghost" onPress={onEdit} />
             </View>
-            <View
-              className={`h-7 w-12 items-${festiveActive ? "end" : "start"} justify-center rounded-full px-1 ${
-                festiveActive ? "bg-celebration" : "bg-gray-300"
-              } ${festiveAvailable ? "" : "opacity-40"}`}
-            >
-              <View className="h-5 w-5 rounded-full bg-white" />
+            <View className="flex-[2]">
+              <Button
+                label={confirmReady ? "Haan, save" : "Wait..."}
+                variant={isCritical ? "critical" : "primary"}
+                disabled={!confirmReady}
+                onPress={handleConfirm}
+              />
             </View>
-          </Pressable>
-        </Card>
-      )}
-
-      <View className="flex-row gap-3">
-        <View className="flex-1">
-          <Button label="Edit" variant="ghost" onPress={onEdit} />
-        </View>
-        <View className="flex-[2]">
-          <Button
-            label={confirmReady ? "Haan, save" : "Wait..."}
-            variant={isCritical ? "critical" : "primary"}
-            disabled={!confirmReady}
-            onPress={handleConfirm}
-          />
-        </View>
-      </View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

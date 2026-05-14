@@ -40,8 +40,7 @@ beforeAll(async () => {
 
   runPrisma(["migrate", "deploy"]);
   runPrisma(["db", "execute", "--stdin"], {
-    input:
-      "SELECT create_hypertable('glucose_readings', 'measured_at', if_not_exists => TRUE);",
+    input: "SELECT create_hypertable('glucose_readings', 'measured_at', if_not_exists => TRUE);",
   });
 
   const appModule = await import("../../src/app.js");
@@ -59,11 +58,9 @@ beforeAll(async () => {
       onboardingComplete: true,
     },
   });
-  accessToken = jwt.sign(
-    { sub: user.id, householdId: user.householdId },
-    process.env.JWT_SECRET!,
-    { expiresIn: "1h" },
-  );
+  accessToken = jwt.sign({ sub: user.id, householdId: user.householdId }, process.env.JWT_SECRET, {
+    expiresIn: "1h",
+  });
 }, 120_000);
 
 afterAll(async () => {
@@ -216,7 +213,11 @@ describe("POST /api/v1/readings/glucose", () => {
       const readingId = postRes.body.data.reading.id;
       let foundForReading = false;
       for (let attempt = 0; attempt < 20 && !foundForReading; attempt++) {
-        const jobs = await probeQueue.getJobs(["waiting", "active", "delayed", "completed"], 0, 100);
+        const jobs = await probeQueue.getJobs(
+          ["waiting", "active", "delayed", "completed"],
+          0,
+          100,
+        );
         foundForReading = jobs.some((j) => j.data?.readingId === readingId);
         if (!foundForReading) await new Promise((r) => setTimeout(r, 100));
       }

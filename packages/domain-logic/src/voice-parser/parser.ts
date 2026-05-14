@@ -33,9 +33,7 @@ const findFirstIndexOfAny = (haystack: string, needles: readonly string[]): numb
 
 const extractColloquial = (text: string): { candidates: NumberCandidate[]; remaining: string } => {
   const out: NumberCandidate[] = [];
-  const phrasesByLength = [...HINDI_COLLOQUIAL.entries()].sort(
-    (a, b) => b[0].length - a[0].length,
-  );
+  const phrasesByLength = [...HINDI_COLLOQUIAL.entries()].sort((a, b) => b[0].length - a[0].length);
   let remaining = text;
   for (const [phrase, value] of phrasesByLength) {
     if (remaining.includes(phrase)) {
@@ -51,18 +49,14 @@ const extractDigits = (text: string): NumberCandidate[] => {
   return matches.map((m) => ({ value: Number(m), recommended: false, source: "digit" as const }));
 };
 
-const inferTypeFromClock = (
-  hour: number,
-): { type: GlucoseReadingType; uncertain: boolean } => {
+const inferTypeFromClock = (hour: number): { type: GlucoseReadingType; uncertain: boolean } => {
   if (hour >= 6 && hour < 10) return { type: "fasting", uncertain: false };
   if (hour >= 12 && hour < 14) return { type: "post_meal", uncertain: false };
   if (hour >= 19 && hour < 21) return { type: "post_meal", uncertain: false };
   return { type: "random", uncertain: true };
 };
 
-const inferTypeFromKeywords = (
-  text: string,
-): GlucoseReadingType | null => {
+const inferTypeFromKeywords = (text: string): GlucoseReadingType | null => {
   if (containsAny(text, POST_MEAL_KEYWORDS)) return "post_meal";
   if (containsAny(text, FASTING_KEYWORDS)) return "fasting";
   return null;
@@ -116,8 +110,7 @@ export const parseVoiceTranscript = (input: VoiceParseInput): VoiceParseResult =
 
   const uncertaintyDetected = containsAny(text, UNCERTAINTY_WORDS);
   const requiresStrongConfirmation = uncertaintyDetected || input.confidence < CONFIDENCE_THRESHOLD;
-  const requiresDoubleConfirmation =
-    value < GLUCOSE_CRITICAL_LOW || value > GLUCOSE_CRITICAL_HIGH;
+  const requiresDoubleConfirmation = value < GLUCOSE_CRITICAL_LOW || value > GLUCOSE_CRITICAL_HIGH;
 
   return {
     kind: "ok",

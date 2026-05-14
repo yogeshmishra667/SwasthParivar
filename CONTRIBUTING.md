@@ -29,16 +29,16 @@ docs/onboarding-runbook
 hotfix/sos-dialer-crash
 ```
 
-| Type      | Used for                                                |
-|-----------|---------------------------------------------------------|
-| `feat`    | Net-new behaviour or capability                          |
-| `fix`     | Bug fix on existing behaviour                            |
-| `perf`    | Performance change with no functional delta              |
-| `refactor`| Internal restructure, no behavioural change              |
-| `test`    | Add/repair tests only                                    |
-| `docs`    | Documentation only                                       |
-| `chore`   | Tooling, deps, config — no production code               |
-| `hotfix`  | Production-blocking fix; bypasses normal review SLA      |
+| Type       | Used for                                            |
+| ---------- | --------------------------------------------------- |
+| `feat`     | Net-new behaviour or capability                     |
+| `fix`      | Bug fix on existing behaviour                       |
+| `perf`     | Performance change with no functional delta         |
+| `refactor` | Internal restructure, no behavioural change         |
+| `test`     | Add/repair tests only                               |
+| `docs`     | Documentation only                                  |
+| `chore`    | Tooling, deps, config — no production code          |
+| `hotfix`   | Production-blocking fix; bypasses normal review SLA |
 
 `main` is the only protected branch. Never push directly to it. Never force-
 push to `main`. Force-push elsewhere only on your own feature branches.
@@ -86,11 +86,11 @@ Project convention: don't add tool-author trailers. Human authorship only.
 
 Husky runs three hooks for you (auto-installed via `pnpm install` postinstall):
 
-| Hook         | What it runs                                               | When it blocks |
-|--------------|-----------------------------------------------------------|----------------|
+| Hook         | What it runs                                                       | When it blocks      |
+| ------------ | ------------------------------------------------------------------ | ------------------- |
 | `pre-commit` | `lint-staged` → `eslint --fix` and `tsc --noEmit` on staged TS/TSX | Lint or type errors |
-| `commit-msg` | `commitlint` against Conventional Commits                  | Off-format message |
-| `pre-push`   | Workspace `typecheck` + `pnpm test:unit` (domain-logic, ~5s) | Any failure |
+| `commit-msg` | `commitlint` against Conventional Commits                          | Off-format message  |
+| `pre-push`   | Workspace `typecheck` + `pnpm test:unit` (domain-logic, ~5s)       | Any failure         |
 
 Skipping a hook in an emergency: `git commit --no-verify` / `git push --no-verify`.
 Use sparingly — CI runs the same checks and will reject the PR.
@@ -111,11 +111,11 @@ Use sparingly — CI runs the same checks and will reject the PR.
 
 ### Review SLA
 
-| Type      | First review |
-|-----------|--------------|
-| `hotfix`  | < 1 hr       |
-| `fix`     | < 1 day      |
-| Everything else | < 2 days |
+| Type            | First review |
+| --------------- | ------------ |
+| `hotfix`        | < 1 hr       |
+| `fix`           | < 1 day      |
+| Everything else | < 2 days     |
 
 ## Phase discipline (from CLAUDE.md)
 

@@ -106,4 +106,3 @@ export const recoverFatigueOn2DayLogStreak = (
   }
   return state;
 };
-
