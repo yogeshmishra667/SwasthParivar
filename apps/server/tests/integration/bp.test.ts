@@ -2,7 +2,7 @@
 // to match the existing convention in readings.test.ts. The eslint
 // no-unsafe-* family triggers on every field access; tracked for cleanup
 // across both files in the fix/lint-cleanup branch.
- 
+
 import { describe, it, beforeAll, afterAll, expect } from "vitest";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";

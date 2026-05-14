@@ -30,21 +30,15 @@ Zero warnings. Treat warnings as errors.
 
 ### 3. Domain-logic purity check
 
-Defense in depth — tsconfig `paths` redirects every forbidden module to `src/_blocked.d.ts` (a stub with no exports), so any forbidden import fails at typecheck (TS2305). The grep below is the secondary gate; both must be clean.
+Defense in depth — tsconfig `paths` redirects every forbidden module to `src/_blocked.d.ts` (a stub with no exports), so any forbidden import fails at typecheck (TS2305). The script below is the secondary gate; both must be clean.
 
 ```
-grep -rE "from ['\"]@prisma/|from ['\"]ioredis|from ['\"]bullmq|from ['\"]express|from ['\"]axios|from ['\"]node:fs|from ['\"]node:net|from ['\"]node:http|from ['\"]node:child_process" packages/domain-logic/src/
+node scripts/check-domain-purity.mjs
 ```
+
+The script (a) rejects imports of `@prisma/*`, `ioredis`, `bullmq`, `express`, `axios`, `node:fs|net|http|https|child_process`, and (b) rejects zero-argument `Date.now()`, `new Date()`, and `Math.random()` calls — these must be passed in as parameters. Comments are stripped before searching so docstring references are not false-flagged.
 
 Any hit → FAIL. Pure functions only.
-
-Also verify no `Date.now()`, `new Date()`, or `Math.random()` calls inside exported domain functions:
-
-```
-grep -rnE "Date\.now\(\)|new Date\(\)|Math\.random\(\)" packages/domain-logic/src/
-```
-
-Time and randomness must be passed as parameters. Any hit → FAIL.
 
 ### 4. Tests
 

@@ -19,9 +19,9 @@ const runPrisma = (args: string[], opts: { input?: string } = {}): void => {
 
 let postgresContainer: StartedPostgreSqlContainer;
 let redisContainer: StartedRedisContainer;
- 
+
 let app: any;
- 
+
 let prisma: any;
 let primaryUserId: string;
 let primaryHouseholdId: string;
@@ -63,11 +63,9 @@ beforeAll(async () => {
     },
   });
   primaryUserId = user.id;
-  primaryToken = jwt.sign(
-    { sub: user.id, householdId: user.householdId },
-    process.env.JWT_SECRET,
-    { expiresIn: "1h" },
-  );
+  primaryToken = jwt.sign({ sub: user.id, householdId: user.householdId }, process.env.JWT_SECRET, {
+    expiresIn: "1h",
+  });
 }, 120_000);
 
 afterAll(async () => {

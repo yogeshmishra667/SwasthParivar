@@ -7,6 +7,16 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
 
+  // Express `trust proxy` setting. Required when running behind a
+  // reverse proxy (Cloudflare, nginx, Render's load balancer) so that
+  // req.ip resolves to the real client IP rather than the proxy's —
+  // without this, rate-limit applies one bucket to every user.
+  //
+  // Values: "false" (no proxy, default for dev), "true" (trust ALL —
+  // NEVER use in production), a positive int (number of hops back to
+  // trust, e.g. "1" for a single CF layer), or a CIDR/IP allowlist.
+  TRUST_PROXY: z.string().default("false"),
+
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
 

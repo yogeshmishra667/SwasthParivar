@@ -1,5 +1,5 @@
 // See readings.test.ts for the lint-disable rationale.
- 
+
 import { describe, it, beforeAll, afterAll, expect } from "vitest";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
