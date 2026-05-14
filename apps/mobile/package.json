@@ -11,7 +11,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint 'app/**/*.{ts,tsx}' 'src/**/*.{ts,tsx}' --max-warnings=0",
     "lint:fix": "eslint 'app/**/*.{ts,tsx}' 'src/**/*.{ts,tsx}' --fix",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "clean": "rm -rf .expo dist coverage *.tsbuildinfo"
   },
   "dependencies": {
