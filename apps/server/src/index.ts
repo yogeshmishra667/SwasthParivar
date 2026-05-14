@@ -1,4 +1,8 @@
-import { initSentry, captureUnhandled, warnIfMisconfigured } from "./shared/observability/sentry.js";
+import {
+  initSentry,
+  captureUnhandled,
+  warnIfMisconfigured,
+} from "./shared/observability/sentry.js";
 initSentry();
 
 import os from "node:os";
@@ -9,8 +13,13 @@ import { prisma, disconnectDatabase } from "./shared/database.js";
 import { redis, disconnectRedis } from "./shared/redis.js";
 import { closeQueueConnection } from "./shared/queue.js";
 import { startWorkers, stopWorkers, workerNames } from "./workers/index.js";
+import {
+  shutdownAnalytics,
+  warnIfMisconfigured as warnIfPostHogMisconfigured,
+} from "./shared/analytics/posthog.js";
 
 warnIfMisconfigured((msg) => logger.warn(msg));
+warnIfPostHogMisconfigured((msg) => logger.warn(msg));
 
 const lanAddresses = (): string[] => {
   const out: string[] = [];
@@ -92,6 +101,7 @@ const shutdown = async (signal: string): Promise<void> => {
   server.close(() => logger.info("http server closed"));
   await stopWorkers();
   await closeQueueConnection();
+  await shutdownAnalytics();
   await disconnectDatabase();
   await disconnectRedis();
   process.exit(0);

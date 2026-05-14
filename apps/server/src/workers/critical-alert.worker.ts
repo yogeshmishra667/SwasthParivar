@@ -4,6 +4,7 @@ import type { Worker } from "bullmq";
 import { createWorker, QUEUE_NAMES } from "../shared/queue.js";
 import { logger } from "../shared/logger.js";
 import { prisma } from "../shared/database.js";
+import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
 import { sendExpoPush, type ExpoPushMessage } from "../shared/notifications/expo-push.js";
 import { sendSmsBatch, type SmsMessage } from "../shared/notifications/msg91-sms.js";
 
@@ -11,6 +12,11 @@ export interface CriticalAlertJob {
   readingId: string;
   userId: string;
   decision: BypassDecision;
+  // Forwarded from the originating HTTP request so the dispatch log line
+  // joins the request log under the same requestId. Optional — jobs
+  // enqueued from cron paths (none today, but kept resilient) emit with
+  // jobId-only correlation.
+  requestId?: string;
 }
 
 const copyForSeverity = (
@@ -75,7 +81,12 @@ const resolveSmsTargets = async (smsContactIds: string[]): Promise<SmsMessage["p
 export const criticalAlertWorker: Worker<CriticalAlertJob> = createWorker<CriticalAlertJob>(
   QUEUE_NAMES.CRITICAL_ALERT,
   async (job) => {
-    const { decision, userId, readingId } = job.data;
+    const { decision, userId, readingId, requestId } = job.data;
+    const log = logger.child({
+      queue: QUEUE_NAMES.CRITICAL_ALERT,
+      jobId: job.id ?? undefined,
+      ...(requestId ? { requestId } : {}),
+    });
     if (!decision.isCritical || decision.severity === null) return;
 
     const patient = await prisma.user.findUnique({
@@ -120,7 +131,7 @@ export const criticalAlertWorker: Worker<CriticalAlertJob> = createWorker<Critic
           else pushFailures.push(r.token);
         });
       } else {
-        logger.warn({ userId }, "no push tokens for guardians — falling through to SMS");
+        log.warn({ userId }, "no push tokens for guardians — falling through to SMS");
       }
     }
 
@@ -137,7 +148,7 @@ export const criticalAlertWorker: Worker<CriticalAlertJob> = createWorker<Critic
       }
     }
 
-    logger.warn(
+    log.warn(
       {
         userId,
         readingId,
@@ -150,5 +161,13 @@ export const criticalAlertWorker: Worker<CriticalAlertJob> = createWorker<Critic
       },
       "critical bypass dispatched",
     );
+
+    captureAnalyticsEvent("critical_bypass_triggered", userId, {
+      value_mg_dl: value,
+      severity: decision.severity,
+      push_targets: decision.pushTargets.length,
+      sms_targets: decision.smsTargets.length,
+      within_cooldown: decision.withinCooldown,
+    });
   },
 );

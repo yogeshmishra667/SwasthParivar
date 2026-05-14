@@ -10,6 +10,7 @@ import type { NotificationState as PrismaNotificationState } from "@prisma/clien
 import { createWorker, createQueue, QUEUE_NAMES } from "../shared/queue.js";
 import { prisma } from "../shared/database.js";
 import { logger } from "../shared/logger.js";
+import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
 import { sendExpoPush } from "../shared/notifications/expo-push.js";
 
 interface TickJob {
@@ -225,6 +226,12 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
 
   if (result.kind === "suppress") {
     logger.debug({ userId, reason: result.reason }, "notification suppressed");
+    captureAnalyticsEvent("notification_sent", userId, {
+      trigger_type: "none",
+      variant_id: null,
+      suppressed: true,
+      suppress_reason: result.reason,
+    });
     return;
   }
 
@@ -245,6 +252,13 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
       },
     })),
   );
+
+  captureAnalyticsEvent("notification_sent", userId, {
+    trigger_type: result.chosen.trigger,
+    variant_id: null,
+    suppressed: false,
+    suppress_reason: null,
+  });
 
   await persistState(userId, result.nextState);
 };

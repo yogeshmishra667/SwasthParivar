@@ -9,10 +9,14 @@ import { Prisma, type GlucoseReading } from "@prisma/client";
 import { prisma } from "../../shared/database.js";
 import { logger } from "../../shared/logger.js";
 import { createQueue, QUEUE_NAMES } from "../../shared/queue.js";
+import { capture as captureAnalyticsEvent } from "../../shared/analytics/posthog.js";
 
-const criticalQueue = createQueue<{ readingId: string; userId: string; decision: BypassDecision }>(
-  QUEUE_NAMES.CRITICAL_ALERT,
-);
+const criticalQueue = createQueue<{
+  readingId: string;
+  userId: string;
+  decision: BypassDecision;
+  requestId?: string;
+}>(QUEUE_NAMES.CRITICAL_ALERT);
 
 // Patch #18 — device-time manipulation defense.
 // If |client_measuredAt − server_now| exceeds this threshold, the reading
@@ -34,6 +38,7 @@ interface CreateReadingInput {
   source: "manual" | "voice" | "device";
   measuredAt: string;
   version: number;
+  requestId?: string;
 }
 
 export interface CreateReadingResult {
@@ -324,6 +329,7 @@ export const createGlucoseReading = async (
       readingId: reading.id,
       userId: input.userId,
       decision: critical,
+      ...(input.requestId ? { requestId: input.requestId } : {}),
     });
   }
 
@@ -332,6 +338,21 @@ export const createGlucoseReading = async (
       { userId: input.userId, flags: streakResult.antiCheatFlags },
       "anti-cheat flags raised",
     );
+  }
+
+  captureAnalyticsEvent("reading_logged", input.userId, {
+    type: input.readingType,
+    source: input.source,
+    time_to_log_seconds: null,
+    user_stage: userStageDays,
+    streak_credited_to_server_time: useServerTimeForStreak,
+  });
+
+  if (streakResult.milestoneReached !== null) {
+    captureAnalyticsEvent("streak_milestone", input.userId, {
+      milestone_days: streakResult.milestoneReached,
+      longest_streak_days: streakResult.nextState.longestStreakDays,
+    });
   }
 
   return {

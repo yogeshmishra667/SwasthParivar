@@ -1,0 +1,60 @@
+# Dependabot config — automated dependency updates.
+#
+# Rationale: manual CVE chasing does not scale (commit fc55686 patched
+# 11 HIGH-severity CVEs in one sweep — we want a steady drip instead).
+#
+# Rules:
+#   - Weekly cadence; Monday is least disruptive (away from release days).
+#   - Major version bumps are ignored — they need human design review.
+#   - PRs are grouped per ecosystem so we don't flood with 30 PRs per week.
+#   - Reviewer set is the same single owner as CODEOWNERS; the 2-reviewer
+#     rule from PULL_REQUEST_TEMPLATE.md takes over once a second owner
+#     exists.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    versioning-strategy: increase-if-necessary
+    labels:
+      - dependencies
+      - automated
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      prod-patches:
+        applies-to: version-updates
+        update-types: [patch]
+        dependency-type: production
+      dev-minors:
+        applies-to: version-updates
+        update-types: [minor, patch]
+        dependency-type: development
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+    ignore:
+      # Majors require human design review (Express 5 → 6, Prisma 7 → 8 etc.)
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - automated
+    commit-message:
+      prefix: chore
+      include: scope

@@ -1,0 +1,106 @@
+# Monthly moderate-severity audit sweep.
+#
+# Why this exists separately from ci.yml's `audit` job: CI fails the build
+# only on HIGH+CRITICAL CVEs (so green PRs aren't blocked by transitive
+# moderates). But moderates DO accumulate — if we never look at them, a
+# real risk hides in plain sight. This job runs once a month, files an
+# issue when there's anything to look at, and stays silent otherwise.
+#
+# Inputs used here are GitHub-context or self-generated — no PR titles,
+# commit messages, or other untrusted fields are interpolated into shell.
+name: audit-moderate
+
+on:
+  schedule:
+    # 03:00 IST on the first of each month (21:30 UTC the previous day);
+    # cron only fires on day-of-month, so we filter inside the job.
+    - cron: "30 21 28-31 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Skip if scheduled run is not the last day of the month
+        if: github.event_name == 'schedule'
+        run: |
+          tomorrow=$(date -u -d "tomorrow" +%d)
+          if [ "$tomorrow" != "01" ]; then
+            echo "Not the last day of the month — skipping."
+            echo "SKIP=true" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/checkout@v4
+        if: env.SKIP != 'true'
+
+      - uses: pnpm/action-setup@v4
+        if: env.SKIP != 'true'
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        if: env.SKIP != 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: pnpm install (offline-friendly)
+        if: env.SKIP != 'true'
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Run pnpm audit (moderate threshold)
+        if: env.SKIP != 'true'
+        id: audit
+        run: |
+          set +e
+          pnpm audit --prod --audit-level=moderate > audit-out.txt 2>&1
+          status=$?
+          set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          {
+            echo "## pnpm audit --prod --audit-level=moderate"
+            echo
+            echo '```'
+            head -c 60000 audit-out.txt
+            echo '```'
+          } > audit-summary.md
+
+      - name: Open / refresh tracking issue
+        if: env.SKIP != 'true' && steps.audit.outputs.status != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('audit-summary.md', 'utf8');
+            const today = new Date().toISOString().slice(0, 10);
+            const title = `chore(security): moderate-severity audit findings — ${today}`;
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'security,automated',
+              state: 'open',
+            });
+            const tracking = existing.find(i =>
+              i.title.startsWith('chore(security): moderate-severity audit'),
+            );
+            if (tracking) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: tracking.number,
+                body: `Refreshed scan (${new Date().toISOString()}):\n\n${body}`,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['security', 'automated', 'dependencies'],
+              });
+            }

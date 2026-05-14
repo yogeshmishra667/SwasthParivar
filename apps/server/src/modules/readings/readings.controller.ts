@@ -3,6 +3,7 @@ import { DomainError } from "@swasth/shared-types";
 import { parseVoiceTranscript } from "@swasth/domain-logic";
 import { ok } from "../../shared/http.js";
 import { resolveHouseholdMember } from "../../shared/auth/household.js";
+import { capture as captureAnalyticsEvent } from "../../shared/analytics/posthog.js";
 import * as service from "./readings.service.js";
 
 export const postGlucose = async (req: Request, res: Response): Promise<void> => {
@@ -20,7 +21,11 @@ export const postGlucose = async (req: Request, res: Response): Promise<void> =>
   const userId = await resolveHouseholdMember(req.auth!, body.targetUserId);
   const { targetUserId: _drop, ...rest } = body;
   void _drop;
-  const result = await service.createGlucoseReading({ userId, ...rest });
+  const result = await service.createGlucoseReading({
+    userId,
+    ...rest,
+    ...(req.requestId ? { requestId: req.requestId } : {}),
+  });
   ok(res, result, 201);
 };
 
@@ -46,8 +51,25 @@ export const postGlucoseVoice = async (req: Request, res: Response): Promise<voi
   });
 
   if (parsed.kind === "rejected") {
+    captureAnalyticsEvent("voice_attempt", userId, {
+      success: false,
+      fallback: "numpad",
+      confidence: body.confidence,
+      colloquial_match: false,
+      uncertainty_detected: false,
+      rejected_reason: parsed.reason,
+    });
     throw new DomainError("READING_CONFIRMATION_NEEDED", `voice rejected: ${parsed.reason}`);
   }
+
+  captureAnalyticsEvent("voice_attempt", userId, {
+    success: true,
+    fallback: "none",
+    confidence: body.confidence,
+    colloquial_match: parsed.colloquialMatch,
+    uncertainty_detected: parsed.requiresStrongConfirmation,
+    rejected_reason: null,
+  });
 
   const result = await service.createGlucoseReading({
     userId,
@@ -58,6 +80,7 @@ export const postGlucoseVoice = async (req: Request, res: Response): Promise<voi
     source: "voice",
     measuredAt: body.capturedAtIso,
     version: 1,
+    ...(req.requestId ? { requestId: req.requestId } : {}),
   });
 
   ok(res, { ...result, parseHints: { colloquialMatch: parsed.colloquialMatch } }, 201);
