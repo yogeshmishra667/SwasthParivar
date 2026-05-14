@@ -1,5 +1,14 @@
 # SwasthParivar — Claude Code Instructions
 
+> **Production audit landed (2026-05-14).** Reference docs at the repo root:
+>
+> - `docs/ARCHITECTURE.md` — how observability / idempotency / flag service / critical-bypass / docker fit together. Read before touching any of them.
+> - `docs/SETUP.md` — every setup step still pending before prod (DSNs, secrets, branch protection, DR drill).
+> - `docs/HOWTO.md` — concrete recipes: use the flag service, add a PostHog event, ship a module, rollback, etc.
+> - `docs/runbooks/rollback.md` — incident response runbook (image revert / migration revert / provider kill switch / PITR).
+> - `audit-progress.md` — historical roadmap + session log.
+> - `scripts/preflight.sh` — wired into pre-push; simulates a fresh CI checkout locally. Override with `git push --no-verify` only in emergencies.
+
 ## Project
 
 Chronic condition health companion for Indian families. Patients (elderly, 50-70) manage diabetes, BP, asthma, cardiac. Guardians (adult children, 25-40) monitor remotely. Hindi-first, offline-first, accuracy-first.

@@ -62,6 +62,7 @@ export default [
       "**/coverage/**",
       "**/*.config.{js,mjs,cjs,ts}",
       "vitest.workspace.ts",
+      "dangerfile.ts",
       ".claude/worktrees/**",
     ],
   },

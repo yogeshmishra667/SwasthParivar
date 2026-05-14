@@ -21,11 +21,15 @@
     "test:integration": "pnpm --filter=@swasth/server run test:integration",
     "test:coverage": "pnpm -r --parallel run test:coverage",
     "clean": "pnpm -r run clean && rm -rf node_modules",
+    "new-module": "bash scripts/scaffold/new-module.sh",
+    "new-detector": "bash scripts/scaffold/new-detector.sh",
+    "new-migration": "bash scripts/scaffold/new-migration.sh",
     "prepare": "husky"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
-      "eslint --fix --no-warn-ignored --max-warnings=0"
+      "eslint --fix --no-warn-ignored --max-warnings=0",
+      "prettier --write"
     ],
     "*.{json,md,yml,yaml}": [
       "prettier --write"
@@ -50,12 +54,13 @@
     "@types/node": "^20.14.10",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
+    "danger": "^13.0.7",
     "eslint": "^9.9.0",
     "eslint-config-prettier": "^9.1.0",
     "husky": "9.1.7",
     "lint-staged": "^16",
     "prettier": "^3.3.3",
-    "typescript": "^6.0.2",
+    "typescript": "~5.9.3",
     "typescript-eslint": "8.59.2",
     "vitest": "^4.1.4"
   }

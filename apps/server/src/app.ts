@@ -18,6 +18,7 @@ import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
 import { usersRouter } from "./modules/users/users.routes.js";
 import { householdRouter } from "./modules/household/household.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
+import { adminRouter } from "./modules/admin/admin.routes.js";
 
 // Parse TRUST_PROXY env value: "true"/"false"/<int>/<comma list>.
 // Express accepts boolean, integer, or string of comma-separated CIDRs.
@@ -86,6 +87,7 @@ export const buildApp = (): Express => {
   app.use("/api/v1/dashboard", dashboardRouter);
   app.use("/api/v1/users", usersRouter);
   app.use("/api/v1/household", householdRouter);
+  app.use("/admin", adminRouter);
 
   app.use(errorHandler);
 
