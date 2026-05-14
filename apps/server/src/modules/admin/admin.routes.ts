@@ -6,7 +6,7 @@ export const adminRouter = Router();
 
 // Every /admin route requires the bearer admin token. The middleware
 // throws DomainError("AUTH_UNAUTHORIZED") on miss; the global error
-// handler maps that to 403.
+// handler maps that to 401 (see shared/middleware/error-handler.ts).
 adminRouter.use(adminAuth);
 
 adminRouter.get("/flags", flags.list);

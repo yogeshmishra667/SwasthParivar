@@ -61,8 +61,15 @@ RUN pnpm --filter @swasth/shared-types run build \
 FROM node:22.18.0-bookworm-slim AS runtime
 WORKDIR /app
 
+# CI / build script should pass `--build-arg GIT_SHA=$(git rev-parse HEAD)`.
+# Sentry uses this to group errors by release. If unset, the server's
+# Sentry init falls back to npm_package_version, then to "no release tag"
+# — none of which break behaviour but Sentry grouping is best with the SHA.
+ARG GIT_SHA=""
+
 ENV NODE_ENV=production \
-    PORT=4000
+    PORT=4000 \
+    GIT_SHA=${GIT_SHA}
 
 # Non-root user. Default `node` user (uid 1000) ships with the base image.
 USER node
