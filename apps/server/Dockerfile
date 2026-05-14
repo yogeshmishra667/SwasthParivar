@@ -38,7 +38,13 @@ COPY packages/domain-logic packages/domain-logic
 COPY packages/shared-types packages/shared-types
 
 # Prisma client must be generated before tsc runs so import types resolve.
-RUN pnpm --filter @swasth/server exec prisma generate
+# Prisma 7's `prisma.config.ts` uses strict env() which throws if
+# DATABASE_URL is missing — but `prisma generate` doesn't actually
+# connect anywhere, so a stub URL is enough to satisfy the parser at
+# image-build time. The runtime container is started with a real
+# DATABASE_URL by the deploy platform.
+RUN DATABASE_URL="postgresql://build:build@build/build" \
+    pnpm --filter @swasth/server exec prisma generate
 
 # --- stage 2: build ---------------------------------------------------
 FROM deps AS build

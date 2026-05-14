@@ -44,7 +44,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: env.SKIP != 'true'
         with:
-          node-version-file: .nvmrc
+          node-version: "22.x"
           cache: pnpm
 
       - name: pnpm install (offline-friendly)
