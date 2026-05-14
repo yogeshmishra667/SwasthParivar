@@ -1,6 +1,13 @@
 # SwasthParivar — Claude Code Instructions
 
-> **Production audit in progress.** If `audit-progress.md` exists at the repo root, read it before any audit / quality-gate / infra work and update it as items land. It tracks the rollout of the production-engineering audit (Sentry, idempotency, coverage ratchets, Dockerfile, dependabot, flag service, etc.) across sessions. The full audit lives at `~/.claude/plans/flickering-wiggling-sundae.md` on the author's machine — `audit-progress.md` is the portable, in-repo continuation.
+> **Production audit landed (2026-05-14).** Reference docs at the repo root:
+>
+> - `docs/ARCHITECTURE.md` — how observability / idempotency / flag service / critical-bypass / docker fit together. Read before touching any of them.
+> - `docs/SETUP.md` — every setup step still pending before prod (DSNs, secrets, branch protection, DR drill).
+> - `docs/HOWTO.md` — concrete recipes: use the flag service, add a PostHog event, ship a module, rollback, etc.
+> - `docs/runbooks/rollback.md` — incident response runbook (image revert / migration revert / provider kill switch / PITR).
+> - `audit-progress.md` — historical roadmap + session log.
+> - `scripts/preflight.sh` — wired into pre-push; simulates a fresh CI checkout locally. Override with `git push --no-verify` only in emergencies.
 
 ## Project
 
