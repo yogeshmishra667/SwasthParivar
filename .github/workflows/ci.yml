@@ -416,3 +416,80 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm dlx danger ci --dangerfile dangerfile.ts
+
+  # ──────────────────────────────────────────────────────────
+  # Server image build + smoke. Builds the production Dockerfile, runs
+  # the resulting container with the bare-minimum env, then probes
+  # /health to confirm the binary actually boots. Catches: missing
+  # files in COPY layers, prisma client absent, wrong entrypoint,
+  # node-version mismatches.
+  #
+  # Does NOT run the deep healthcheck — that needs Postgres+Redis,
+  # which is the integration-tests job's domain.
+  # ──────────────────────────────────────────────────────────
+  image-smoke:
+    name: Server image build + smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/server/Dockerfile
+          tags: swasth-server:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Boot container with stub env
+        env:
+          # Stub env — enough for the process to pass env-schema parse and
+          # start listening. /health works without DB/Redis (only
+          # /health/deep needs them). Secrets here are throwaway test
+          # values, not real credentials.
+          NODE_ENV: test
+          DATABASE_URL: "postgresql://stub:stub@127.0.0.1:65432/stub"
+          REDIS_URL: "redis://127.0.0.1:65433"
+          JWT_SECRET: "ci-jwt-secret-ci-jwt-secret-ci-jwt-secret"
+          JWT_REFRESH_SECRET: "ci-refresh-ci-refresh-ci-refresh-ci-refresh"
+          OTP_SECRET: "ci-otp-secret-ci-otp-secret-ci-otp-secret"
+          PORT: "4000"
+        run: |
+          set -eu
+          docker run -d \
+            --name swasth-server-smoke \
+            -p 4000:4000 \
+            -e NODE_ENV \
+            -e DATABASE_URL \
+            -e REDIS_URL \
+            -e JWT_SECRET \
+            -e JWT_REFRESH_SECRET \
+            -e OTP_SECRET \
+            -e PORT \
+            swasth-server:ci
+
+      - name: Probe /health
+        run: |
+          set -eu
+          # Container needs a few seconds to boot. Poll for up to 30s.
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4000/health > /tmp/health.json; then
+              echo "OK after ${i}s:"
+              cat /tmp/health.json
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::/health did not respond within 30s"
+          docker logs swasth-server-smoke || true
+          exit 1
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f swasth-server-smoke || true

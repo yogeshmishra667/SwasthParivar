@@ -1,3 +1,6 @@
+import { initSentry } from "@/services/sentry";
+initSentry();
+
 import "@/i18n/config";
 import "../global.css";
 import "react-native-get-random-values";
@@ -13,6 +16,7 @@ import { useProfileInactivity } from "@/hooks/useProfileInactivity";
 import { useSyncDrain } from "@/hooks/useSyncDrain";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { FontScaleProvider } from "@/components/shared/FontScaleProvider";
+import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { ProfileSelectorModal } from "@/components/profile/ProfileSelectorModal";
 import { isExpoGo } from "@/utils/runtime";
 
@@ -52,21 +56,23 @@ export default function RootLayout(): JSX.Element | null {
   if (!ready) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <FontScaleProvider>
-          <StatusBar style="dark" />
-          <OfflineBanner />
-          <ProfileSelectorModal />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(onboarding)" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="sos" options={{ presentation: "fullScreenModal" }} />
-          </Stack>
-        </FontScaleProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <FontScaleProvider>
+            <StatusBar style="dark" />
+            <OfflineBanner />
+            <ProfileSelectorModal />
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(onboarding)" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="sos" options={{ presentation: "fullScreenModal" }} />
+            </Stack>
+          </FontScaleProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

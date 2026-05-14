@@ -1,0 +1,59 @@
+# Top-level .dockerignore — applies to every `docker build` from the
+# repo root. Keep this tight: the build context is sent over the wire
+# to the daemon, so anything in here that isn't actually copied wastes
+# bandwidth and slows local builds.
+
+# Heavy local-only directories
+**/node_modules
+**/.expo
+**/.next
+**/.turbo
+**/.cache
+**/dist
+**/build
+**/coverage
+**/.tsbuildinfo
+
+# Version control + IDE
+.git
+.gitignore
+.gitattributes
+.gitmessage
+.github
+.husky
+.idea
+.vscode
+.claude
+.cursor
+
+# Local environment + secrets — NEVER let these leak into image layers
+.env
+.env.local
+.env.*.local
+*.env
+
+# Mobile-only — the server image never needs these.
+# Exception: the workspace manifest must be visible to pnpm install,
+# otherwise the lockfile resolution complains about a missing project.
+apps/mobile
+!apps/mobile/package.json
+
+# Tests + fixtures (not needed in runtime image)
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/__tests__
+**/__fixtures__
+**/tests
+
+# Docs + meta
+*.md
+LICENSE
+CODE_OF_CONDUCT.md
+audit-progress.md
+
+# Anything that ends with a tilde / temp
+*~
+*.bak
+*.swp
+.DS_Store

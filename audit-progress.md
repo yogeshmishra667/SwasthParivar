@@ -1,8 +1,8 @@
 # Audit Progress
 
 > Source plan: `~/.claude/plans/flickering-wiggling-sundae.md`
-> Last updated: 2026-05-14 (all Immediate items 1–5 done)
-> Current session focus: Done with Immediate bucket; pause for review before Short term (items 6–13)
+> Last updated: 2026-05-14 (all Immediate items 1–5 done; all Short term items 6–13 done)
+> Current session focus: Short term complete. Next session: Long term bucket (items 14–19).
 
 ## Status Legend
 
@@ -22,13 +22,13 @@
 ## Short term (2–4 weeks)
 
 - [x] 6. **[P1]** PostHog server emitter wired (`apps/server/src/shared/analytics/posthog.ts`). Pinned `posthog-node@~5.20.0` (newer versions require Node 22.22+; local is 22.18). 5 events emitting: `reading_logged`, `streak_milestone`, `voice_attempt` (success + rejected paths), `critical_bypass_triggered` (from worker), `notification_sent` (suppressed + sent). Strongly-typed `EventPropsMap`. No-op when key missing. Shutdown wired into graceful shutdown.
-- [ ] 7. **[X-cut]** `apps/server/Dockerfile` (multi-stage, non-root, healthcheck) + `.dockerignore` + CI image-build + container smoke against `/health`
+- [x] 7. **[X-cut]** `apps/server/Dockerfile` (3-stage: deps → build → runtime). Node 22.18 base, runs as `node` user, HEALTHCHECK against `/health` baked in. Root `.dockerignore` keeps the build context lean (mobile excluded except its `package.json` so pnpm install resolves). CI `image-smoke` job builds the image (Buildx + GHA cache), boots it with stub env, polls `/health` for 30s. Local docker daemon was down so CI will be the first real exercise.
 - [x] 8. **[X-cut]** `.github/dependabot.yml` (weekly, grouped npm + github-actions, ignores major bumps) + `.github/workflows/audit-moderate.yml` (monthly issue-opener on last-day-of-month, refreshes existing tracking issue rather than spamming). Also fixed root `lint-staged` to run prettier on `.ts/.tsx` (was eslint-only, causing format drift after commits).
 - [ ] 9. **[X-cut]** `dangerfile.ts` with rules: test-parity for `packages/domain-logic/src/**`, migration-parity for schema changes, large-PR explainer >500 LoC
 - [x] 10. **[X-cut]** `squawk` migration linter added to CI as a new `migration-lint` job (only fires on PRs that add a new `migration.sql`). Excludes `prefer-text-field` + `require-concurrent-index-creation` rules. Filenames flow through env + quoted shell access.
-- [ ] 11. **[P1]** Mobile: `eas.json`, `@sentry/react-native`, top-level `ErrorBoundary` in `app/_layout.tsx` with Hindi recovery copy
+- [x] 11. **[P1]** Mobile Sentry + ErrorBoundary + EAS. `@sentry/react-native@^8.11` installed; `src/services/sentry.ts` resolves DSN from `EXPO_PUBLIC_SENTRY_DSN` or `app.json.extra.sentryDsn`; scrubs auth/cookie + query strings. New `src/components/shared/ErrorBoundary.tsx` wraps the root layout — Hindi recovery copy ("Kuch gadbad hui — App phir se kholein"), 48dp button, sends `componentStack` + boundary tag to Sentry. `eas.json` with development / preview / production profiles.
 - [x] 12. **[X-cut]** `requestId` propagation through BullMQ. `CriticalAlertJob` gets optional `requestId`; controller passes `req.requestId` → service → queue payload; worker derives `logger.child({ queue, jobId, requestId })`. Cron-only workers (notification-trigger, grace-reset, med-reminder) keep module logger.
-- [ ] 13. **[X-cut]** Redis-backed flag service (`apps/server/src/shared/flags/`): generic `get/set` + 30s in-process cache. Admin route gated by `JWT_ADMIN_SECRET`. Audit log on every set. Flag _keys_ added on-demand. **Never flagged:** critical-bypass thresholds, chain ordering, parallel execution.
+- [x] 13. **[X-cut]** Flag service in `apps/server/src/shared/flags/` — `getFlag/getFlagOrNull/setFlag/listFlags/getAudit` + 30s in-process cache + Redis pubsub cross-invalidation + capped audit log (100 entries per key). Admin module under `/admin/flags` (`adminAuth` middleware = constant-time bearer check against `ADMIN_API_TOKEN`; required in production). Integration tests: missing token 403, wrong token 403, PUT→GET→audit roundtrip with `X-Admin-Actor`, boolean/object values, invalid-key 400, default fallback. Critical-bypass thresholds + chain stay hardcoded.
 
 ## Long term (1–2 months)
 
@@ -71,3 +71,4 @@
 - 2026-05-14: item 5 done — `SENTRY_DSN` + `POSTHOG_API_KEY` now fatally required when `NODE_ENV=production` (post-parse guard prints which keys are missing and exits 1). Dev/test unaffected. Full workspace typecheck + lint + purity green. **Immediate bucket complete (5/5).**
 - 2026-05-14: bundled commit `43f84f8` "chore(audit): immediate bucket — Sentry, idempotency, TS pin, coverage, env guard" landed on `chore/quality-gate-hardening`. 12 files, +389/-37. Next: Short term bucket (items 6–13).
 - 2026-05-14: bundled commit `497bca4` "chore(audit): short-term batch 1 — PostHog, requestId, dependabot, squawk, danger" — items 6, 8, 9, 10, 12. 15 files, +573/-13. Remaining short-term: 7 (Dockerfile), 11 (mobile Sentry + EAS + ErrorBoundary), 13 (flag service) — each ~2h. Natural pause for review.
+- 2026-05-14: short-term batch 2 (items 7, 11, 13). New files: `apps/server/Dockerfile`, `.dockerignore`, `apps/mobile/eas.json`, `apps/mobile/src/services/sentry.ts`, `apps/mobile/src/components/shared/ErrorBoundary.tsx`, `apps/server/src/shared/flags/{flags,index}.ts`, `apps/server/src/shared/middleware/admin-auth.ts`, `apps/server/src/modules/admin/{admin.routes,flags.controller,flags.validation}.ts`, integration test for admin flags. ci.yml gets an `image-smoke` job. Workspace typecheck + lint + format all green. **Short term bucket complete (8/8).**

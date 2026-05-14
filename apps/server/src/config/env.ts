@@ -38,6 +38,11 @@ const envSchema = z.object({
 
   EXPO_ACCESS_TOKEN: z.string().optional(),
 
+  // Bearer secret guarding /admin routes (currently just the flag service
+  // admin endpoints). Optional in dev/test; promoted to required for
+  // production by the prod guard below.
+  ADMIN_API_TOKEN: z.string().min(32).optional(),
+
   SENTRY_DSN: z.string().optional(),
   POSTHOG_API_KEY: z.string().optional(),
 
@@ -51,7 +56,7 @@ const envSchema = z.object({
 // them, otherwise the server loses error visibility and product analytics
 // silently. Treat absence as a fatal config error, same as a missing
 // DATABASE_URL.
-const PROD_REQUIRED_KEYS = ["SENTRY_DSN", "POSTHOG_API_KEY"] as const;
+const PROD_REQUIRED_KEYS = ["SENTRY_DSN", "POSTHOG_API_KEY", "ADMIN_API_TOKEN"] as const;
 
 const parsed = envSchema.safeParse(process.env);
 
