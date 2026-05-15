@@ -41,7 +41,7 @@ jobs:
       - uses: pnpm/action-setup@v4
         if: env.SKIP != 'true'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         if: env.SKIP != 'true'
         with:
           node-version: "22.x"
@@ -70,7 +70,7 @@ jobs:
 
       - name: Open / refresh tracking issue
         if: env.SKIP != 'true' && steps.audit.outputs.status != '0'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
