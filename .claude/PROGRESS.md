@@ -1,8 +1,8 @@
 # SwasthParivar — Build Progress
 
-**Last updated:** 2026-05-13 (session 7, end-of-day)
-**Status:** ✅ **Phase 1 complete.** 🚧 **Phase 2 in progress** — main merged steps 0+1; steps 2 + 3a + 3b shipped as PRs awaiting review.
-**Branch:** main (9 Phase 1 PRs + #14 #15 #16 merged) + open Phase 2 PRs: `feat/meal-logs-server` (#17, step 2 + docs), `feat/insight-engine-foundation` (#18, step 3a — InsightEvent + stats helpers + insights module), `feat/insight-detectors-spike-trend` (step 3b — `detectSpike` + `detectTrend` pure functions).
+**Last updated:** 2026-05-15 (session 8 — steps 3d + 4 + 5 + 6)
+**Status:** ✅ **Phase 1 complete.** 🚧 **Phase 2 in progress** — steps 2, 3a, 3b, 3c, 3d, 4, 5, 6 shipped as PRs awaiting review.
+**Branch:** main + open Phase 2 PRs: `feat/meal-logs-server` (#17, step 2), `feat/insight-engine-foundation` (#18, step 3a), `feat/insight-detectors-spike-trend` (#19, step 3b), `feat/insight-detectors-meal-anomaly` (steps 3c + 3d), `feat/hba1c-estimator` (step 4), `feat/health-score` (step 5), `feat/dashboard-summary` (step 6 — `composeDashboardSummary` + extended `GET /api/v1/dashboard`).
 
 ## Dependency versions
 
@@ -112,7 +112,7 @@ _No items remaining. Every Phase 1 mandate from `CLAUDE.md` is shipped._
    - ⏭️ 3c — `detectMealCorrelation` + `detectAnomaly` + `ANALYZE_READING` BullMQ worker wiring (runs all 4 detectors post-glucose-insert, persists InsightEvent rows)
 5. ⏭️ Step 4 — HbA1c estimator
 6. ⏭️ Step 5 — Daily HealthScore job + `HealthScore` model
-7. ⏭️ Step 6 — Hindi/English dashboard summary card (rule-based)
+7. ✅ Step 6 — Hindi/English dashboard summary card (rule-based) — branch `feat/dashboard-summary`
 8. ⏭️ Step 7 — Guardian read-only view (`FamilyLink` + `GET /api/v1/family/patients/:id/dashboard`)
 
 Each step ships as its own branch + PR; `git-workflow` skill conventions (squash merge, conventional commits, no Co-Authored-By trailer).
@@ -130,7 +130,7 @@ Each step ships as its own branch + PR; `git-workflow` skill conventions (squash
 - [ ] Step 3c — `detectMealCorrelation` (groups post_meal readings by `MealCategory` in 7-calendar-day window, min 5 per category) + `detectAnomaly` (median + IQR, min 21 days) + `ANALYZE_READING` BullMQ worker fired post-glucose-insert (3 retries, exp backoff). Worker runs all 4 detectors in parallel; below-floor results persist with `confidence < 0.7` (suppressed from feed); above-floor results visible.
 - [ ] Step 4 — `estimateHbA1c` pure function (weights: 30d ×1.5, 30d ×1.0, 30d ×0.5) + `GET /api/v1/hba1c/estimate`, Redis-cached 1h, 422 `INSUFFICIENT_DATA` < 30 readings.
 - [ ] Step 5 — `HealthScore` model + `DAILY_HEALTH_SCORE` repeatable BullMQ (`0 6 * * *` Asia/Kolkata) + `computeHealthScore` pure function (logging 20 + stability 25 + trend 25 + med 20 + streak 10).
-- [ ] Step 6 — `composeDashboardSummary` pure function + `DAILY_DASHBOARD_SUMMARY` job + extend `GET /api/v1/dashboard` response with `summary`, `bpLatest`, `mealsToday`, `insightsUnacknowledgedCount`, `healthScore`.
+- [x] **Step 6 — Dashboard summary card** — Pure function `composeDashboardSummary` in `packages/domain-logic/src/dashboard-summary/`. Rule-based (no Claude — Phase 3 owns AI; the dashboard fires on every load so latency/cost must be zero). Hindi-first natural-language headline + up to 3 detail lines (glucose, BP, "kal se behtar" trend) with English fallback on the language toggle. Priority order: cold-start (< 7d) → no-readings prompt → critical-value short-circuit → normal day with optional health-score in the headline. Critical threshold reuses GLUCOSE_CRITICAL_LOW (<65) / GLUCOSE_CRITICAL_HIGH (>315). 20 new tests covering all four priority branches + English variant + invariants. **Extended `GET /api/v1/dashboard`** (new `dashboard.service.ts` extracted from the inline route) with `summary`, `bpLatest`, `mealsToday`, `insightsUnacknowledgedCount` (confidence ≥ 0.7, not acknowledged, < 30 days old), and `healthScore` (gracefully `null` when the HealthScore model isn't on the running schema — runtime-safe degrade for staged rollouts). Branch `feat/dashboard-summary`.
 - [ ] Step 7 — `FamilyLink` model + family module. PII-stripped dashboard reuse via `readOnly: true` + `viewerUserId`.
 
 ### Architectural decisions locked-in
