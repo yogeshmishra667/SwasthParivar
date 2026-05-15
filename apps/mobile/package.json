@@ -51,7 +51,7 @@
     "i18next": "^23.16.4",
     "nativewind": "^4.2.3",
     "posthog-react-native": "^3.5.0",
-    "react": "19.1.0",
+    "react": "19.2.6",
     "react-hook-form": "^7.53.1",
     "react-i18next": "^15.1.0",
     "react-native": "0.81.5",
@@ -72,7 +72,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.9",
     "@testing-library/react-native": "^12.8.0",
-    "@types/react": "~19.1.17",
+    "@types/react": "~19.2.14",
     "@types/uuid": "^10.0.0",
     "@vitest/coverage-v8": "^2.0.5",
     "babel-plugin-module-resolver": "^5.0.2",
