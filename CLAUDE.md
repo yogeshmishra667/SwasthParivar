@@ -6,6 +6,7 @@
 > - `docs/SETUP.md` — every setup step still pending before prod (DSNs, secrets, branch protection, DR drill).
 > - `docs/HOWTO.md` — concrete recipes: use the flag service, add a PostHog event, ship a module, rollback, etc.
 > - `docs/runbooks/rollback.md` — incident response runbook (image revert / migration revert / provider kill switch / PITR).
+> - `docs/deploy-digitalocean.md` — step-by-step deploy runbook (DO Droplet, Bangalore, behind nginx + Let's Encrypt). Pairs with `apps/server/docker-compose.prod.yml`.
 > - `audit-progress.md` — historical roadmap + session log.
 > - `scripts/preflight.sh` — wired into pre-push; simulates a fresh CI checkout locally. Override with `git push --no-verify` only in emergencies.
 
