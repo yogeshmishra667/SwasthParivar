@@ -11,6 +11,7 @@ import { authRouter } from "./modules/auth/auth.routes.js";
 import { readingsRouter } from "./modules/readings/readings.routes.js";
 import { mealsRouter } from "./modules/meals/meals.routes.js";
 import { insightsRouter } from "./modules/insights/insights.routes.js";
+import { healthScoreRouter } from "./modules/health-score/health-score.routes.js";
 import { medicationsRouter } from "./modules/medications/medications.routes.js";
 import { streaksRouter } from "./modules/streaks/streaks.routes.js";
 import { syncRouter } from "./modules/sync/sync.routes.js";
@@ -81,6 +82,7 @@ export const buildApp = (): Express => {
   app.use("/api/v1/readings", readingsRouter);
   app.use("/api/v1/meals", mealsRouter);
   app.use("/api/v1/insights", insightsRouter);
+  app.use("/api/v1/health-score", healthScoreRouter);
   app.use("/api/v1/medications", medicationsRouter);
   app.use("/api/v1/streaks", streaksRouter);
   app.use("/api/v1/sync", syncRouter);

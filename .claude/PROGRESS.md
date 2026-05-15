@@ -1,8 +1,8 @@
 # SwasthParivar — Build Progress
 
-**Last updated:** 2026-05-13 (session 7, end-of-day)
-**Status:** ✅ **Phase 1 complete.** 🚧 **Phase 2 in progress** — main merged steps 0+1; steps 2 + 3a + 3b shipped as PRs awaiting review.
-**Branch:** main (9 Phase 1 PRs + #14 #15 #16 merged) + open Phase 2 PRs: `feat/meal-logs-server` (#17, step 2 + docs), `feat/insight-engine-foundation` (#18, step 3a — InsightEvent + stats helpers + insights module), `feat/insight-detectors-spike-trend` (step 3b — `detectSpike` + `detectTrend` pure functions).
+**Last updated:** 2026-05-15 (session 8 — steps 3d + 4 + 5)
+**Status:** ✅ **Phase 1 complete.** 🚧 **Phase 2 in progress** — steps 2, 3a, 3b, 3c, 3d, 4, 5 shipped as PRs awaiting review.
+**Branch:** main (9 Phase 1 PRs + #14 #15 #16 merged) + open Phase 2 PRs: `feat/meal-logs-server` (#17, step 2), `feat/insight-engine-foundation` (#18, step 3a), `feat/insight-detectors-spike-trend` (#19, step 3b), `feat/insight-detectors-meal-anomaly` (step 3c + 3d), `feat/hba1c-estimator` (step 4), `feat/health-score` (step 5 — `computeHealthScore` + `HealthScore` model + `DAILY_HEALTH_SCORE` cron + `GET /api/v1/health-score`).
 
 ## Dependency versions
 
@@ -111,7 +111,7 @@ _No items remaining. Every Phase 1 mandate from `CLAUDE.md` is shipped._
    - ✅ **3b — `detectSpike` + `detectTrend` pure functions** consuming 3a helpers — branch `feat/insight-detectors-spike-trend`
    - ⏭️ 3c — `detectMealCorrelation` + `detectAnomaly` + `ANALYZE_READING` BullMQ worker wiring (runs all 4 detectors post-glucose-insert, persists InsightEvent rows)
 5. ⏭️ Step 4 — HbA1c estimator
-6. ⏭️ Step 5 — Daily HealthScore job + `HealthScore` model
+6. ✅ Step 5 — Daily HealthScore job + `HealthScore` model — branch `feat/health-score`
 7. ⏭️ Step 6 — Hindi/English dashboard summary card (rule-based)
 8. ⏭️ Step 7 — Guardian read-only view (`FamilyLink` + `GET /api/v1/family/patients/:id/dashboard`)
 
@@ -129,7 +129,7 @@ Each step ships as its own branch + PR; `git-workflow` skill conventions (squash
 - [x] **Step 3b — `detectSpike` + `detectTrend`** — `packages/domain-logic/src/detectors/spike.ts` and `trend.ts`. Both filter to a single `readingType` (medical-correctness rule). **Spike**: 14-day rolling median + σ-distance, severity bands info(1.5σ) / warn(2σ) / critical(3σ); critical-high override always promotes value > 315 to severe regardless of σ. Confidence tiers: severe ≥ 0.85, significant ≥ 0.7, mild starts at 0.4 (only clears the feed floor with rich history — by design). **Trend**: linear regression on 5 / 14 / 30-day windows, R² > 0.5 gate, slope thresholds info(1) / warn(2) / critical(5) mg/dL/day, direction tagged. Span check rejects 5 readings packed into 1 day. 28 new tests (24 cases + 4 fast-check property tests). Detector files: **100% lines + 100% functions, 96.96% branches** (uncovered branches are TypeScript-strict `??` fallbacks on indexed access — unreachable at runtime). Domain-logic suite: 104/104 ✅. PR opens against `feat/insight-engine-foundation` (PR #18) since 3b depends on the stats helpers from 3a.
 - [ ] Step 3c — `detectMealCorrelation` (groups post_meal readings by `MealCategory` in 7-calendar-day window, min 5 per category) + `detectAnomaly` (median + IQR, min 21 days) + `ANALYZE_READING` BullMQ worker fired post-glucose-insert (3 retries, exp backoff). Worker runs all 4 detectors in parallel; below-floor results persist with `confidence < 0.7` (suppressed from feed); above-floor results visible.
 - [ ] Step 4 — `estimateHbA1c` pure function (weights: 30d ×1.5, 30d ×1.0, 30d ×0.5) + `GET /api/v1/hba1c/estimate`, Redis-cached 1h, 422 `INSUFFICIENT_DATA` < 30 readings.
-- [ ] Step 5 — `HealthScore` model + `DAILY_HEALTH_SCORE` repeatable BullMQ (`0 6 * * *` Asia/Kolkata) + `computeHealthScore` pure function (logging 20 + stability 25 + trend 25 + med 20 + streak 10).
+- [x] **Step 5 — Daily HealthScore** — Pure function `computeHealthScore` in `packages/domain-logic/src/health-score/`. 5-component blend (logging 20 / stability 25 / trend 25 / medication 20 / streak 10 — hard-coded `HEALTH_SCORE_WEIGHTS` sum to 100). Each component a linear ramp: logging 2-logs/day = 100, stability σ≤15 fasting = 100, trend slope ≤0 mg/dL/day = 100, med take ratio (delayed counts as taken), streak 14d = 100. Insufficient-data buckets default to 50 (don't punish new users). New Prisma `HealthScore` model with composite unique key `(user_id, computed_for_date)` so the daily cron is idempotent. New `DAILY_HEALTH_SCORE` BullMQ queue + `daily-health-score.processor.ts` / `.worker.ts` (mirrors critical-alert split). Cron fires 00:30 UTC = 06:00 IST daily, iterates onboarded users, upserts the row, invalidates `health-score:<userId>` Redis cache. `GET /api/v1/health-score` returns the most-recent stored row (or computes on-the-fly for cold-start users), cached 24h. 21 new tests. Branch `feat/health-score`.
 - [ ] Step 6 — `composeDashboardSummary` pure function + `DAILY_DASHBOARD_SUMMARY` job + extend `GET /api/v1/dashboard` response with `summary`, `bpLatest`, `mealsToday`, `insightsUnacknowledgedCount`, `healthScore`.
 - [ ] Step 7 — `FamilyLink` model + family module. PII-stripped dashboard reuse via `readOnly: true` + `viewerUserId`.
 
