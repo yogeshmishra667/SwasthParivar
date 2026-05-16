@@ -40,6 +40,8 @@
 | Image smoke       | `docker build` + curl `/health`                                                                                                    | Dockerfile doesn't produce a bootable image                                                                                                  |
 | Image CVE scan    | Trivy (HIGH+CRITICAL, fixable only, OS + library)                                                                                  | vulnerable Node base or system package — `ignore-unfixed: true` so unfixed CVEs surface as tracked issues, not PR blockers                   |
 | Danger            | `pnpm dlx danger ci`                                                                                                               | (1) domain-logic source changed without a test, (2) schema.prisma changed without migration, (3) PR > 500 LoC without "## Why this is large" |
+| SBOM              | Syft (CycloneDX + SPDX) — source-tree + Docker image                                                                               | (informational — uploads SBOM artefacts to PR/release; attached to GitHub releases on `v*` tag)                                              |
+| OpenSSF Scorecard | weekly cron + push to main                                                                                                         | (informational — uploads SARIF to Security tab; scores branch protection, pinned actions, signed releases, SAST presence, token perms, etc.) |
 | Dependabot        | weekly cron                                                                                                                        | (informational PRs only — doesn't fail builds)                                                                                               |
 | Audit moderate    | monthly cron                                                                                                                       | files a GitHub Issue when moderate CVEs accumulate                                                                                           |
 
@@ -195,6 +197,29 @@ trustworthy (CodeQL, dependency review, Trivy, eslint-plugin-security,
 gitleaks). None of these need keys; all of them ship findings to the
 GitHub Security tab where they survive across PRs and aren't drowned
 out by ephemeral run-logs.
+
+### Supply-chain transparency — SBOM + Scorecard
+
+Two informational (non-blocking) workflows audit what's actually being
+shipped:
+
+- **`.github/workflows/sbom.yml`** — Syft generates CycloneDX + SPDX
+  inventories from (a) the pnpm lockfile (source intent) and (b) the
+  built Docker image (actual deploy artefact, includes OS packages
+  the lockfile can't see). Uploaded as workflow artefacts on every
+  PR and push; attached to GitHub releases on `v*` tag. Auditors and
+  procurement consume the SBOM, not the lockfile.
+- **`.github/workflows/scorecard.yml`** — OpenSSF Scorecard runs
+  weekly + on push to main. Audits 19 supply-chain hygiene rules
+  (branch protection, pinned actions, signed releases, token
+  permissions, SAST presence, etc.). Results land in the Security
+  tab as SARIF and a numeric score is published at
+  `https://api.securityscorecards.dev/projects/github.com/<org>/<repo>`.
+  Failing rules become a punch list for incremental hardening, not a
+  blocker on the current PR.
+
+Neither workflow fails the build. They're audit, not gate. The gates
+that DO fail PRs are the ones in the table above.
 
 ---
 

@@ -113,24 +113,26 @@ tests + Docker image build + `/health` smoke (~5min total).
 Everything that runs in CI also runs locally **except** the ones below.
 The gap is intentional (cost vs. value), not drift.
 
-| Gate                           | pre-commit |   pre-push (preflight)    |     CI     |
-| ------------------------------ | :--------: | :-----------------------: | :--------: |
-| ESLint                         | ✅ staged  |       ✅ workspace        |     ✅     |
-| Prettier (`.ts/.json/.md/...`) | ✅ staged  |            ✅             |     ✅     |
-| Prisma schema format           | ✅ staged  |            ✅             |     ✅     |
-| Typecheck                      |     —      |            ✅             |     ✅     |
-| Domain-logic purity            |     —      |            ✅             |     ✅     |
-| Unit tests + coverage          |     —      |            ✅             |     ✅     |
-| Schema ↔ migration parity      |     —      |            ✅             | ✅ PR-only |
-| Migration lint (squawk)        |     —      |            ✅             | ✅ PR-only |
-| Build (workspace)              |     —      |   (typecheck covers it)   |     ✅     |
-| Integration tests              |     —      | opt-in `PREFLIGHT_FULL=1` |     ✅     |
-| Docker image smoke + Trivy     |     —      |  opt-in `--with-docker`   |     ✅     |
-| `pnpm audit` (HIGH/CRITICAL)   |     —      |             —             |     ✅     |
-| CodeQL SAST                    |     —      |             —             |     ✅     |
-| Dependency review (PR diff)    |     —      |             —             | ✅ PR-only |
-| Secret scan (gitleaks)         |     —      |             —             |     ✅     |
-| Danger (PR rules)              |     —      |             —             | ✅ PR-only |
+| Gate                           | pre-commit |   pre-push (preflight)    |                      CI                      |
+| ------------------------------ | :--------: | :-----------------------: | :------------------------------------------: |
+| ESLint                         | ✅ staged  |       ✅ workspace        |                      ✅                      |
+| Prettier (`.ts/.json/.md/...`) | ✅ staged  |            ✅             |                      ✅                      |
+| Prisma schema format           | ✅ staged  |            ✅             |                      ✅                      |
+| Typecheck                      |     —      |            ✅             |                      ✅                      |
+| Domain-logic purity            |     —      |            ✅             |                      ✅                      |
+| Unit tests + coverage          |     —      |            ✅             |                      ✅                      |
+| Schema ↔ migration parity      |     —      |            ✅             |                  ✅ PR-only                  |
+| Migration lint (squawk)        |     —      |            ✅             |                  ✅ PR-only                  |
+| Build (workspace)              |     —      |   (typecheck covers it)   |                      ✅                      |
+| Integration tests              |     —      | opt-in `PREFLIGHT_FULL=1` |                      ✅                      |
+| Docker image smoke + Trivy     |     —      |  opt-in `--with-docker`   |                      ✅                      |
+| `pnpm audit` (HIGH/CRITICAL)   |     —      |             —             |                      ✅                      |
+| CodeQL SAST                    |     —      |             —             |                      ✅                      |
+| Dependency review (PR diff)    |     —      |             —             |                  ✅ PR-only                  |
+| Secret scan (gitleaks)         |     —      |             —             |                      ✅                      |
+| Danger (PR rules)              |     —      |             —             |                  ✅ PR-only                  |
+| SBOM (CycloneDX + SPDX)        |     —      |             —             |    ✅ informational, attached to releases    |
+| OpenSSF Scorecard              |     —      |             —             | ✅ informational, weekly cron + push to main |
 
 Skipping a hook in an emergency: `git commit --no-verify` / `git push --no-verify`.
 Use sparingly — CI runs the same checks and will reject the PR. If you find

@@ -1,0 +1,89 @@
+name: OpenSSF Scorecard
+
+# Automated supply-chain hygiene scoring from the OSSF (Linux
+# Foundation). Audits 19 things on every push to main and weekly:
+#   - Branch protection rules
+#   - Pinned action versions (vs `@main` / floating tags)
+#   - Signed releases / signed commits
+#   - SAST presence (CodeQL → check for us)
+#   - License declaration
+#   - Maintained signal (commit frequency)
+#   - Token permissions on workflows
+#   - Webhook security
+#   - and more...
+#
+# Output: a SARIF report in Security -> Code scanning, a JSON score,
+# and a public badge at https://api.securityscorecards.dev/projects/...
+#
+# WHY this exists:
+#   - Continuous audit. Tells you when a NEW workflow lands without
+#     pinned actions or with overly-broad permissions.
+#   - Reproducible score. "What is our supply-chain posture?" gets a
+#     numeric answer that improves over time as we address findings.
+#   - Free. Runs on GitHub-hosted infra, no third-party account needed.
+#
+# WHAT this does NOT do:
+#   - Does not fail the build. It is an audit, not a gate. Findings
+#     surface in Security tab; we address them deliberately.
+#   - Does not replace dependabot/Trivy/CodeQL. It is a meta-check on
+#     the repo posture, not a per-PR security gate.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Wednesdays 06:30 UTC (12:00 IST) — different day than CodeQL
+    # (Monday) to spread the noise.
+    - cron: "30 6 * * 3"
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # Required to upload SARIF results to Security tab.
+      security-events: write
+      # Required to read repo content + workflow metadata.
+      contents: read
+      actions: read
+      # Required for branch-protection check. The action's docs say
+      # this is the minimum needed for the rule.
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Scorecard's "Maintained" check looks at commit frequency
+          # over the whole history.
+          persist-credentials: false
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@v2.4.0
+        with:
+          results_file: scorecard-results.sarif
+          results_format: sarif
+          # publish_results=true posts the score to OpenSSF's public
+          # registry so the badge in README resolves. Skip on PR (no
+          # publish from forks).
+          publish_results: true
+
+      # Upload as workflow artefact too — useful for diffing the
+      # raw JSON results across runs.
+      - name: Upload SARIF as artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: scorecard-results-sarif
+          path: scorecard-results.sarif
+          retention-days: 30
+
+      # Upload to GitHub's code-scanning so findings appear in the
+      # Security tab alongside CodeQL alerts.
+      - name: Upload SARIF to GitHub
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: scorecard-results.sarif
