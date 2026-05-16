@@ -334,9 +334,12 @@ jobs:
         if: steps.detect.outputs.has_new == 'true'
         run: |
           set -eu
-          SQUAWK_VERSION=1.5.4
-          curl -sSL -o /tmp/squawk \
-            "https://github.com/sbdchd/squawk/releases/download/v${SQUAWK_VERSION}/squawk-linux-x86_64"
+          # Squawk v1.5.4 and the `squawk-linux-x86_64` asset are gone from
+          # upstream releases. v2.x ships `squawk-linux-x64`. `-f` makes curl
+          # fail loudly on a 404 instead of writing an HTML page to disk.
+          SQUAWK_VERSION=2.52.1
+          curl -sSLf -o /tmp/squawk \
+            "https://github.com/sbdchd/squawk/releases/download/v${SQUAWK_VERSION}/squawk-linux-x64"
           chmod +x /tmp/squawk
           /tmp/squawk --version
 
