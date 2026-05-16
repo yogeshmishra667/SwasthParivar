@@ -19,7 +19,10 @@ const statusFor = (code: ErrorCode): number => {
     case "READING_NOT_FOUND":
     case "MEAL_NOT_FOUND":
     case "INSIGHT_NOT_FOUND":
+    case "FAMILY_LINK_NOT_FOUND":
       return 404;
+    case "FAMILY_INVITE_INVALID":
+      return 400;
     case "FAMILY_LINK_EXISTS":
     case "SOS_ALREADY_ACTIVE":
     case "READING_STALE_VERSION":
