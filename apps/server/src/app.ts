@@ -19,6 +19,7 @@ import { syncRouter } from "./modules/sync/sync.routes.js";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
 import { usersRouter } from "./modules/users/users.routes.js";
 import { householdRouter } from "./modules/household/household.routes.js";
+import { familyRouter } from "./modules/family/family.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { adminRouter } from "./modules/admin/admin.routes.js";
 
@@ -91,6 +92,7 @@ export const buildApp = (): Express => {
   app.use("/api/v1/dashboard", dashboardRouter);
   app.use("/api/v1/users", usersRouter);
   app.use("/api/v1/household", householdRouter);
+  app.use("/api/v1/family", familyRouter);
   app.use("/admin", adminRouter);
 
   app.use(errorHandler);

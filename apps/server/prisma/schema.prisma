@@ -106,6 +106,26 @@ enum InsightSeverityLevel {
   critical
 }
 
+// FamilyLink lifecycle. A patient creates a `pending` invite for a
+// guardian; the guardian moves it to `accepted` (or `declined`). Either
+// side can `revoked` it later. Only `accepted` links are visible from
+// /family endpoints.
+enum FamilyLinkStatus {
+  pending
+  accepted
+  declined
+  revoked
+}
+
+// Sensitivity controls how loudly Silent Guardian (Phase 3) speaks to
+// this specific guardian. Phase 2 stores it but never reads it; kept on
+// the model so the Phase 3 migration is purely additive.
+enum FamilyAlertSensitivity {
+  low
+  medium
+  high
+}
+
 // ─────────────────────────────────────────────────────────────
 // Users & Household (Phase 1)
 // ─────────────────────────────────────────────────────────────
@@ -127,7 +147,7 @@ model User {
   preferredLanguage  Language    @default(hi) @map("preferred_language")
   conditions         Condition[]
   timezone           String      @default("Asia/Kolkata")
-  householdId        String      @db.Uuid @map("household_id")
+  householdId        String      @map("household_id") @db.Uuid
   onboardingComplete Boolean     @default(false) @map("onboarding_complete")
   onboardingStep     Int         @default(0) @map("onboarding_step")
   tier               Tier        @default(free)
@@ -135,27 +155,76 @@ model User {
   createdAt          DateTime    @default(now()) @map("created_at")
   updatedAt          DateTime    @updatedAt @map("updated_at")
 
-  household            Household             @relation(fields: [householdId], references: [id])
-  glucoseReadings      GlucoseReading[]
-  bpReadings           BPReading[]
-  mealLogs             MealLog[]
-  insights             InsightEvent[]
-  medicationSchedules  MedicationSchedule[]
-  medicationLogs       MedicationLog[]
-  streak               UserStreak?
-  feedbackEvents       FeedbackEvent[]
-  notificationState    NotificationState?
-  emergencyContacts    EmergencyContact[]
-  pushTokens           PushToken[]
-  healthScores         HealthScore[]
+  household           Household            @relation(fields: [householdId], references: [id])
+  glucoseReadings     GlucoseReading[]
+  bpReadings          BPReading[]
+  mealLogs            MealLog[]
+  insights            InsightEvent[]
+  medicationSchedules MedicationSchedule[]
+  medicationLogs      MedicationLog[]
+  streak              UserStreak?
+  feedbackEvents      FeedbackEvent[]
+  notificationState   NotificationState?
+  emergencyContacts   EmergencyContact[]
+  pushTokens          PushToken[]
+  healthScores        HealthScore[]
+  // Family links — a user can be the patient on some rows and the
+  // guardian on others. Phase 2 ships the read-only dashboard; alerts
+  // arrive in Phase 3.
+  patientFamilyLinks  FamilyLink[]         @relation("PatientLinks")
+  guardianFamilyLinks FamilyLink[]         @relation("GuardianLinks")
 
   @@index([householdId])
   @@map("users")
 }
 
+// ─────────────────────────────────────────────────────────────
+// Family / Guardian links (Phase 2 step 7)
+// ─────────────────────────────────────────────────────────────
+
+// A FamilyLink connects one patient to one guardian (both `User` rows,
+// possibly in different households). Phase 2 ships the read-only
+// dashboard endpoint; alerts arrive in Phase 3 and reuse this same row.
+// `visibleConditions` lets the patient hide e.g. cardiac history from a
+// specific guardian without breaking the link.
+model FamilyLink {
+  id                String                 @id @default(uuid()) @db.Uuid
+  patientId         String                 @map("patient_id") @db.Uuid
+  guardianId        String                 @map("guardian_id") @db.Uuid
+  // Free-text relationship label entered by the patient ("son",
+  // "beti", "Mausi"). Not an enum — labels are user-facing copy.
+  relationship      String?
+  // Default-on so the Phase 3 alert pipeline doesn't require a
+  // migration to start sending. Patient can flip per-guardian via the
+  // privacy endpoint at any time.
+  alertEnabled      Boolean                @default(true) @map("alert_enabled")
+  // Subset of the patient's `conditions` array that this guardian can
+  // see. Empty array = no conditions hidden, all are visible (default).
+  // Non-empty = the dashboard filters to these conditions only.
+  visibleConditions String[]               @default([]) @map("visible_conditions")
+  alertSensitivity  FamilyAlertSensitivity @default(medium) @map("alert_sensitivity")
+  status            FamilyLinkStatus       @default(pending)
+  acceptedAt        DateTime?              @map("accepted_at")
+  revokedAt         DateTime?              @map("revoked_at")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+
+  patient  User @relation("PatientLinks", fields: [patientId], references: [id], onDelete: Cascade)
+  guardian User @relation("GuardianLinks", fields: [guardianId], references: [id], onDelete: Cascade)
+
+  // Only one link per (patient, guardian) pair regardless of status —
+  // a re-invite after a revoke updates the existing row in place. The
+  // controller surfaces FAMILY_LINK_EXISTS when an active row is
+  // already there.
+  @@unique([patientId, guardianId])
+  @@index([guardianId, status])
+  @@index([patientId, status])
+  @@map("family_links")
+}
+
 model EmergencyContact {
   id           String   @id @default(uuid()) @db.Uuid
-  userId       String   @db.Uuid @map("user_id")
+  userId       String   @map("user_id") @db.Uuid
   name         String
   phone        String
   relationship String
@@ -174,29 +243,29 @@ model EmergencyContact {
 // ─────────────────────────────────────────────────────────────
 
 model GlucoseReading {
-  id                          String             @default(uuid()) @db.Uuid
-  clientUuid                  String             @db.Uuid @map("client_uuid")
-  userId                      String             @db.Uuid @map("user_id")
-  valueMgDl                   Int                @map("value_mg_dl")
-  readingType                 GlucoseReadingType @map("reading_type")
-  context                     ReadingContext     @default(normal)
-  notes                       String?
-  source                      ReadingSource
-  measuredAt                  DateTime           @map("measured_at")
-  streakCreditedTo            DateTime           @db.Date @map("streak_credited_to")
+  id                         String             @default(uuid()) @db.Uuid
+  clientUuid                 String             @map("client_uuid") @db.Uuid
+  userId                     String             @map("user_id") @db.Uuid
+  valueMgDl                  Int                @map("value_mg_dl")
+  readingType                GlucoseReadingType @map("reading_type")
+  context                    ReadingContext     @default(normal)
+  notes                      String?
+  source                     ReadingSource
+  measuredAt                 DateTime           @map("measured_at")
+  streakCreditedTo           DateTime           @map("streak_credited_to") @db.Date
   // Anti-cheat flags raised by the streak engine for this reading
   // (e.g. ["same_value_3_consecutive"]). Stored for analytics; never
   // blocks save. Empty array when no flags raised.
-  antiCheatFlags              Json               @default("[]") @map("anti_cheat_flags")
+  antiCheatFlags             Json               @default("[]") @map("anti_cheat_flags")
   // True when streak credit used server-received time instead of the
   // client-reported `measuredAt` (Patch #18 — fired when the user has
   // crossed time_anomaly_count >= 2). The reading's measuredAt remains
   // the patient-reported timestamp for medical fidelity.
-  streakCreditedAtServerTime  Boolean            @default(false) @map("streak_credited_at_server_time")
-  version                     Int                @default(1)
-  syncedAt                    DateTime?          @map("synced_at")
-  createdAt                   DateTime           @default(now()) @map("created_at")
-  updatedAt                   DateTime           @updatedAt @map("updated_at")
+  streakCreditedAtServerTime Boolean            @default(false) @map("streak_credited_at_server_time")
+  version                    Int                @default(1)
+  syncedAt                   DateTime?          @map("synced_at")
+  createdAt                  DateTime           @default(now()) @map("created_at")
+  updatedAt                  DateTime           @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -214,8 +283,8 @@ model GlucoseReading {
 
 model BPReading {
   id         String         @default(uuid()) @db.Uuid
-  clientUuid String         @db.Uuid @map("client_uuid")
-  userId     String         @db.Uuid @map("user_id")
+  clientUuid String         @map("client_uuid") @db.Uuid
+  userId     String         @map("user_id") @db.Uuid
   systolic   Int
   diastolic  Int
   pulse      Int?
@@ -245,8 +314,8 @@ model BPReading {
 
 model MealLog {
   id              String       @default(uuid()) @db.Uuid
-  clientUuid      String       @db.Uuid @map("client_uuid")
-  userId          String       @db.Uuid @map("user_id")
+  clientUuid      String       @map("client_uuid") @db.Uuid
+  userId          String       @map("user_id") @db.Uuid
   mealType        MealType     @map("meal_type")
   mealCategory    MealCategory @map("meal_category")
   foodDescription String?      @map("food_description")
@@ -274,7 +343,7 @@ model MealLog {
 
 model InsightEvent {
   id                 String               @default(uuid()) @db.Uuid
-  userId             String               @db.Uuid @map("user_id")
+  userId             String               @map("user_id") @db.Uuid
   patternType        InsightPatternType   @map("pattern_type")
   // string[] rather than Condition[] — detectors may surface a category
   // (e.g. "glucose", "bp") that isn't a `Condition` enum value.
@@ -313,7 +382,7 @@ model InsightEvent {
 
 model HealthScore {
   id              String   @id @default(uuid()) @db.Uuid
-  userId          String   @db.Uuid @map("user_id")
+  userId          String   @map("user_id") @db.Uuid
   // 0-100, rounded integer from `computeHealthScore`.
   score           Int
   // Per-component scores: { logging, stability, trend, medication, streak }.
@@ -322,7 +391,7 @@ model HealthScore {
   // The date the score is *for* (user-local day). Unique per user per
   // day so the cron is idempotent: re-running for the same day updates
   // the row in place.
-  computedForDate DateTime @db.Date @map("computed_for_date")
+  computedForDate DateTime @map("computed_for_date") @db.Date
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -339,7 +408,7 @@ model HealthScore {
 
 model MedicationSchedule {
   id                String   @id @default(uuid()) @db.Uuid
-  userId            String   @db.Uuid @map("user_id")
+  userId            String   @map("user_id") @db.Uuid
   medicineName      String   @map("medicine_name")
   dosage            String?
   timeSlots         Json     @map("time_slots")
@@ -361,8 +430,8 @@ model MedicationSchedule {
 
 model MedicationLog {
   id              String              @id @default(uuid()) @db.Uuid
-  scheduleId      String              @db.Uuid @map("schedule_id")
-  userId          String              @db.Uuid @map("user_id")
+  scheduleId      String              @map("schedule_id") @db.Uuid
+  userId          String              @map("user_id") @db.Uuid
   status          MedicationLogStatus
   scheduledFor    DateTime            @map("scheduled_for")
   respondedAt     DateTime?           @map("responded_at")
@@ -384,16 +453,16 @@ model MedicationLog {
 // ─────────────────────────────────────────────────────────────
 
 model UserStreak {
-  userId              String    @id @db.Uuid @map("user_id")
-  currentStreakDays   Int       @default(0) @map("current_streak_days")
-  longestStreakDays   Int       @default(0) @map("longest_streak_days")
-  lastLogDate         DateTime? @db.Date @map("last_log_date")
-  streakStartedAt     DateTime? @map("streak_started_at")
-  totalLogDays        Int       @default(0) @map("total_log_days")
-  brokenStreakLength  Int       @default(0) @map("broken_streak_length")
-  graceUsedThisWeek   Int       @default(0) @map("grace_used_this_week")
-  milestonesReached   Json      @default("[]") @map("milestones_reached")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
+  userId             String    @id @map("user_id") @db.Uuid
+  currentStreakDays  Int       @default(0) @map("current_streak_days")
+  longestStreakDays  Int       @default(0) @map("longest_streak_days")
+  lastLogDate        DateTime? @map("last_log_date") @db.Date
+  streakStartedAt    DateTime? @map("streak_started_at")
+  totalLogDays       Int       @default(0) @map("total_log_days")
+  brokenStreakLength Int       @default(0) @map("broken_streak_length")
+  graceUsedThisWeek  Int       @default(0) @map("grace_used_this_week")
+  milestonesReached  Json      @default("[]") @map("milestones_reached")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -401,15 +470,15 @@ model UserStreak {
 }
 
 model FeedbackEvent {
-  id             String       @id @default(uuid()) @db.Uuid
-  userId         String       @db.Uuid @map("user_id")
-  readingId      String?      @db.Uuid @map("reading_id")
-  feedbackType   FeedbackType @map("feedback_type")
-  tone           FeedbackTone
-  messageKey     String       @map("message_key")
-  variantIndex   Int          @map("message_variant_index")
-  messageParams  Json         @map("message_params")
-  shownAt        DateTime     @default(now()) @map("shown_at")
+  id            String       @id @default(uuid()) @db.Uuid
+  userId        String       @map("user_id") @db.Uuid
+  readingId     String?      @map("reading_id") @db.Uuid
+  feedbackType  FeedbackType @map("feedback_type")
+  tone          FeedbackTone
+  messageKey    String       @map("message_key")
+  variantIndex  Int          @map("message_variant_index")
+  messageParams Json         @map("message_params")
+  shownAt       DateTime     @default(now()) @map("shown_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -419,7 +488,7 @@ model FeedbackEvent {
 
 model PushToken {
   id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @db.Uuid @map("user_id")
+  userId     String   @map("user_id") @db.Uuid
   token      String   @unique
   platform   String
   deviceId   String?  @map("device_id")
@@ -433,15 +502,15 @@ model PushToken {
 }
 
 model NotificationState {
-  userId                  String   @id @db.Uuid @map("user_id")
-  fatigueLevel            Int      @default(0) @map("fatigue_level")
-  consecutiveIgnores      Int      @default(0) @map("consecutive_ignores")
-  lastNotificationAt      DateTime? @map("last_notification_at")
-  bestLogTimeFasting      String   @default("07:00") @map("best_log_time_fasting")
-  bestLogTimePostMeal     String   @default("13:30") @map("best_log_time_post_meal")
-  notificationHistory7d   Json     @default("[]") @map("notification_history_7d")
-  last3VariantIds         Json     @default("[]") @map("last_3_variant_ids")
-  updatedAt               DateTime @updatedAt @map("updated_at")
+  userId                String    @id @map("user_id") @db.Uuid
+  fatigueLevel          Int       @default(0) @map("fatigue_level")
+  consecutiveIgnores    Int       @default(0) @map("consecutive_ignores")
+  lastNotificationAt    DateTime? @map("last_notification_at")
+  bestLogTimeFasting    String    @default("07:00") @map("best_log_time_fasting")
+  bestLogTimePostMeal   String    @default("13:30") @map("best_log_time_post_meal")
+  notificationHistory7d Json      @default("[]") @map("notification_history_7d")
+  last3VariantIds       Json      @default("[]") @map("last_3_variant_ids")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
