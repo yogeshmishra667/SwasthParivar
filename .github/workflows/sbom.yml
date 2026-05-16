@@ -1,0 +1,142 @@
+name: SBOM
+
+# Software Bill of Materials — generates a CycloneDX + SPDX inventory of
+# every dependency in the production deploy artefact. Two scopes:
+#
+#   1. Source SBOM     — derived from the pnpm lockfile (what we INTEND
+#                        to ship)
+#   2. Image SBOM      — derived from the built Docker image (what we
+#                        ACTUALLY ship, including transitively-installed
+#                        base-image OS packages)
+#
+# Both are uploaded as workflow artefacts on every push to main and
+# attached as release assets when a tag is cut. PR runs also generate
+# the artefacts so reviewers can diff dep additions.
+#
+# WHY this exists:
+#   - Supply-chain transparency. Auditors, customers, and CVE-scanners
+#     consume the SBOM, not the lockfile.
+#   - Required for FDA/CDSCO software-as-medical-device filings. Even
+#     non-MDR products get scored on this in enterprise procurement.
+#   - Free side-effect: makes incident response trivial. "Are we
+#     affected by CVE-2026-XXXX in package foo?" — grep one file.
+#
+# WHAT this does NOT do:
+#   - Doesn't FAIL on vulns. That's `pnpm audit` + `dependency-review` +
+#     `Trivy` (already wired). SBOM is inventory, not gate.
+#   - Doesn't sign. Sigstore/cosign is the next tier once images push to
+#     a registry (currently CI builds locally; nothing to sign).
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: sbom-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  # 1. Source SBOM — from pnpm lockfile. Catches every JS dep,
+  #    transitively, with versions and license metadata.
+  # ──────────────────────────────────────────────────────────
+  source-sbom:
+    name: Source SBOM (CycloneDX + SPDX)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # Syft scans the working directory and finds package manifests
+      # for every supported ecosystem (npm/pnpm/yarn here, but also
+      # python/go/rust/etc. in mixed repos).
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          artifact-name: sbom-source.cyclonedx.json
+          upload-artifact: true
+
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          artifact-name: sbom-source.spdx.json
+          upload-artifact: true
+
+  # ──────────────────────────────────────────────────────────
+  # 2. Image SBOM — from the built server Docker image. Adds OS
+  #    packages, libc, language runtimes that aren't in the
+  #    JS lockfile but DO ship to production.
+  # ──────────────────────────────────────────────────────────
+  image-sbom:
+    name: Image SBOM (CycloneDX + SPDX)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build the same image the image-smoke job builds. We re-use
+      # type=gha cache so this is fast (~30s on a warm cache).
+      - name: Build server image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/server/Dockerfile
+          tags: swasth-server:sbom
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Generate SBOM from image (CycloneDX)
+        uses: anchore/sbom-action@v0
+        with:
+          image: swasth-server:sbom
+          format: cyclonedx-json
+          artifact-name: sbom-image.cyclonedx.json
+          upload-artifact: true
+
+      - name: Generate SBOM from image (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          image: swasth-server:sbom
+          format: spdx-json
+          artifact-name: sbom-image.spdx.json
+          upload-artifact: true
+
+  # ──────────────────────────────────────────────────────────
+  # 3. Attach to release on tag push. Only runs on `v*` tags.
+  # ──────────────────────────────────────────────────────────
+  release-attach:
+    name: Attach SBOMs to release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [source-sbom, image-sbom]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all SBOM artefacts
+        uses: actions/download-artifact@v4
+        with:
+          path: sbom
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            sbom/sbom-source.cyclonedx.json/*
+            sbom/sbom-source.spdx.json/*
+            sbom/sbom-image.cyclonedx.json/*
+            sbom/sbom-image.spdx.json/*
+          fail_on_unmatched_files: true

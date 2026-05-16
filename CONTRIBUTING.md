@@ -86,14 +86,57 @@ Project convention: don't add tool-author trailers. Human authorship only.
 
 Husky runs three hooks for you (auto-installed via `pnpm install` postinstall):
 
-| Hook         | What it runs                                                       | When it blocks      |
-| ------------ | ------------------------------------------------------------------ | ------------------- |
-| `pre-commit` | `lint-staged` → `eslint --fix` and `tsc --noEmit` on staged TS/TSX | Lint or type errors |
-| `commit-msg` | `commitlint` against Conventional Commits                          | Off-format message  |
-| `pre-push`   | Workspace `typecheck` + `pnpm test:unit` (domain-logic, ~5s)       | Any failure         |
+| Hook         | What it runs                                                                                         | When it blocks      |
+| ------------ | ---------------------------------------------------------------------------------------------------- | ------------------- |
+| `pre-commit` | `lint-staged` → ESLint + Prettier on staged TS/TSX/JSON/MD/YAML, `prisma format` if schema is staged | Lint or type errors |
+| `commit-msg` | `commitlint` against Conventional Commits                                                            | Off-format message  |
+| `pre-push`   | `scripts/preflight.sh` — full local CI mirror (see below)                                            | Any failure         |
+
+`scripts/preflight.sh` wipes every build artefact + tsbuildinfo first
+(to defeat "passes locally, fails in CI" drift), then runs:
+
+1. Frozen `pnpm install` (matches CI lockfile lock)
+2. Workspace `typecheck` (5 projects)
+3. Workspace `lint` (max-warnings=0)
+4. Prettier `format:check`
+5. `prisma format` check on `schema.prisma`
+6. Schema ↔ migration parity (`scripts/check-migration-parity.sh`)
+7. Squawk migration SQL safety on new migrations only (`scripts/lint-migrations.sh`)
+8. Domain-logic purity (`scripts/check-domain-purity.mjs`)
+9. Domain-logic `test:coverage` with per-file ratchets
+
+Optional opt-ins: `PREFLIGHT_FULL=1 git push` adds Testcontainers integration
+tests + Docker image build + `/health` smoke (~5min total).
+
+### Gate map — local vs CI
+
+Everything that runs in CI also runs locally **except** the ones below.
+The gap is intentional (cost vs. value), not drift.
+
+| Gate                           | pre-commit |   pre-push (preflight)    |                      CI                      |
+| ------------------------------ | :--------: | :-----------------------: | :------------------------------------------: |
+| ESLint                         | ✅ staged  |       ✅ workspace        |                      ✅                      |
+| Prettier (`.ts/.json/.md/...`) | ✅ staged  |            ✅             |                      ✅                      |
+| Prisma schema format           | ✅ staged  |            ✅             |                      ✅                      |
+| Typecheck                      |     —      |            ✅             |                      ✅                      |
+| Domain-logic purity            |     —      |            ✅             |                      ✅                      |
+| Unit tests + coverage          |     —      |            ✅             |                      ✅                      |
+| Schema ↔ migration parity      |     —      |            ✅             |                  ✅ PR-only                  |
+| Migration lint (squawk)        |     —      |            ✅             |                  ✅ PR-only                  |
+| Build (workspace)              |     —      |   (typecheck covers it)   |                      ✅                      |
+| Integration tests              |     —      | opt-in `PREFLIGHT_FULL=1` |                      ✅                      |
+| Docker image smoke + Trivy     |     —      |  opt-in `--with-docker`   |                      ✅                      |
+| `pnpm audit` (HIGH/CRITICAL)   |     —      |             —             |                      ✅                      |
+| CodeQL SAST                    |     —      |             —             |                      ✅                      |
+| Dependency review (PR diff)    |     —      |             —             |                  ✅ PR-only                  |
+| Secret scan (gitleaks)         |     —      |             —             |                      ✅                      |
+| Danger (PR rules)              |     —      |             —             |                  ✅ PR-only                  |
+| SBOM (CycloneDX + SPDX)        |     —      |             —             |    ✅ informational, attached to releases    |
+| OpenSSF Scorecard              |     —      |             —             | ✅ informational, weekly cron + push to main |
 
 Skipping a hook in an emergency: `git commit --no-verify` / `git push --no-verify`.
-Use sparingly — CI runs the same checks and will reject the PR.
+Use sparingly — CI runs the same checks and will reject the PR. If you find
+yourself reaching for `--no-verify` regularly, file an issue: a gate is mis-tuned.
 
 ## Pull requests
 

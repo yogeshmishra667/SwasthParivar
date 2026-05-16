@@ -1,9 +1,20 @@
 import PostHog from "posthog-react-native";
 import Constants from "expo-constants";
 
-const apiKey = (Constants.expoConfig?.extra as { posthogKey?: string } | undefined)?.posthogKey;
+const extra = Constants.expoConfig?.extra as
+  | { posthogKey?: string; posthogHost?: string }
+  | undefined;
 
-export const analytics = apiKey ? new PostHog(apiKey, { host: "https://app.posthog.com" }) : null;
+const apiKey = extra?.posthogKey;
+
+// Default to the US ingest host to match `apps/server/src/shared/
+// analytics/posthog.ts`. EU teams override via `app.json` →
+// `extra.posthogHost = "https://eu.i.posthog.com"`. (The legacy
+// `app.posthog.com` URL still resolves but is route-deprecated; matching
+// the server URL keeps both surfaces in lockstep when we change region.)
+const host = extra?.posthogHost ?? "https://us.i.posthog.com";
+
+export const analytics = apiKey ? new PostHog(apiKey, { host }) : null;
 
 type JsonPrimitive = string | number | boolean | null;
 export type EventProps = Record<string, JsonPrimitive | JsonPrimitive[]>;

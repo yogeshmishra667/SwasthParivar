@@ -12,9 +12,11 @@
 #   1. Wipe every build artefact + tsbuildinfo
 #   2. Reinstall from the lockfile (frozen) — matches CI exactly
 #   3. Run every static gate (typecheck, lint, format, purity)
-#   4. Run unit tests (domain-logic coverage)
-#   5. Optionally run Docker image build + /health probe (--with-docker)
-#   6. Optionally run integration tests (--with-integration; needs Docker)
+#   4. Prisma schema/migration gates (format, schema↔migration parity,
+#      squawk SQL safety on newly-added migrations)
+#   5. Run unit tests (domain-logic coverage)
+#   6. Optionally run Docker image build + /health probe (--with-docker)
+#   7. Optionally run integration tests (--with-integration; needs Docker)
 #
 #   Each step prints a banner; exits non-zero on first failure.
 #
@@ -47,7 +49,7 @@ fail() {
   exit 1
 }
 
-banner "1/8 wipe build artefacts (dist + tsbuildinfo)"
+banner "1/11 wipe build artefacts (dist + tsbuildinfo)"
 pnpm -r run clean >/dev/null 2>&1 || true
 find . -name ".tsbuildinfo" -not -path "*/node_modules/*" -delete 2>/dev/null || true
 find packages -type d -name "dist" -not -path "*/node_modules/*" -exec rm -rf {} + 2>/dev/null || true
@@ -60,26 +62,35 @@ if [ -n "$remaining" ]; then
   fail "leftover artefact after clean: $remaining"
 fi
 
-banner "2/8 frozen pnpm install (matches CI exactly)"
+banner "2/11 frozen pnpm install (matches CI exactly)"
 pnpm install --frozen-lockfile --prefer-offline 2>&1 | tail -3 || fail "install"
 
-banner "3/8 workspace typecheck (5 projects)"
+banner "3/11 workspace typecheck (5 projects)"
 pnpm typecheck >/dev/null || fail "typecheck"
 
-banner "4/8 workspace lint (max-warnings=0)"
+banner "4/11 workspace lint (max-warnings=0)"
 pnpm lint >/dev/null || fail "lint"
 
-banner "5/8 prettier format:check"
+banner "5/11 prettier format:check"
 pnpm format:check >/dev/null || fail "format:check"
 
-banner "6/8 domain-logic purity"
+banner "6/11 prisma schema format"
+bash scripts/check-prisma-format.sh >/dev/null || fail "prisma format"
+
+banner "7/11 schema ↔ migration parity"
+bash scripts/check-migration-parity.sh || fail "migration parity"
+
+banner "8/11 migration lint (squawk) on new migrations"
+bash scripts/lint-migrations.sh || fail "squawk"
+
+banner "9/11 domain-logic purity"
 node scripts/check-domain-purity.mjs >/dev/null || fail "purity"
 
-banner "7/8 domain-logic test:coverage (per-file ratchets)"
+banner "10/11 domain-logic test:coverage (per-file ratchets)"
 pnpm --filter @swasth/domain-logic test:coverage >/dev/null || fail "domain-logic tests"
 
 if [ "$WITH_INTEGRATION" = "1" ]; then
-  banner "8a/8 server integration tests (Testcontainers — needs Docker)"
+  banner "11a/11 server integration tests (Testcontainers — needs Docker)"
   if ! docker info >/dev/null 2>&1; then
     fail "Docker daemon down — integration tests need it"
   fi
@@ -87,7 +98,7 @@ if [ "$WITH_INTEGRATION" = "1" ]; then
 fi
 
 if [ "$WITH_DOCKER" = "1" ]; then
-  banner "8b/8 docker build + /health smoke (matches CI image-smoke job)"
+  banner "11b/11 docker build + /health smoke (matches CI image-smoke job)"
   if ! docker info >/dev/null 2>&1; then
     fail "Docker daemon down"
   fi
