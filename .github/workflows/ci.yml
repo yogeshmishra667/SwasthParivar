@@ -85,8 +85,9 @@ jobs:
         run: pnpm -r --parallel run lint
 
   # ──────────────────────────────────────────────────────────
-  # Format check (Prettier). Catches whitespace/quote/line-break
-  # drift across the whole tree, not just commit-staged files.
+  # Format check (Prettier + Prisma). Catches whitespace/quote/line-break
+  # drift across the whole tree, plus drift in schema.prisma that
+  # `prisma format` would have fixed locally.
   # ──────────────────────────────────────────────────────────
   format:
     name: Prettier format:check
@@ -101,8 +102,11 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
-      - name: Format check
+      - name: Format check (Prettier)
         run: pnpm format:check
+      # Same script that preflight runs — single source of truth.
+      - name: Format check (Prisma schema)
+        run: bash scripts/check-prisma-format.sh
 
   # ──────────────────────────────────────────────────────────
   # Domain-logic purity: forbidden imports + Date.now()/new Date()/
@@ -163,6 +167,32 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Audit production deps (high+critical)
         run: pnpm audit --prod --audit-level=high
+
+  # ──────────────────────────────────────────────────────────
+  # Dependency review on PR diffs. Earlier signal than `pnpm audit`:
+  # blocks new HIGH/CRITICAL CVEs and incompatible licenses at the
+  # moment they enter the lockfile, before they're merged.
+  #
+  # PR-only — needs the base..head diff.
+  # ──────────────────────────────────────────────────────────
+  dependency-review:
+    name: Dependency review (PR diff)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 4
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          # Block GPL/AGPL/SSPL — the codebase is permissive-MIT and we
+          # ship a closed-source mobile binary. Add to this list when
+          # bringing in a deliberately copyleft tool (e.g. ffmpeg fork).
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0, AGPL-1.0, SSPL-1.0
+          comment-summary-in-pr: on-failure
 
   # ──────────────────────────────────────────────────────────
   # Secret scan. Catches API keys, JWT/OTP secrets, and cloud
@@ -245,9 +275,9 @@ jobs:
         run: pnpm test:integration
 
   # ──────────────────────────────────────────────────────────
-  # Migration check: every diff that touches schema.prisma must
-  # include at least one new migration folder under prisma/migrations.
-  # Catches a common bug pattern (schema-without-migration drift).
+  # Migration parity: every diff that touches schema.prisma must
+  # include at least one new migration folder. Calls the same script
+  # preflight runs locally (scripts/check-migration-parity.sh).
   #
   # SHAs flow through env to avoid script injection patterns even
   # though SHAs are hex-only — defence in depth.
@@ -258,31 +288,15 @@ jobs:
     if: github.event_name == 'pull_request'
     timeout-minutes: 2
     env:
-      BASE_SHA: ${{ github.event.pull_request.base.sha }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      BASE_REF: ${{ github.event.pull_request.base.sha }}
+      HEAD_REF: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Verify schema changes ship with a migration
-        run: |
-          set -eu
-          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
-          SCHEMA_TOUCHED=$(printf '%s\n' "$CHANGED" | grep -E '^apps/server/prisma/schema\.prisma$' || true)
-          MIGRATION_ADDED=$(git diff --name-only --diff-filter=A "$BASE_SHA" "$HEAD_SHA" \
-            | grep -E '^apps/server/prisma/migrations/[^/]+/migration\.sql$' || true)
-          if [ -n "$SCHEMA_TOUCHED" ] && [ -z "$MIGRATION_ADDED" ]; then
-            echo "::error::schema.prisma changed but no new migration folder was added."
-            echo "Run: pnpm --filter @swasth/server prisma:migrate -- --name <slug>"
-            exit 1
-          fi
-          if [ -n "$SCHEMA_TOUCHED" ]; then
-            echo "Schema change pairs with new migration(s):"
-            printf '%s\n' "$MIGRATION_ADDED"
-          else
-            echo "No schema changes — migration check skipped."
-          fi
+        run: bash scripts/check-migration-parity.sh
 
   # ──────────────────────────────────────────────────────────
   # Migration lint (squawk) — Postgres safety check on NEW migration
@@ -290,12 +304,9 @@ jobs:
   # adding NOT NULL columns without defaults, renaming columns, dropping
   # indexes concurrently, transaction nesting, etc.
   #
-  # Only runs on PRs that introduce a new migration.sql — never lints
-  # already-merged migrations (would block all PRs after a single
-  # historical squawk-flagged migration).
-  #
-  # All untrusted inputs flow through env vars + quoted shell access
-  # (no ${{ }} interpolation inside run: blocks).
+  # Calls scripts/lint-migrations.sh — the SAME script preflight runs
+  # locally. The rule-exclusion list lives in that script; reasoning
+  # for each exclusion is documented there.
   # ──────────────────────────────────────────────────────────
   migration-lint:
     name: Migration lint (squawk)
@@ -303,100 +314,15 @@ jobs:
     if: github.event_name == 'pull_request'
     timeout-minutes: 3
     env:
-      BASE_SHA: ${{ github.event.pull_request.base.sha }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      BASE_REF: ${{ github.event.pull_request.base.sha }}
+      HEAD_REF: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Detect new migrations
-        id: detect
-        run: |
-          set -eu
-          NEW_MIGRATIONS=$(git diff --name-only --diff-filter=A "$BASE_SHA" "$HEAD_SHA" \
-            | grep -E '^apps/server/prisma/migrations/[^/]+/migration\.sql$' || true)
-          if [ -z "$NEW_MIGRATIONS" ]; then
-            echo "No new migrations — skipping squawk."
-            echo "has_new=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_new=true" >> "$GITHUB_OUTPUT"
-            {
-              echo "files<<MIGEOF"
-              echo "$NEW_MIGRATIONS"
-              echo "MIGEOF"
-            } >> "$GITHUB_OUTPUT"
-            echo "New migrations to lint:"
-            printf '  %s\n' $NEW_MIGRATIONS
-          fi
-
-      - name: Install squawk
-        if: steps.detect.outputs.has_new == 'true'
-        run: |
-          set -eu
-          # Squawk v1.5.4 and the `squawk-linux-x86_64` asset are gone from
-          # upstream releases. v2.x ships `squawk-linux-x64`. `-f` makes curl
-          # fail loudly on a 404 instead of writing an HTML page to disk.
-          SQUAWK_VERSION=2.52.1
-          curl -sSLf -o /tmp/squawk \
-            "https://github.com/sbdchd/squawk/releases/download/v${SQUAWK_VERSION}/squawk-linux-x64"
-          chmod +x /tmp/squawk
-          /tmp/squawk --version
-
-      - name: Lint new migrations
-        if: steps.detect.outputs.has_new == 'true'
-        env:
-          FILES: ${{ steps.detect.outputs.files }}
-        run: |
-          set -eu
-          FAILED=0
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            # The regex in 'Detect new migrations' guarantees $f matches
-            # apps/server/prisma/migrations/<name>/migration.sql — no shell
-            # metacharacters can slip through to this point.
-            echo "::group::squawk $f"
-            # Excluded rules — all about safety on tables that already have
-            # data in production. We're pre-production and every migration
-            # so far creates a brand-new empty table, so the locks/scans
-            # these rules warn about can't actually block anything.
-            #
-            #   prefer-text-field, require-concurrent-index-creation
-            #     — original exclusions, see audit notes.
-            #   prefer-robust-stmts
-            #     — wants IF NOT EXISTS / explicit transactions so a
-            #       partially-failed migration can be re-run. Prisma's
-            #       migrate engine handles that for us.
-            #   constraint-missing-not-valid, adding-foreign-key-constraint
-            #     — protect against FK validation scans on tables with
-            #       rows. New tables have zero rows.
-            #   disallowed-unique-constraint, require-timeout-settings
-            #     — both want a lock_timeout/statement_timeout before
-            #       unique-index creation. Same "only matters on populated
-            #       tables" reasoning — new empty tables have no contention.
-            #   prefer-bigint-over-int
-            #     — warns about int32 overflow. Our int columns are bounded
-            #       counters (score 0-100, severity_score 0-100, etc.), not
-            #       monotonic IDs; overflow is impossible by construction.
-            #   prefer-timestamp-tz
-            #     — wants timestamptz over timestamp. Prisma's default emit
-            #       is TIMESTAMP(3) across every model in schema.prisma;
-            #       fixing it is a repo-wide sweep tracked separately, not
-            #       a per-PR gate.
-            #
-            # Revisit when migrations start altering populated tables.
-            if ! /tmp/squawk \
-                --exclude prefer-text-field,require-concurrent-index-creation,prefer-robust-stmts,constraint-missing-not-valid,adding-foreign-key-constraint,disallowed-unique-constraint,require-timeout-settings,prefer-bigint-over-int,prefer-timestamp-tz \
-                "$f"; then
-              FAILED=1
-            fi
-            echo "::endgroup::"
-          done <<< "$FILES"
-          if [ "$FAILED" -ne 0 ]; then
-            echo "::error::squawk flagged unsafe SQL in one or more new migrations."
-            echo "Review the rules: https://squawkhq.com/docs/rules"
-            exit 1
-          fi
+      - name: Lint new migrations (squawk)
+        run: bash scripts/lint-migrations.sh
 
   # ──────────────────────────────────────────────────────────
   # Danger.js — three rules that turn manual reviewer checks into
@@ -436,11 +362,12 @@ jobs:
         run: pnpm dlx danger ci --dangerfile dangerfile.ts
 
   # ──────────────────────────────────────────────────────────
-  # Server image build + smoke. Builds the production Dockerfile, runs
-  # the resulting container with the bare-minimum env, then probes
-  # /health to confirm the binary actually boots. Catches: missing
-  # files in COPY layers, prisma client absent, wrong entrypoint,
-  # node-version mismatches.
+  # Server image build + Trivy CVE scan + /health smoke. Builds the
+  # production Dockerfile, scans the resulting image for fixable HIGH/
+  # CRITICAL CVEs, then runs the container with bare-minimum env and
+  # probes /health to confirm the binary boots. Catches: missing files
+  # in COPY layers, prisma client absent, wrong entrypoint,
+  # node-version mismatches, vulnerable OS/lib in the base image.
   #
   # Does NOT run the deep healthcheck — that needs Postgres+Redis,
   # which is the integration-tests job's domain.
@@ -466,6 +393,24 @@ jobs:
             GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Scan the produced image for OS + library CVEs. Fails on
+      # HIGH/CRITICAL with a fix available. `ignore-unfixed: true`
+      # avoids blocking on issues we can't action this build (e.g. an
+      # OS package CVE with no patch yet — those should generate a
+      # tracking issue separately, not break PRs).
+      - name: Scan image with Trivy (HIGH+CRITICAL, fixable)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: swasth-server:ci
+          format: table
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          vuln-type: os,library
+          # Trivy DB lives in a public ECR; the action pulls it.
+          # `TRIVY_TIMEOUT` matters on a cold-cache run.
+          timeout: 10m
 
       - name: Boot container with stub env
         env:
