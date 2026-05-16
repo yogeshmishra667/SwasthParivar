@@ -5,4 +5,5 @@ export * from "./notification-resolver/index.js";
 export * from "./critical-bypass/index.js";
 export * from "./detectors/index.js";
 export * from "./hba1c/index.js";
+export * from "./dashboard-summary/index.js";
 export * from "./health-score/index.js";
