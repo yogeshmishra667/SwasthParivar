@@ -334,9 +334,12 @@ jobs:
         if: steps.detect.outputs.has_new == 'true'
         run: |
           set -eu
-          SQUAWK_VERSION=1.5.4
-          curl -sSL -o /tmp/squawk \
-            "https://github.com/sbdchd/squawk/releases/download/v${SQUAWK_VERSION}/squawk-linux-x86_64"
+          # Squawk v1.5.4 and the `squawk-linux-x86_64` asset are gone from
+          # upstream releases. v2.x ships `squawk-linux-x64`. `-f` makes curl
+          # fail loudly on a 404 instead of writing an HTML page to disk.
+          SQUAWK_VERSION=2.52.1
+          curl -sSLf -o /tmp/squawk \
+            "https://github.com/sbdchd/squawk/releases/download/v${SQUAWK_VERSION}/squawk-linux-x64"
           chmod +x /tmp/squawk
           /tmp/squawk --version
 
@@ -353,8 +356,37 @@ jobs:
             # apps/server/prisma/migrations/<name>/migration.sql — no shell
             # metacharacters can slip through to this point.
             echo "::group::squawk $f"
+            # Excluded rules — all about safety on tables that already have
+            # data in production. We're pre-production and every migration
+            # so far creates a brand-new empty table, so the locks/scans
+            # these rules warn about can't actually block anything.
+            #
+            #   prefer-text-field, require-concurrent-index-creation
+            #     — original exclusions, see audit notes.
+            #   prefer-robust-stmts
+            #     — wants IF NOT EXISTS / explicit transactions so a
+            #       partially-failed migration can be re-run. Prisma's
+            #       migrate engine handles that for us.
+            #   constraint-missing-not-valid, adding-foreign-key-constraint
+            #     — protect against FK validation scans on tables with
+            #       rows. New tables have zero rows.
+            #   disallowed-unique-constraint, require-timeout-settings
+            #     — both want a lock_timeout/statement_timeout before
+            #       unique-index creation. Same "only matters on populated
+            #       tables" reasoning — new empty tables have no contention.
+            #   prefer-bigint-over-int
+            #     — warns about int32 overflow. Our int columns are bounded
+            #       counters (score 0-100, severity_score 0-100, etc.), not
+            #       monotonic IDs; overflow is impossible by construction.
+            #   prefer-timestamp-tz
+            #     — wants timestamptz over timestamp. Prisma's default emit
+            #       is TIMESTAMP(3) across every model in schema.prisma;
+            #       fixing it is a repo-wide sweep tracked separately, not
+            #       a per-PR gate.
+            #
+            # Revisit when migrations start altering populated tables.
             if ! /tmp/squawk \
-                --exclude prefer-text-field,require-concurrent-index-creation \
+                --exclude prefer-text-field,require-concurrent-index-creation,prefer-robust-stmts,constraint-missing-not-valid,adding-foreign-key-constraint,disallowed-unique-constraint,require-timeout-settings,prefer-bigint-over-int,prefer-timestamp-tz \
                 "$f"; then
               FAILED=1
             fi

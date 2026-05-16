@@ -13,6 +13,7 @@ export const QUEUE_NAMES = {
   CRITICAL_ALERT: "critical-alert",
   RE_ENGAGEMENT: "re-engagement",
   GRACE_RESET: "grace-reset",
+  DAILY_HEALTH_SCORE: "daily-health-score",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

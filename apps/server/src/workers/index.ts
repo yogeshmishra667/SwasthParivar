@@ -6,6 +6,10 @@ import {
   bootstrapNotificationCron,
 } from "./notification-trigger.worker.js";
 import { graceResetWorker, bootstrapGraceResetCron } from "./grace-reset.worker.js";
+import {
+  dailyHealthScoreWorker,
+  bootstrapDailyHealthScoreCron,
+} from "./daily-health-score.worker.js";
 import { logger } from "../shared/logger.js";
 
 const workers = [
@@ -15,6 +19,7 @@ const workers = [
   medMissedAlertWorker,
   notificationTriggerWorker,
   graceResetWorker,
+  dailyHealthScoreWorker,
 ];
 
 export const workerNames = [
@@ -24,6 +29,7 @@ export const workerNames = [
   "med-missed-alert",
   "notification-trigger",
   "grace-reset",
+  "daily-health-score",
 ];
 
 export const startWorkers = (): void => {
@@ -32,6 +38,9 @@ export const startWorkers = (): void => {
   );
   bootstrapGraceResetCron().catch((err) =>
     logger.error({ err }, "failed to bootstrap grace-reset cron"),
+  );
+  bootstrapDailyHealthScoreCron().catch((err) =>
+    logger.error({ err }, "failed to bootstrap daily-health-score cron"),
   );
   logger.info({ count: workers.length }, "workers started");
 };

@@ -147,6 +147,7 @@ model User {
   notificationState    NotificationState?
   emergencyContacts    EmergencyContact[]
   pushTokens           PushToken[]
+  healthScores         HealthScore[]
 
   @@index([householdId])
   @@map("users")
@@ -304,6 +305,32 @@ model InsightEvent {
   @@index([userId, createdAt])
   @@index([userId, acknowledged, createdAt])
   @@map("insight_events")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Health Score (Phase 2 step 5)
+// ─────────────────────────────────────────────────────────────
+
+model HealthScore {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @db.Uuid @map("user_id")
+  // 0-100, rounded integer from `computeHealthScore`.
+  score           Int
+  // Per-component scores: { logging, stability, trend, medication, streak }.
+  // JSON not relation — schema-light and the consumer is a single mobile card.
+  components      Json     @default("{}")
+  // The date the score is *for* (user-local day). Unique per user per
+  // day so the cron is idempotent: re-running for the same day updates
+  // the row in place.
+  computedForDate DateTime @db.Date @map("computed_for_date")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, computedForDate])
+  @@index([userId, computedForDate])
+  @@map("health_scores")
 }
 
 // ─────────────────────────────────────────────────────────────
