@@ -18,6 +18,13 @@ const criticalQueue = createQueue<{
   requestId?: string;
 }>(QUEUE_NAMES.CRITICAL_ALERT);
 
+const analyzeQueue = createQueue<{
+  readingId: string;
+  userId: string;
+  readingType: GlucoseReading["readingType"];
+  requestId?: string;
+}>(QUEUE_NAMES.ANALYZE_READING);
+
 // Patch #18 — device-time manipulation defense.
 // If |client_measuredAt − server_now| exceeds this threshold, the reading
 // counts as one anomalous occurrence. After TIME_ANOMALY_TRIGGER_COUNT cumulative
@@ -332,6 +339,16 @@ export const createGlucoseReading = async (
       ...(input.requestId ? { requestId: input.requestId } : {}),
     });
   }
+
+  // Phase 2 step 3c — fire ANALYZE_READING for every glucose insert.
+  // The processor runs spike / trend / meal-correlation / anomaly in
+  // parallel; below-floor confidence rows persist but are suppressed
+  // from the feed. 3 retries + exp backoff come from queue defaults.
+  await analyzeQueue.add("analyze", {
+    readingId: reading.id,
+    userId: input.userId,
+    readingType: reading.readingType,
+  });
 
   if (streakResult.antiCheatFlags.length > 0) {
     logger.warn(

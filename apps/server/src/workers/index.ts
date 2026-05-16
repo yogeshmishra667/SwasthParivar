@@ -1,4 +1,5 @@
 import { criticalAlertWorker } from "./critical-alert.worker.js";
+import { analyzeReadingWorker } from "./analyze-reading.worker.js";
 import { medReminderWorker, medMissedAlertWorker } from "./med-reminder.worker.js";
 import {
   notificationTriggerWorker,
@@ -9,6 +10,7 @@ import { logger } from "../shared/logger.js";
 
 const workers = [
   criticalAlertWorker,
+  analyzeReadingWorker,
   medReminderWorker,
   medMissedAlertWorker,
   notificationTriggerWorker,
@@ -17,6 +19,7 @@ const workers = [
 
 export const workerNames = [
   "critical-alert",
+  "analyze-reading",
   "med-reminder",
   "med-missed-alert",
   "notification-trigger",
