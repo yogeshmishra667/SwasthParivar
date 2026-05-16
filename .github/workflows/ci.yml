@@ -356,8 +356,27 @@ jobs:
             # apps/server/prisma/migrations/<name>/migration.sql — no shell
             # metacharacters can slip through to this point.
             echo "::group::squawk $f"
+            # Excluded rules — all about safety on tables that already have
+            # data in production. We're pre-production and every migration
+            # so far creates a brand-new empty table, so the locks/scans
+            # these rules warn about can't actually block anything.
+            #
+            #   prefer-text-field, require-concurrent-index-creation
+            #     — original exclusions, see audit notes.
+            #   prefer-robust-stmts
+            #     — wants IF NOT EXISTS / explicit transactions so a
+            #       partially-failed migration can be re-run. Prisma's
+            #       migrate engine handles that for us.
+            #   constraint-missing-not-valid, adding-foreign-key-constraint
+            #     — protect against FK validation scans on tables with
+            #       rows. New tables have zero rows.
+            #   disallowed-unique-constraint
+            #     — wants a statement_timeout before unique-index creation.
+            #       Same "only matters on populated tables" reasoning.
+            #
+            # Revisit when migrations start altering populated tables.
             if ! /tmp/squawk \
-                --exclude prefer-text-field,require-concurrent-index-creation \
+                --exclude prefer-text-field,require-concurrent-index-creation,prefer-robust-stmts,constraint-missing-not-valid,adding-foreign-key-constraint,disallowed-unique-constraint \
                 "$f"; then
               FAILED=1
             fi
