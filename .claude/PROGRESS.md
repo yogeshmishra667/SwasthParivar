@@ -1,8 +1,8 @@
 # SwasthParivar — Build Progress
 
-**Last updated:** 2026-05-15 (session 8 — steps 3d + 4 + 5 + 6)
-**Status:** ✅ **Phase 1 complete.** 🚧 **Phase 2 in progress** — steps 2, 3a, 3b, 3c, 3d, 4, 5, 6 shipped as PRs awaiting review.
-**Branch:** main + open Phase 2 PRs: `feat/meal-logs-server` (#17, step 2), `feat/insight-engine-foundation` (#18, step 3a), `feat/insight-detectors-spike-trend` (#19, step 3b), `feat/insight-detectors-meal-anomaly` (steps 3c + 3d), `feat/hba1c-estimator` (step 4), `feat/health-score` (step 5), `feat/dashboard-summary` (step 6 — `composeDashboardSummary` + extended `GET /api/v1/dashboard`).
+**Last updated:** 2026-05-15 (session 8 — step 3d + step 4)
+**Status:** ✅ **Phase 1 complete.** 🚧 **Phase 2 in progress** — main merged steps 0+1; steps 2 + 3a + 3b + 3c + 3d + 4 shipped as PRs awaiting review.
+**Branch:** main (9 Phase 1 PRs + #14 #15 #16 merged) + open Phase 2 PRs: `feat/meal-logs-server` (#17, step 2 + docs), `feat/insight-engine-foundation` (#18, step 3a), `feat/insight-detectors-spike-trend` (#19, step 3b), `feat/insight-detectors-meal-anomaly` (step 3c + 3d), `feat/hba1c-estimator` (step 4 — `estimateHbA1c` pure function + `GET /api/v1/hba1c/estimate`).
 
 ## Dependency versions
 
@@ -110,9 +110,9 @@ _No items remaining. Every Phase 1 mandate from `CLAUDE.md` is shipped._
    - ✅ **3a — Foundation**: `InsightEvent` model + insights module (GET / POST acknowledge) + detector primitives (`stats.ts` with median, IQR, stdDev, linear regression, rollingMedian helpers) + types — branch `feat/insight-engine-foundation`
    - ✅ **3b — `detectSpike` + `detectTrend` pure functions** consuming 3a helpers — branch `feat/insight-detectors-spike-trend`
    - ⏭️ 3c — `detectMealCorrelation` + `detectAnomaly` + `ANALYZE_READING` BullMQ worker wiring (runs all 4 detectors post-glucose-insert, persists InsightEvent rows)
-5. ⏭️ Step 4 — HbA1c estimator
+5. ✅ Step 4 — HbA1c estimator — branch `feat/hba1c-estimator`
 6. ⏭️ Step 5 — Daily HealthScore job + `HealthScore` model
-7. ✅ Step 6 — Hindi/English dashboard summary card (rule-based) — branch `feat/dashboard-summary`
+7. ⏭️ Step 6 — Hindi/English dashboard summary card (rule-based)
 8. ⏭️ Step 7 — Guardian read-only view (`FamilyLink` + `GET /api/v1/family/patients/:id/dashboard`)
 
 Each step ships as its own branch + PR; `git-workflow` skill conventions (squash merge, conventional commits, no Co-Authored-By trailer).
@@ -128,9 +128,9 @@ Each step ships as its own branch + PR; `git-workflow` skill conventions (squash
 
 - [x] **Step 3b — `detectSpike` + `detectTrend`** — `packages/domain-logic/src/detectors/spike.ts` and `trend.ts`. Both filter to a single `readingType` (medical-correctness rule). **Spike**: 14-day rolling median + σ-distance, severity bands info(1.5σ) / warn(2σ) / critical(3σ); critical-high override always promotes value > 315 to severe regardless of σ. Confidence tiers: severe ≥ 0.85, significant ≥ 0.7, mild starts at 0.4 (only clears the feed floor with rich history — by design). **Trend**: linear regression on 5 / 14 / 30-day windows, R² > 0.5 gate, slope thresholds info(1) / warn(2) / critical(5) mg/dL/day, direction tagged. Span check rejects 5 readings packed into 1 day. 28 new tests (24 cases + 4 fast-check property tests). Detector files: **100% lines + 100% functions, 96.96% branches** (uncovered branches are TypeScript-strict `??` fallbacks on indexed access — unreachable at runtime). Domain-logic suite: 104/104 ✅. PR opens against `feat/insight-engine-foundation` (PR #18) since 3b depends on the stats helpers from 3a.
 - [ ] Step 3c — `detectMealCorrelation` (groups post_meal readings by `MealCategory` in 7-calendar-day window, min 5 per category) + `detectAnomaly` (median + IQR, min 21 days) + `ANALYZE_READING` BullMQ worker fired post-glucose-insert (3 retries, exp backoff). Worker runs all 4 detectors in parallel; below-floor results persist with `confidence < 0.7` (suppressed from feed); above-floor results visible.
-- [ ] Step 4 — `estimateHbA1c` pure function (weights: 30d ×1.5, 30d ×1.0, 30d ×0.5) + `GET /api/v1/hba1c/estimate`, Redis-cached 1h, 422 `INSUFFICIENT_DATA` < 30 readings.
+- [x] **Step 4 — HbA1c estimator** — `packages/domain-logic/src/hba1c/estimate.ts` (pure). Recency-weighted 90-day mean: recent 30d ×1.5 + middle 30d ×1.0 + oldest 30d ×0.5, blended by `weight × readingCount`. ADAG formula: `(weighted_mean + 46.7) / 28.7`. Min 30 readings overall AND ≥ 1 reading in the 0-30d window (no fresh data → estimate is misleading). Future-dated and >90d-old readings silently dropped. Output rounded to 1 dp, always labelled `"ESTIMATE"`, returns per-window stats so the dashboard can explain the number. New `apps/server/src/modules/hba1c/` module: service + controller + routes + validation. `GET /api/v1/hba1c/estimate` (mounted on `app.ts`). Redis cache `hba1c:<userId>` TTL 1h (CLAUDE.md spec); cache errors fall through to live computation. Null result → 422 `INSUFFICIENT_DATA` (new error code wired through `error-handler.ts` status map). 14 new tests including 2 fast-check property tests (monotonicity vs mean glucose; null below 30-reading floor). Branch `feat/hba1c-estimator`.
 - [ ] Step 5 — `HealthScore` model + `DAILY_HEALTH_SCORE` repeatable BullMQ (`0 6 * * *` Asia/Kolkata) + `computeHealthScore` pure function (logging 20 + stability 25 + trend 25 + med 20 + streak 10).
-- [x] **Step 6 — Dashboard summary card** — Pure function `composeDashboardSummary` in `packages/domain-logic/src/dashboard-summary/`. Rule-based (no Claude — Phase 3 owns AI; the dashboard fires on every load so latency/cost must be zero). Hindi-first natural-language headline + up to 3 detail lines (glucose, BP, "kal se behtar" trend) with English fallback on the language toggle. Priority order: cold-start (< 7d) → no-readings prompt → critical-value short-circuit → normal day with optional health-score in the headline. Critical threshold reuses GLUCOSE_CRITICAL_LOW (<65) / GLUCOSE_CRITICAL_HIGH (>315). 20 new tests covering all four priority branches + English variant + invariants. **Extended `GET /api/v1/dashboard`** (new `dashboard.service.ts` extracted from the inline route) with `summary`, `bpLatest`, `mealsToday`, `insightsUnacknowledgedCount` (confidence ≥ 0.7, not acknowledged, < 30 days old), and `healthScore` (gracefully `null` when the HealthScore model isn't on the running schema — runtime-safe degrade for staged rollouts). Branch `feat/dashboard-summary`.
+- [ ] Step 6 — `composeDashboardSummary` pure function + `DAILY_DASHBOARD_SUMMARY` job + extend `GET /api/v1/dashboard` response with `summary`, `bpLatest`, `mealsToday`, `insightsUnacknowledgedCount`, `healthScore`.
 - [ ] Step 7 — `FamilyLink` model + family module. PII-stripped dashboard reuse via `readOnly: true` + `viewerUserId`.
 
 ### Architectural decisions locked-in

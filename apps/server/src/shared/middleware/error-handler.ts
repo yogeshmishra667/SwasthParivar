@@ -31,6 +31,8 @@ const statusFor = (code: ErrorCode): number => {
       return 429;
     case "REPORT_GENERATING":
       return 202;
+    case "INSUFFICIENT_DATA":
+      return 422;
     case "READING_INVALID_VALUE":
     case "READING_CONFIRMATION_NEEDED":
     case "RX_PENDING_APPROVAL":
