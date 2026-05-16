@@ -31,15 +31,11 @@ const ANOMALY_MIN_DAYS = 21;
 const TUKEY_K = 1.5;
 const TUKEY_K_EXTREME = 3;
 
-export const detectAnomaly = (
-  input: AnomalyDetectorInput,
-): DetectorResult | null => {
+export const detectAnomaly = (input: AnomalyDetectorInput): DetectorResult | null => {
   const nowMs = input.now.getTime();
   const windowStartMs = nowMs - ANOMALY_WINDOW_DAYS * dayMs;
 
-  const sameType = input.readings.filter(
-    (r) => r.readingType === input.targetReadingType,
-  );
+  const sameType = input.readings.filter((r) => r.readingType === input.targetReadingType);
   if (sameType.length === 0) return null;
 
   const target = sameType.find((r) => r.id === input.targetReadingId);
@@ -56,9 +52,7 @@ export const detectAnomaly = (
   if (history.length < 5) return null;
 
   // Minimum-data gate per CLAUDE.md: 21 days of same-type data.
-  const oldestMs = Math.min(
-    ...history.map((r) => new Date(r.measuredAt).getTime()),
-  );
+  const oldestMs = Math.min(...history.map((r) => new Date(r.measuredAt).getTime()));
   if (daysBetween(oldestMs, nowMs) < ANOMALY_MIN_DAYS) return null;
 
   const { q1, q3, iqr: iqrValue } = iqr(history.map((r) => r.valueMgDl));
@@ -96,10 +90,7 @@ export const detectAnomaly = (
   }
 
   // Distance in IQR-units — used in evidence + confidence.
-  const distanceIqrs =
-    direction === "high"
-      ? (value - q3) / iqrValue
-      : (q1 - value) / iqrValue;
+  const distanceIqrs = direction === "high" ? (value - q3) / iqrValue : (q1 - value) / iqrValue;
 
   // Confidence: anchored on distance from the fence + sample size.
   // 5-point minimum baseline → 0.5 depth boost; full 21-day window →

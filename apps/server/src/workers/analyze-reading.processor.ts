@@ -69,9 +69,7 @@ const toMealEntries = (
     loggedAt: m.loggedAt.toISOString(),
   }));
 
-const maxSeverity = (
-  results: readonly DetectorResult[],
-): DetectorResult["severityLevel"] => {
+const maxSeverity = (results: readonly DetectorResult[]): DetectorResult["severityLevel"] => {
   let acc: DetectorResult["severityLevel"] = "info";
   for (const r of results) {
     if (r.severityLevel === "critical") return "critical";
@@ -80,9 +78,7 @@ const maxSeverity = (
   return acc;
 };
 
-export const processAnalyzeReading = async (
-  job: Job<AnalyzeReadingJob>,
-): Promise<void> => {
+export const processAnalyzeReading = async (job: Job<AnalyzeReadingJob>): Promise<void> => {
   const { readingId, userId, readingType, requestId } = job.data;
   const childLogger = logger.child({
     queue: "analyze-reading",

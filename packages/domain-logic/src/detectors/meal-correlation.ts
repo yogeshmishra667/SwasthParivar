@@ -65,9 +65,7 @@ export const detectMealCorrelation = (
 
   // Span guard: 7-CALENDAR-day window per CLAUDE.md — reject 7
   // readings packed into 24h.
-  const oldestMs = Math.min(
-    ...postMealInWindow.map((r) => new Date(r.measuredAt).getTime()),
-  );
+  const oldestMs = Math.min(...postMealInWindow.map((r) => new Date(r.measuredAt).getTime()));
   if (daysBetween(oldestMs, nowMs) < 3) return null;
 
   const mealsInWindow = input.meals.filter((m) => {

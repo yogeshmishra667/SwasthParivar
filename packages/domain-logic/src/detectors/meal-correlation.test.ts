@@ -7,18 +7,11 @@ const NOW = new Date("2026-05-13T20:00:00.000Z");
 const dayMs = 86_400_000;
 const hourMs = 60 * 60 * 1000;
 
-const reading = (
-  id: string,
-  value: number,
-  daysAgo: number,
-  hoursOffset = 0,
-): TypedReading => ({
+const reading = (id: string, value: number, daysAgo: number, hoursOffset = 0): TypedReading => ({
   id,
   valueMgDl: value,
   readingType: "post_meal",
-  measuredAt: new Date(
-    NOW.getTime() - daysAgo * dayMs + hoursOffset * hourMs,
-  ).toISOString(),
+  measuredAt: new Date(NOW.getTime() - daysAgo * dayMs + hoursOffset * hourMs).toISOString(),
 });
 
 const meal = (
@@ -34,9 +27,7 @@ const meal = (
 
 describe("detectMealCorrelation — minimum-data gates", () => {
   it("returns null with no readings", () => {
-    expect(
-      detectMealCorrelation({ readings: [], meals: [], now: NOW }),
-    ).toBeNull();
+    expect(detectMealCorrelation({ readings: [], meals: [], now: NOW })).toBeNull();
   });
 
   it("returns null when fewer than 5 post_meal readings exist", () => {
@@ -46,9 +37,7 @@ describe("detectMealCorrelation — minimum-data gates", () => {
       reading("c", 160, 4),
       reading("d", 175, 6),
     ];
-    expect(
-      detectMealCorrelation({ readings, meals: [], now: NOW }),
-    ).toBeNull();
+    expect(detectMealCorrelation({ readings, meals: [], now: NOW })).toBeNull();
   });
 
   it("returns null when readings span < 3 days (packed into 24h)", () => {
@@ -61,9 +50,7 @@ describe("detectMealCorrelation — minimum-data gates", () => {
       reading("e", 0, 0, -8),
       reading("f", 0, 0, -10),
     ].map((r, i) => ({ ...r, valueMgDl: 180 - i }));
-    expect(
-      detectMealCorrelation({ readings, meals: [], now: NOW }),
-    ).toBeNull();
+    expect(detectMealCorrelation({ readings, meals: [], now: NOW })).toBeNull();
   });
 
   it("returns null when no category has 5+ attributed readings", () => {
@@ -83,9 +70,7 @@ describe("detectMealCorrelation — minimum-data gates", () => {
       meal("m4", "heavy_fried", 6),
       // Two readings with no meal in the prior 3h.
     ];
-    expect(
-      detectMealCorrelation({ readings, meals, now: NOW }),
-    ).toBeNull();
+    expect(detectMealCorrelation({ readings, meals, now: NOW })).toBeNull();
   });
 });
 
@@ -119,9 +104,7 @@ describe("detectMealCorrelation — happy path", () => {
 
   it("returns null when category mean is within 10 of overall (noise band)", () => {
     const { readings, meals } = pairsScenario(155, 150);
-    expect(
-      detectMealCorrelation({ readings, meals, now: NOW }),
-    ).toBeNull();
+    expect(detectMealCorrelation({ readings, meals, now: NOW })).toBeNull();
   });
 
   it("escalates to critical when category mean exceeds overall by 50+", () => {
@@ -152,9 +135,7 @@ describe("detectMealCorrelation — attribution window", () => {
       meal("m4", "heavy_fried", 3, -6),
       meal("m5", "heavy_fried", 4, -6),
     ];
-    expect(
-      detectMealCorrelation({ readings, meals, now: NOW }),
-    ).toBeNull();
+    expect(detectMealCorrelation({ readings, meals, now: NOW })).toBeNull();
   });
 });
 
