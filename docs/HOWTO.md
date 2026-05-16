@@ -218,7 +218,145 @@ bash scripts/preflight.sh --full    # also integration + Docker, ~5min
 
 The pre-push git hook runs the fast version automatically. Override with `git push --no-verify` only in genuine emergencies.
 
-If preflight passes locally and CI fails, the gap is a CI-specific thing (env, secrets, third-party). Open the failing job's log on GitHub.
+Preflight runs 11 gates in order (mirrors CI):
+
+1. Wipe build artefacts (`dist/`, `*.tsbuildinfo`)
+2. Frozen `pnpm install` (matches CI lockfile lock)
+3. Workspace typecheck
+4. Workspace lint (`max-warnings=0`, includes `eslint-plugin-security`)
+5. Prettier `format:check`
+6. `prisma format` check on `schema.prisma`
+7. Schema ↔ migration parity (semantic — uses `prisma migrate diff`,
+   so pure-format edits do NOT trigger "missing migration")
+8. Squawk migration SQL safety on newly-added migrations
+9. Domain-logic purity (no DB/network imports, no `Date.now()` etc.)
+10. Domain-logic `test:coverage` with per-file ratchets
+11. (Optional with `--full`) integration tests + Docker `/health` smoke
+
+If preflight passes locally and CI fails, the gap is a CI-specific thing (env, secrets, third-party services like Trivy DB or CodeQL servers). Open the failing job's log on GitHub.
+
+CI-only gates (don't run locally — see CONTRIBUTING.md gate map for why):
+
+- **CodeQL SAST** (JS/TS) — Security → Code scanning
+- **Dependency review** on PR diffs (HIGH/CRITICAL CVE + license check)
+- **Trivy image scan** (HIGH/CRITICAL, fixable only)
+- **Gitleaks** secret scan
+- **Danger** PR-rules bot
+- **`pnpm audit`** full production-dep tree
+
+---
+
+## Triage a CodeQL alert
+
+CodeQL findings appear under **Security → Code scanning** on GitHub. PR
+checks fail only on `ERROR`-severity rules; `WARNING` and `NOTE` show
+in the dashboard but don't block.
+
+1. Click the alert. Read **"Why this matters"** — it explains the data
+   flow CodeQL traced (e.g. `req.body.token → service → bcrypt.compare`).
+2. If the flow is genuinely exploitable:
+   - Add the input validation or sanitization at the boundary, not the
+     sink. Pattern: parse-don't-validate using Zod at the controller.
+   - Push a fix; CodeQL re-scans on the next commit.
+3. If it's a false positive (CodeQL traced data that's actually
+   already constrained):
+   - Click **Dismiss** → pick the reason (`False positive`,
+     `Used in tests`, `Won't fix`). The audit log captures who
+     dismissed and why.
+   - **Don't** suppress with a code comment — CodeQL reads SARIF
+     suppressions, not source comments. Use the GitHub UI.
+4. If it's a known limitation of the rule pack:
+   - Open an issue tagged `security:codeql-tuning` with the rule ID.
+     Periodically (~quarterly) we review the suppression list and
+     consider downgrading rules to `warning` severity in the workflow.
+
+The workflow lives at `.github/workflows/codeql.yml`; it pulls the
+`security-and-quality` query pack. Bumping to `security-extended` is on
+the table once the team is ≥5 engineers.
+
+---
+
+## Triage a Trivy image-scan alert
+
+Trivy runs after the server Docker image is built (`image-smoke` job).
+It fails on `HIGH` or `CRITICAL` CVEs that have a fix available
+(`ignore-unfixed: true`).
+
+1. The CI step prints the CVE table — package, installed version,
+   fixed version, link to advisory.
+2. **Most common cause**: the Node base image (`node:22-bookworm-slim`)
+   has a vulnerable `libxml2` / `openssl`. Rebuild after a base bump:
+   ```bash
+   # Locally bump the base in apps/server/Dockerfile and re-run:
+   bash scripts/preflight.sh --with-docker
+   ```
+3. If the CVE is in a workspace dep, regenerate the lockfile:
+   ```bash
+   pnpm --filter @swasth/server update <pkg>
+   pnpm install
+   ```
+4. If no fix exists yet (Trivy still shows it because the package
+   patched in a later major), pin to a minor that has the patch OR add
+   to `.trivyignore` with a tracking issue.
+5. **Never** disable the gate. Reach for `--ignore-unfixed: false`
+   only if you want MORE strictness, not less.
+
+---
+
+## Triage an `eslint-plugin-security` failure
+
+The plugin fires on lint at commit + preflight + CI. High-signal rules
+only (CONTRIBUTING.md lists the picked subset).
+
+| Rule fired                                | What to do                                                                                                          |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `security/detect-eval-with-expression`    | Don't use `eval`. If you must (e.g. expression sandbox), use `vm2` and add the rule disable comment justifying it.  |
+| `security/detect-non-literal-regexp`      | Compute the regex once at module load with a literal, OR escape user input via `lodash.escapeRegExp` then build it. |
+| `security/detect-unsafe-regex`            | Catastrophic backtracking risk (ReDoS). Replace with a non-greedy pattern or a finite-state matcher.                |
+| `security/detect-possible-timing-attacks` | Use `crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))` — never `===` on auth tokens / OTPs / JWTs.            |
+| `security/detect-pseudoRandomBytes`       | `crypto.pseudoRandomBytes` is removed in modern Node — use `crypto.randomBytes` (cryptographically secure).         |
+| `security/detect-child-process`           | Avoid `exec` with user input. Use `spawn` with an arg array (no shell), or refactor to remove `child_process`.      |
+| `security/detect-bidi-characters`         | Trojan Source attack vector. Open the file in an editor that shows zero-width chars, find and delete.               |
+
+If a rule is firing on safe code you can't restructure away, suppress
+inline with a one-liner justification:
+
+```ts
+// eslint-disable-next-line security/detect-non-literal-regexp -- pattern is from a
+// trusted source list, no user input ever reaches the constructor
+const re = new RegExp(trustedPattern);
+```
+
+Suppress at file level only with reviewer sign-off; we audit
+`eslint-disable` density quarterly to catch slow drift.
+
+---
+
+## Local-dev PostHog setup (without prod keys)
+
+You can wire a local PostHog instance against a personal free-tier
+account for development. CLAUDE.md's "Developer Alerts" all run against
+PostHog, so getting events flowing locally is the fastest way to
+confirm a new event you're adding actually emits.
+
+```bash
+# 1) Get a free PostHog project key (docs/SETUP.md "PostHog setup
+#    walkthrough" Step 1 — same flow).
+# 2) Drop the key into apps/server/.env:
+echo "POSTHOG_API_KEY=phc_…" >> apps/server/.env
+
+# 3) Start the server. The init log prints whether PostHog wired up:
+pnpm --filter @swasth/server dev | grep -i posthog
+# → either "PostHog initialised" or no line (no-op, key missing)
+
+# 4) Trigger any event-emitting endpoint. The CLAUDE.md Metrics list
+#    is exhaustive — pick one and curl it.
+# 5) PostHog → Live Events tab → confirm arrival within ~10s.
+```
+
+The mobile-side key (Step 3 of the walkthrough) is bundle-time, not
+process-env, so to test mobile events you need an EAS preview build
+with `extra.posthogKey` set in `app.json` or via `eas env`.
 
 ---
 

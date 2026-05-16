@@ -20,15 +20,15 @@ Last updated: 2026-05-14 (after the audit landed).
 
 ## P1 — required for the audit's observability to actually work
 
-| #   | Item                            | Where               | Notes                                                                                                                                                                                                                                |
-| --- | ------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 6   | Create Sentry project (server)  | sentry.io           | Copy DSN to `SENTRY_DSN` on the deploy host. Without this, server errors land in stdout only.                                                                                                                                        |
-| 7   | Create Sentry project (mobile)  | sentry.io           | Pass DSN as `EXPO_PUBLIC_SENTRY_DSN` at EAS build time, _or_ put it under `expoConfig.extra.sentryDsn` in `app.json` (re-build needed).                                                                                              |
-| 8   | Create PostHog project          | posthog.com         | Copy project API key to `POSTHOG_API_KEY` on the deploy host. Without this, all 5 audit-wired events (`reading_logged`, `streak_milestone`, `voice_attempt`, `critical_bypass_triggered`, `notification_sent`) are silently dropped. |
-| 9   | Configure WhatsApp Business API | Meta business       | `WHATSAPP_BUSINESS_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`. Primary OTP channel.                                                                                                                                                      |
-| 10  | Configure MSG91                 | msg91.com           | `MSG91_API_KEY`, `MSG91_SENDER_ID`. SMS fallback (critical-bypass step 2).                                                                                                                                                           |
-| 11  | Configure Expo push             | expo.dev            | `EXPO_ACCESS_TOKEN`. Required for guardian push notifications.                                                                                                                                                                       |
-| 12  | Configure Cloudflare R2         | dash.cloudflare.com | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY`, `R2_SECRET_KEY`, `R2_BUCKET`. Phase 4 (prescription photos) — defer until then.                                                                                                                    |
+| #   | Item                            | Where               | Notes                                                                                                                                                                                                                                                                |
+| --- | ------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 6   | Create Sentry project (server)  | sentry.io           | Copy DSN to `SENTRY_DSN` on the deploy host. Without this, server errors land in stdout only.                                                                                                                                                                        |
+| 7   | Create Sentry project (mobile)  | sentry.io           | Pass DSN as `EXPO_PUBLIC_SENTRY_DSN` at EAS build time, _or_ put it under `expoConfig.extra.sentryDsn` in `app.json` (re-build needed).                                                                                                                              |
+| 8   | Create PostHog project          | posthog.com         | See [PostHog setup](#posthog-setup-walkthrough) below for the full step-by-step. Without `POSTHOG_API_KEY`, all 5 audit-wired events (`reading_logged`, `streak_milestone`, `voice_attempt`, `critical_bypass_triggered`, `notification_sent`) are silently dropped. |
+| 9   | Configure WhatsApp Business API | Meta business       | `WHATSAPP_BUSINESS_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`. Primary OTP channel.                                                                                                                                                                                      |
+| 10  | Configure MSG91                 | msg91.com           | `MSG91_API_KEY`, `MSG91_SENDER_ID`. SMS fallback (critical-bypass step 2).                                                                                                                                                                                           |
+| 11  | Configure Expo push             | expo.dev            | `EXPO_ACCESS_TOKEN`. Required for guardian push notifications.                                                                                                                                                                                                       |
+| 12  | Configure Cloudflare R2         | dash.cloudflare.com | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY`, `R2_SECRET_KEY`, `R2_BUCKET`. Phase 4 (prescription photos) — defer until then.                                                                                                                                                    |
 
 ## P2 — repo + GitHub configuration
 
@@ -58,6 +58,140 @@ Last updated: 2026-05-14 (after the audit landed).
 | 24  | Detox / Maestro mobile E2E                                                            | CLAUDE.md defers to Phase 2+ explicitly.                                                                                                                                              |
 | 25  | Per-user rate limit + OTP exponential backoff                                         | DAU < 1k for now; revisit at scale.                                                                                                                                                   |
 | 26  | Zod → OpenAPI contract generation                                                     | Only worth it once a second client (web admin, doctor dashboard, partner) lands.                                                                                                      |
+
+---
+
+## PostHog setup walkthrough
+
+This is the concrete step-by-step for item #8. Two env vars across two
+surfaces (server + mobile), both wired with no-op fallbacks so the
+absence of keys never breaks a build.
+
+### Step 1 — Create the PostHog project
+
+1. Sign up at [posthog.com](https://posthog.com) (free tier is enough — 1M
+   events/month). Pick the **US** region unless your team is in the EU; the
+   server emitter currently points at `https://us.i.posthog.com`. If you
+   pick EU, update both `posthog.ts` files (see Step 4 below).
+2. Skip the install wizard's framework picker — we don't use the snippet
+   approach. We use `posthog-node` (server) and `posthog-react-native`
+   (mobile), both already in the workspace.
+3. Open the new project's **Settings → Project → API keys**.
+4. Copy the **Project API key** (starts with `phc_`). This is the
+   client-side key — safe to ship inside the mobile app. It can write
+   events but cannot read them.
+5. (Optional, ops only) Copy the **Personal API key** if you want to
+   write Grafana/Looker queries against PostHog data. Not needed by the
+   app.
+
+### Step 2 — Server: set `POSTHOG_API_KEY`
+
+Same key as Step 1 (the `phc_…`).
+
+```bash
+# Local dev (apps/server/.env):
+echo "POSTHOG_API_KEY=phc_…your_key_here…" >> apps/server/.env
+
+# Deploy host: set via the platform's secret manager
+# (Render env vars / Fly secrets / k8s Secret).
+```
+
+The server emitter in `apps/server/src/shared/analytics/posthog.ts`
+reads this key at startup. **No key → `capture()` is a silent no-op**,
+so dev/test runs stay quiet. In production the env-schema guard
+(`apps/server/src/config/env.ts`) makes the key required and fails
+fast on startup.
+
+### Step 3 — Mobile: bake the key into the build
+
+Mobile reads from `expoConfig.extra.posthogKey`, _not_ from a process
+env var (process env doesn't exist on a React Native runtime). Two
+ways to land the key:
+
+**Option A — `app.json` (simplest, key visible in repo):**
+
+```json
+// apps/mobile/app.json
+{
+  "expo": {
+    "extra": {
+      "sentryDsn": "...",
+      "posthogKey": "phc_…your_key_here…"
+    }
+  }
+}
+```
+
+Then rebuild: `eas build` or `npx expo prebuild && npx expo run:android`.
+
+**Option B — EAS environment variable (key not in repo):**
+
+```bash
+eas env:create EXPO_PUBLIC_POSTHOG_KEY --value phc_… --environment production
+```
+
+Then read it in `app.config.ts` instead of `app.json` and project the
+value through `expoConfig.extra.posthogKey`. Required if the key
+should differ per build profile.
+
+**Either way the client-side PostHog key is _not_ a secret** — it's
+shipped inside the binary. PostHog enforces server-side that
+project-keys can only `capture` events, never read them.
+
+### Step 4 — (Only if you picked the EU region)
+
+PostHog has two API hosts. Update both files to match the region you
+chose at signup:
+
+```ts
+// apps/server/src/shared/analytics/posthog.ts
+host: "https://eu.i.posthog.com"; // was: us.i.posthog.com
+
+// apps/mobile/src/services/analytics.ts
+new PostHog(apiKey, { host: "https://eu.i.posthog.com" }); // was: app.posthog.com
+```
+
+(The mobile file currently points at the legacy `app.posthog.com`
+host which still works for both regions, but matching the server URL
+is cleaner.)
+
+### Step 5 — Verify events are flowing
+
+```bash
+# 1) Start the server with the new key set:
+pnpm --filter @swasth/server dev
+
+# 2) Trigger a server-side event. The simplest is logging a glucose
+#    reading — it fires `reading_logged` from readings.service.ts:
+curl -X POST http://localhost:3000/api/v1/readings/glucose \
+  -H "Authorization: Bearer <JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{"clientUuid":"00000000-0000-0000-0000-000000000001","valueMgDl":120,"readingType":"fasting","source":"manual","measuredAt":"2026-05-16T07:00:00Z","version":1}'
+
+# 3) Open PostHog → Live Events tab. Within ~10 seconds you should
+#    see `reading_logged` with the expected properties (type, source,
+#    user_stage, etc.). If you don't:
+#      - check the server log for "posthog capture failed"
+#      - confirm POSTHOG_API_KEY is loaded (`echo $POSTHOG_API_KEY`)
+#      - confirm the host matches your region (Step 4)
+```
+
+### Step 6 — Dashboards (recommended, takes ~10 min)
+
+PostHog → **Dashboards → New dashboard → SwasthParivar - retention**.
+Add these queries — they map 1:1 to the CLAUDE.md "Developer Alerts"
+section:
+
+| Tile                        | Query                                                                                                                                                   | Alert threshold                    |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Voice success rate          | `count(voice_attempt where success=true) / count(voice_attempt)` over last 7 days                                                                       | < 70% → onboarding parser broken   |
+| Time-to-first-log p50       | `median(time_to_log_seconds where reading_logged.user_stage=0)`                                                                                         | > 24hr for 30% → too much friction |
+| Critical-bypass SMS success | `count(critical_bypass_triggered where sms_targets > 0)` — track per-day. Pair with `critical_alert_sms_per_contact{delivered}` (Phase-1.5 patch event) | < 95% → SMS provider issue         |
+| Day-1 / Day-7 retention     | Retention insight, anchor event = `reading_logged`, return event = `reading_logged`                                                                     | day-1→3 < 50% → onboarding fix     |
+| Notification → open rate    | `count(app_opened where source='notification') / count(notification_sent where suppressed=false)`                                                       | < 30% → re-tune copy/cadence       |
+
+The team's alerting bar comes from CLAUDE.md "Developer Alerts" —
+PostHog → Alerts can fire to email or Slack when any of these breach.
 
 ---
 
