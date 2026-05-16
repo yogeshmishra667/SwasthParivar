@@ -38,6 +38,7 @@ Last updated: 2026-05-14 (after the audit landed).
 | 14  | Add a second human to `CODEOWNERS`                  | `.github/CODEOWNERS`              | Currently lists `@yogeshmishra667` only. The "2 reviewers required for safety-critical paths" rule in `PULL_REQUEST_TEMPLATE.md` is aspirational until a second name lands here.                            |
 | 15  | Configure deploy host secrets via the platform's UI | Render / Fly / k8s secret manager | Copy each env var from items 1–12. Never commit them; never put them in `app.json` for mobile except for non-secret values like Sentry DSN.                                                                 |
 | 16  | Wire CI status checks into branch protection        | GitHub repo settings              | Each CI job is a status check; pick the ones from item 13 above.                                                                                                                                            |
+| 17  | Enable Code scanning + Dependency graph             | GitHub repo settings              | See [Enabling code-security features](#enabling-code-security-features-codeql--dependency-review) below. Currently soft-fail; enable to upgrade to hard gates.                                              |
 
 ## P3 — operational followups that can land any time
 
@@ -58,6 +59,67 @@ Last updated: 2026-05-14 (after the audit landed).
 | 24  | Detox / Maestro mobile E2E                                                            | CLAUDE.md defers to Phase 2+ explicitly.                                                                                                                                              |
 | 25  | Per-user rate limit + OTP exponential backoff                                         | DAU < 1k for now; revisit at scale.                                                                                                                                                   |
 | 26  | Zod → OpenAPI contract generation                                                     | Only worth it once a second client (web admin, doctor dashboard, partner) lands.                                                                                                      |
+
+---
+
+## Enabling code-security features (CodeQL + Dependency review)
+
+Two of the new gates (CodeQL SAST and Dependency review on PR diffs)
+ship with `continue-on-error: true` so they don't BLOCK PRs on a fresh
+repo. They become hard gates once the underlying GitHub features are
+enabled. Without enabling them, the gates run but their failures are
+informational.
+
+### What needs enabling
+
+| Feature              | Required for          | How to enable                                                           | Cost                            |
+| -------------------- | --------------------- | ----------------------------------------------------------------------- | ------------------------------- |
+| **Dependency graph** | `dependency-review`   | Settings → Code security → "Dependency graph" toggle                    | Free on public; GHAS on private |
+| **Code scanning**    | `CodeQL`, `Scorecard` | Settings → Code security → "Code scanning" → click "Set up" → "Default" | Free on public; GHAS on private |
+| **Secret scanning**  | Better than gitleaks  | Settings → Code security → "Secret scanning" toggle                     | Free on public; GHAS on private |
+
+### Two paths to upgrade soft gates to hard gates
+
+**Option A — Make the repo public** (recommended if the code is meant
+to be open):
+
+1. Settings → General → Danger Zone → Change visibility → Public
+2. All three features above become FREE
+3. After the next push: gates pass cleanly with no extra work
+4. Drop `continue-on-error: true` from `ci.yml` (dependency-review job)
+   and `codeql.yml` (analyze job) in a follow-up PR
+
+**Option B — Enable GitHub Advanced Security** (keep repo private):
+
+1. Settings → Code security → enable each feature one by one
+2. GHAS is paid (~$21/user/month for orgs as of 2026). For a single-
+   user account, GitHub may offer a free trial — check
+   `Settings → Billing`.
+3. After enabling, drop `continue-on-error: true` as in Option A.
+
+### What still works without either
+
+These gates run fine on a private repo with no GHAS:
+
+- `pnpm audit` (full-tree CVE scan, runs in the `audit` job)
+- Trivy image scan (runs in `image-smoke`)
+- gitleaks (runs in `secret-scan`)
+- `eslint-plugin-security` (runs in `lint`)
+- SBOM generation (workflow artefacts + release attachments)
+- OpenSSF Scorecard analysis itself (only the SARIF upload to Security
+  tab fails; the score artefact still gets generated)
+
+So the security posture is already strong without GHAS — CodeQL just
+adds the SAST flow-analysis layer on top, and dependency-review adds
+the PR-diff earlier signal vs `pnpm audit`'s full-tree run.
+
+### What I recommend for SwasthParivar
+
+For a medical-grade project pre-launch: **enable GHAS** when budget
+allows, because CodeQL's session-fixation / data-flow rules find a
+class of bug `pnpm audit` and Trivy can't see. Until then, the
+soft-fail keeps the gates in place so the day GHAS lands, every PR
+since this commit gets re-scanned in the historical timeline.
 
 ---
 

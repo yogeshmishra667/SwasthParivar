@@ -31,6 +31,15 @@ jobs:
     name: CodeQL (javascript-typescript)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # NOTE on `continue-on-error`: CodeQL's `upload-sarif` requires
+    # "Code scanning" enabled in repo Settings → Code security. On a
+    # PUBLIC repo this is free; on a PRIVATE repo it requires GitHub
+    # Advanced Security (paid). Without it the action fails with
+    # "Code scanning is not enabled for this repository." We soft-fail
+    # so the gate is informational until the repo is made public OR
+    # GHAS is enabled. To upgrade to a hard gate: drop the
+    # `continue-on-error` line below.
+    continue-on-error: true
     permissions:
       # security-events:write is required to upload SARIF results.
       # actions:read + contents:read are required by the action.

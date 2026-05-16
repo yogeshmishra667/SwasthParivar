@@ -174,11 +174,21 @@ jobs:
   # moment they enter the lockfile, before they're merged.
   #
   # PR-only — needs the base..head diff.
+  #
+  # NOTE on `continue-on-error`: GitHub's dependency-review action
+  # requires either a PUBLIC repo OR GitHub Advanced Security (paid)
+  # enabled on a private repo. Without it, the API returns "not
+  # supported on this repository". We soft-fail here so the gate is
+  # informational rather than blocking until the repo is made public
+  # OR GHAS is enabled. To upgrade to a hard gate later: drop the
+  # `continue-on-error` line + ensure `Settings → Code security →
+  # Dependency graph` is on.
   # ──────────────────────────────────────────────────────────
   dependency-review:
     name: Dependency review (PR diff)
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    continue-on-error: true
     timeout-minutes: 4
     permissions:
       contents: read
@@ -399,8 +409,14 @@ jobs:
       # avoids blocking on issues we can't action this build (e.g. an
       # OS package CVE with no patch yet — those should generate a
       # tracking issue separately, not break PRs).
+      #
+      # Version: aquasecurity/trivy-action uses no-v tag form on the
+      # marketplace (matches `0.35.0`). Bump in lockstep with their
+      # release cadence; pin to commit SHA when the team is large
+      # enough that OpenSSF Scorecard's "pinned action" rule
+      # becomes worth chasing.
       - name: Scan image with Trivy (HIGH+CRITICAL, fixable)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: swasth-server:ci
           format: table
