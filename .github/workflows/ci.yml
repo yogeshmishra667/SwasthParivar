@@ -370,13 +370,23 @@ jobs:
             #   constraint-missing-not-valid, adding-foreign-key-constraint
             #     — protect against FK validation scans on tables with
             #       rows. New tables have zero rows.
-            #   disallowed-unique-constraint
-            #     — wants a statement_timeout before unique-index creation.
-            #       Same "only matters on populated tables" reasoning.
+            #   disallowed-unique-constraint, require-timeout-settings
+            #     — both want a lock_timeout/statement_timeout before
+            #       unique-index creation. Same "only matters on populated
+            #       tables" reasoning — new empty tables have no contention.
+            #   prefer-bigint-over-int
+            #     — warns about int32 overflow. Our int columns are bounded
+            #       counters (score 0-100, severity_score 0-100, etc.), not
+            #       monotonic IDs; overflow is impossible by construction.
+            #   prefer-timestamp-tz
+            #     — wants timestamptz over timestamp. Prisma's default emit
+            #       is TIMESTAMP(3) across every model in schema.prisma;
+            #       fixing it is a repo-wide sweep tracked separately, not
+            #       a per-PR gate.
             #
             # Revisit when migrations start altering populated tables.
             if ! /tmp/squawk \
-                --exclude prefer-text-field,require-concurrent-index-creation,prefer-robust-stmts,constraint-missing-not-valid,adding-foreign-key-constraint,disallowed-unique-constraint \
+                --exclude prefer-text-field,require-concurrent-index-creation,prefer-robust-stmts,constraint-missing-not-valid,adding-foreign-key-constraint,disallowed-unique-constraint,require-timeout-settings,prefer-bigint-over-int,prefer-timestamp-tz \
                 "$f"; then
               FAILED=1
             fi
