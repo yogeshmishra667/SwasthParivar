@@ -19,9 +19,7 @@ export default function SosScreen(): JSX.Element {
     <SafeAreaView className="flex-1 items-center justify-center bg-critical p-6">
       <Icon name="warning" size={72} color="#FFFFFF" accessibilityLabel="Emergency" />
       <Text className="mt-4 text-hero font-bold text-white">Emergency</Text>
-      <Text className="mt-2 text-important text-white">
-        {name ?? "Contact"} ko call karein
-      </Text>
+      <Text className="mt-2 text-important text-white">{name ?? "Contact"} ko call karein</Text>
       <View className="mt-6 w-full gap-3">
         <Button
           label="Abhi call karein"

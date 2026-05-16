@@ -13,6 +13,7 @@ You are reviewing pure domain logic functions for a health app. These functions 
 ## Purity Enforcement
 
 Before reviewing logic, verify:
+
 1. No imports from @prisma/client, ioredis, bullmq, or any HTTP client
 2. No file system operations
 3. No Date.now() calls — time must be passed as a parameter
@@ -48,7 +49,7 @@ If ANY purity violation found, stop review and flag as CRITICAL.
 
 - CRITICAL: ALWAYS compare same reading type (fasting vs fasting ONLY, never mix)
 - < 7 days user stage: compare to last reading of same type
-- >= 7 days: 7-calendar-day rolling median of same type, min 3 readings, else fall back
+- > = 7 days: 7-calendar-day rolling median of same type, min 3 readings, else fall back
 - Delta thresholds: <= -10 celebrate, >= 10 gentle_warn, else neutral
 - < 10 mg/dL delta → neutral always (noise floor)
 - First ever reading → celebrate regardless of value

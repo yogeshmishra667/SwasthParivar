@@ -39,9 +39,7 @@ export const detectTrend = (input: TrendDetectorInput): DetectorResult | null =>
   const nowMs = input.now.getTime();
   const windowStartMs = nowMs - input.windowDays * dayMs;
 
-  const sameType = input.readings.filter(
-    (r) => r.readingType === input.targetReadingType,
-  );
+  const sameType = input.readings.filter((r) => r.readingType === input.targetReadingType);
 
   const inWindow = sameType.filter((r) => {
     const t = new Date(r.measuredAt).getTime();
@@ -53,9 +51,7 @@ export const detectTrend = (input: TrendDetectorInput): DetectorResult | null =>
   // Span check — without it, 5 readings packed into a single hour would
   // pass the min-points gate. CLAUDE.md "min 5 points + R² > 0.5"
   // assumes those points are spread across the window.
-  const oldestMs = Math.min(
-    ...inWindow.map((r) => new Date(r.measuredAt).getTime()),
-  );
+  const oldestMs = Math.min(...inWindow.map((r) => new Date(r.measuredAt).getTime()));
   const span = daysBetween(oldestMs, nowMs);
   if (span < Math.max(2, Math.floor(input.windowDays / 3))) return null;
 

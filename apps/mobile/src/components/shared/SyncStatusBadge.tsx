@@ -34,9 +34,7 @@ export const SyncStatusBadge = (): JSX.Element | null => {
         className="flex-row items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1"
       >
         <Icon name="cloud-offline" size={14} color="#92400E" />
-        <Text className="text-body text-amber-900">
-          {pendingCount} locally saved
-        </Text>
+        <Text className="text-body text-amber-900">{pendingCount} locally saved</Text>
       </View>
     );
   }

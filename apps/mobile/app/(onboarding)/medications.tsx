@@ -24,9 +24,7 @@ export default function MedicationsOnboarding(): JSX.Element {
       logError("onboarding/medications", e);
     }
     setSaving(false);
-    router.replace(
-      destination === "medications" ? "/(tabs)/medications" : "/(tabs)/dashboard",
-    );
+    router.replace(destination === "medications" ? "/(tabs)/medications" : "/(tabs)/dashboard");
   };
 
   return (

@@ -10,9 +10,12 @@ import type { NotificationState as PrismaNotificationState } from "@prisma/clien
 import { createWorker, createQueue, QUEUE_NAMES } from "../shared/queue.js";
 import { prisma } from "../shared/database.js";
 import { logger } from "../shared/logger.js";
+import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
 import { sendExpoPush } from "../shared/notifications/expo-push.js";
 
-interface TickJob { tick: true }
+interface TickJob {
+  tick: true;
+}
 
 const triggerQueue = createQueue<TickJob>(QUEUE_NAMES.TRIGGER_NOTIFICATION);
 
@@ -32,12 +35,13 @@ export const bootstrapNotificationCron = async (): Promise<void> => {
 
 const toShared = (s: PrismaNotificationState): SharedNotificationState => ({
   userId: s.userId,
-  fatigueLevel: (Math.min(3, Math.max(0, s.fatigueLevel)) as 0 | 1 | 2 | 3),
+  fatigueLevel: Math.min(3, Math.max(0, s.fatigueLevel)) as 0 | 1 | 2 | 3,
   consecutiveIgnores: s.consecutiveIgnores,
   lastNotificationAt: s.lastNotificationAt?.toISOString() ?? null,
   bestLogTimeFasting: s.bestLogTimeFasting,
   bestLogTimePostMeal: s.bestLogTimePostMeal,
-  notificationHistory7d: (s.notificationHistory7d as SharedNotificationState["notificationHistory7d"]) ?? [],
+  notificationHistory7d:
+    (s.notificationHistory7d as SharedNotificationState["notificationHistory7d"]) ?? [],
   last3VariantIds: (s.last3VariantIds as string[]) ?? [],
 });
 
@@ -222,6 +226,12 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
 
   if (result.kind === "suppress") {
     logger.debug({ userId, reason: result.reason }, "notification suppressed");
+    captureAnalyticsEvent("notification_sent", userId, {
+      trigger_type: "none",
+      variant_id: null,
+      suppressed: true,
+      suppress_reason: result.reason,
+    });
     return;
   }
 
@@ -242,6 +252,13 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
       },
     })),
   );
+
+  captureAnalyticsEvent("notification_sent", userId, {
+    trigger_type: result.chosen.trigger,
+    variant_id: null,
+    suppressed: false,
+    suppress_reason: null,
+  });
 
   await persistState(userId, result.nextState);
 };

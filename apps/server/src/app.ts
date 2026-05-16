@@ -2,6 +2,7 @@ import express, { type Express } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { pinoHttp } from "pino-http";
+import { env } from "./config/env.js";
 import { logger } from "./shared/logger.js";
 import { requestIdMiddleware } from "./shared/middleware/request-id.js";
 import { errorHandler } from "./shared/middleware/error-handler.js";
@@ -17,14 +18,47 @@ import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
 import { usersRouter } from "./modules/users/users.routes.js";
 import { householdRouter } from "./modules/household/household.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
+import { adminRouter } from "./modules/admin/admin.routes.js";
+
+// Parse TRUST_PROXY env value: "true"/"false"/<int>/<comma list>.
+// Express accepts boolean, integer, or string of comma-separated CIDRs.
+const parseTrustProxy = (raw: string): boolean | number | string[] => {
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  const asInt = Number(raw);
+  if (Number.isInteger(asInt) && asInt >= 0) return asInt;
+  return raw.split(",").map((s) => s.trim());
+};
+
+// CORS allowlist. Patterns are anchored with `^` to prevent
+// substring-match bypass (e.g. `http://evil.com/.swasthparivar.com`
+// can't match the path component, but defensive anchoring is cheap).
+// The root domain is explicitly included alongside the subdomain pattern.
+const corsAllowList: (string | RegExp)[] = [
+  /^https?:\/\/localhost:8081$/,
+  /^https?:\/\/localhost:3000$/,
+  "https://swasthparivar.com",
+  /^https:\/\/[a-z0-9-]+\.swasthparivar\.com$/,
+];
 
 export const buildApp = (): Express => {
   const app = express();
 
+  // Required behind any reverse proxy so req.ip and rate-limit bucket
+  // by real client IP, not the proxy IP. See env.ts comment for valid
+  // values. NEVER set TRUST_PROXY=true in prod — that trusts any
+  // X-Forwarded-For header from any caller and breaks IP-based rate
+  // limiting / abuse blocking.
+  app.set("trust proxy", parseTrustProxy(env.TRUST_PROXY));
+
+  // Defensive: helmet already removes this, but a second layer costs
+  // nothing and protects against helmet config regressions.
+  app.disable("x-powered-by");
+
   app.use(helmet());
   app.use(
     cors({
-      origin: [/localhost:8081$/, /localhost:3000$/, /\.swasthparivar\.com$/],
+      origin: corsAllowList,
       credentials: true,
     }),
   );
@@ -53,6 +87,7 @@ export const buildApp = (): Express => {
   app.use("/api/v1/dashboard", dashboardRouter);
   app.use("/api/v1/users", usersRouter);
   app.use("/api/v1/household", householdRouter);
+  app.use("/admin", adminRouter);
 
   app.use(errorHandler);
 

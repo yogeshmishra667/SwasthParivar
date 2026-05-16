@@ -16,12 +16,14 @@ You are planning a feature for SwasthParivar. Follow these steps in order — do
 Read `CLAUDE.md` → "STRICT BUILD PHASES — ENFORCE THIS" section.
 
 Determine which phase the user's request belongs to:
+
 - Phase 1 (Weeks 1-4): GLUCOSE ONLY. User, GlucoseReading, MedicationSchedule, MedicationLog, UserStreak, FeedbackEvent, NotificationState. Voice logging, critical bypass, profile switcher.
 - Phase 2 (Weeks 5-8): BP, meals, insights (spike/trend), HbA1c, health score, guardian read-only.
 - Phase 3 (Weeks 9-12): AI chat, correlation/cross-condition detectors, basic guardian alerts, SOS.
 - Phase 4+: Cardiac, respiratory, prescriptions/OCR, appointments, activity, sleep, regional languages.
 
 **If the request is out-of-phase, STOP.** Tell the user:
+
 - Which phase their request belongs to
 - What Phase 1 success metric must be met first ("Papa logs 2+ readings/day for 14 consecutive days")
 - Offer to plan a Phase-1-compatible alternative if one exists
@@ -31,6 +33,7 @@ Do not proceed to Step 2 until phase is confirmed.
 ## Step 2 — Explore
 
 Use the `Explore` subagent (thoroughness "medium") to map:
+
 - Existing modules under `apps/server/src/modules/` that this feature touches
 - Pure functions in `packages/domain-logic/src/` that can be reused
 - Tables in the Prisma schema that already exist vs. need to be added

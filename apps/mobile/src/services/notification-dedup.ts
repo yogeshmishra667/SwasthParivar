@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { logError } from "@/services/analytics";
 
 const STORAGE_KEY = "@swasth/seen_notification_ids";
 const MAX_ENTRIES = 100;
@@ -8,7 +9,7 @@ let hydrating: Promise<void> | null = null;
 
 const hydrate = async (): Promise<void> => {
   if (seen) return;
-  if (hydrating) return hydrating;
+  if (hydrating) return await hydrating;
   hydrating = (async () => {
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
@@ -17,12 +18,14 @@ const hydrate = async (): Promise<void> => {
       seen = [];
     }
   })();
-  return hydrating;
+  return await hydrating;
 };
 
 const persist = (): void => {
   if (!seen) return;
-  void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(seen)).catch(() => {});
+  void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(seen)).catch((err: unknown) => {
+    logError("notification-dedup.persist", err);
+  });
 };
 
 /**

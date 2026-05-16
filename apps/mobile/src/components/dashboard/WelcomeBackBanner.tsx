@@ -26,10 +26,7 @@ interface Props {
 const SHOW_THRESHOLD_DAYS = 3;
 const NEVER_LOGGED = Number.POSITIVE_INFINITY;
 
-export const WelcomeBackBanner = ({
-  daysSinceLatest,
-  loggedToday,
-}: Props): JSX.Element | null => {
+export const WelcomeBackBanner = ({ daysSinceLatest, loggedToday }: Props): JSX.Element | null => {
   const { t } = useTranslation();
   if (loggedToday) return null;
   if (daysSinceLatest < SHOW_THRESHOLD_DAYS) return null;

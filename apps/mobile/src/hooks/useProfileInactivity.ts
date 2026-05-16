@@ -6,8 +6,7 @@ import { TIMEOUTS } from "@/utils/constants";
 export const useProfileInactivity = (): void => {
   useEffect(() => {
     const handleChange = (status: AppStateStatus): void => {
-      const { lastActiveAt, profiles, markActive, requestSelector } =
-        useProfileStore.getState();
+      const { lastActiveAt, profiles, markActive, requestSelector } = useProfileStore.getState();
       if (status === "active") {
         if (
           lastActiveAt !== null &&

@@ -1,6 +1,7 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import prettier from "eslint-config-prettier";
+import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
   js.configs.recommended,
@@ -28,11 +29,28 @@ export default [
       "eqeqeq": ["error", "always", { null: "ignore" }],
     },
   },
+  // React Hooks rules — applied only to mobile (the only React codebase in the workspace)
+  {
+    files: ["apps/mobile/**/*.{ts,tsx}"],
+    plugins: { "react-hooks": reactHooks },
+    rules: {
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+    },
+  },
+  // Test files: relax unsafe-any rules — supertest, vitest helpers, mocks
+  // legitimately return `any`, and forcing typed shims everywhere adds
+  // noise that hides real test bugs.
   {
     files: ["**/*.test.ts", "**/*.spec.ts", "**/tests/**/*.ts"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
     },
   },
   {
@@ -42,8 +60,10 @@ export default [
       "**/node_modules/**",
       "**/.expo/**",
       "**/coverage/**",
-      "**/*.config.{js,mjs,cjs}",
-      "apps/mobile/**",
+      "**/*.config.{js,mjs,cjs,ts}",
+      "vitest.workspace.ts",
+      "dangerfile.ts",
+      ".claude/worktrees/**",
     ],
   },
 ];

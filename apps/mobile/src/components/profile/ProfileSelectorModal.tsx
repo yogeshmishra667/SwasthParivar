@@ -18,9 +18,7 @@ export const ProfileSelectorModal = (): JSX.Element | null => {
       <View className="flex-1 justify-end bg-black/60">
         <View className="w-full rounded-t-3xl bg-white p-6">
           <Text className="text-hero font-bold">{t("profileSelector.title")}</Text>
-          <Text className="mt-1 text-body text-neutral">
-            {t("profileSelector.subtitle")}
-          </Text>
+          <Text className="mt-1 text-body text-neutral">{t("profileSelector.subtitle")}</Text>
 
           <ScrollView className="mt-4 max-h-80">
             {profiles.map((p) => {
@@ -58,9 +56,7 @@ export const ProfileSelectorModal = (): JSX.Element | null => {
             className="mt-4 items-center justify-center rounded-xl bg-gray-100 p-3"
             accessibilityRole="button"
           >
-            <Text className="text-important font-semibold">
-              {t("profileSelector.keepCurrent")}
-            </Text>
+            <Text className="text-important font-semibold">{t("profileSelector.keepCurrent")}</Text>
           </Pressable>
         </View>
       </View>

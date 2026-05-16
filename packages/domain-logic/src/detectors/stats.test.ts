@@ -152,13 +152,7 @@ describe("rollingMedian", () => {
     const day = 86_400_000;
     const now = 100 * day;
     // measuredAtMs sits 50 days in the past; window is only 7 days.
-    expect(
-      rollingMedian(
-        [{ measuredAtMs: 50 * day, value: 100 }],
-        now,
-        7 * day,
-      ),
-    ).toBe(0);
+    expect(rollingMedian([{ measuredAtMs: 50 * day, value: 100 }], now, 7 * day)).toBe(0);
   });
 
   it("includes only points in [now - window, now]", () => {
@@ -198,15 +192,12 @@ describe("daysBetween", () => {
 describe("stats — property invariants", () => {
   it("median is always in [min, max]", () => {
     fc.assert(
-      fc.property(
-        fc.array(fc.integer({ min: -1000, max: 1000 }), { minLength: 1 }),
-        (xs) => {
-          const m = median(xs);
-          const lo = Math.min(...xs);
-          const hi = Math.max(...xs);
-          return m >= lo && m <= hi;
-        },
-      ),
+      fc.property(fc.array(fc.integer({ min: -1000, max: 1000 }), { minLength: 1 }), (xs) => {
+        const m = median(xs);
+        const lo = Math.min(...xs);
+        const hi = Math.max(...xs);
+        return m >= lo && m <= hi;
+      }),
     );
   });
 

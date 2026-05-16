@@ -5,14 +5,18 @@ import {
   decideCriticalBypass,
   type BypassDecision,
 } from "@swasth/domain-logic";
-import type { GlucoseReading, Prisma } from "@prisma/client";
+import { Prisma, type GlucoseReading } from "@prisma/client";
 import { prisma } from "../../shared/database.js";
 import { logger } from "../../shared/logger.js";
 import { createQueue, QUEUE_NAMES } from "../../shared/queue.js";
+import { capture as captureAnalyticsEvent } from "../../shared/analytics/posthog.js";
 
-const criticalQueue = createQueue<{ readingId: string; userId: string; decision: BypassDecision }>(
-  QUEUE_NAMES.CRITICAL_ALERT,
-);
+const criticalQueue = createQueue<{
+  readingId: string;
+  userId: string;
+  decision: BypassDecision;
+  requestId?: string;
+}>(QUEUE_NAMES.CRITICAL_ALERT);
 
 const analyzeQueue = createQueue<{
   readingId: string;
@@ -41,6 +45,7 @@ interface CreateReadingInput {
   source: "manual" | "voice" | "device";
   measuredAt: string;
   version: number;
+  requestId?: string;
 }
 
 export interface CreateReadingResult {
@@ -55,6 +60,57 @@ export interface CreateReadingResult {
 
 const ist = (): number => 330;
 
+// Idempotent replay response — fired when a client retries a POST with the
+// same {clientUuid, version} we already persisted. Returns the existing
+// reading and current downstream state without re-running streak/feedback
+// side effects or re-enqueuing the critical alert.
+const buildReplayResult = async (
+  reading: GlucoseReading,
+  userId: string,
+): Promise<CreateReadingResult> => {
+  const [streakState, feedbackEvent, contacts, lastBypassEvent] = await Promise.all([
+    prisma.userStreak.findUnique({ where: { userId } }),
+    prisma.feedbackEvent.findFirst({
+      where: { readingId: reading.id },
+      orderBy: { shownAt: "desc" },
+    }),
+    prisma.emergencyContact.findMany({ where: { userId }, orderBy: { priority: "asc" } }),
+    prisma.feedbackEvent.findFirst({
+      where: {
+        userId,
+        feedbackType: "critical_warn",
+        shownAt: { gte: new Date(Date.now() - 30 * 60_000) },
+      },
+      orderBy: { shownAt: "desc" },
+    }),
+  ]);
+
+  const critical = decideCriticalBypass({
+    glucoseValueMgDl: reading.valueMgDl,
+    nowIso: reading.measuredAt.toISOString(),
+    lastBypassTriggeredAtIso: lastBypassEvent?.shownAt.toISOString() ?? null,
+    emergencyContacts: contacts.map((c) => ({
+      contactId: c.id,
+      priority: c.priority,
+      isGuardian: c.isGuardian,
+    })),
+  });
+
+  return {
+    reading,
+    streak: {
+      currentStreakDays: streakState?.currentStreakDays ?? 0,
+      milestoneReached: null,
+    },
+    feedback: {
+      tone: feedbackEvent?.tone ?? "neutral",
+      messageKey: feedbackEvent?.messageKey ?? "reading.noted",
+      params: (feedbackEvent?.messageParams as Record<string, unknown>) ?? {},
+    },
+    critical,
+  };
+};
+
 export const createGlucoseReading = async (
   input: CreateReadingInput,
 ): Promise<CreateReadingResult> => {
@@ -63,11 +119,18 @@ export const createGlucoseReading = async (
   const clockDeltaMs = Math.abs(serverNow.getTime() - measuredAtDate.getTime());
   const isAnomalousClock = clockDeltaMs > SERVER_TIME_FALLBACK_THRESHOLD_HOURS * MS_PER_HOUR;
 
-  const existing = await prisma.glucoseReading.findFirst({ where: { clientUuid: input.clientUuid } });
+  const existing = await prisma.glucoseReading.findFirst({
+    where: { clientUuid: input.clientUuid },
+  });
 
   if (existing) {
-    if (input.version <= existing.version) {
+    if (input.version < existing.version) {
       throw new DomainError("READING_STALE_VERSION", "incoming version not newer than stored");
+    }
+    if (input.version === existing.version) {
+      // Idempotent replay — same {clientUuid, version} we already stored.
+      // Return the prior result without re-running side effects.
+      return await buildReplayResult(existing, input.userId);
     }
   }
 
@@ -96,9 +159,7 @@ export const createGlucoseReading = async (
     );
   }
   const useServerTimeForStreak = effectiveAnomalyCount >= TIME_ANOMALY_TRIGGER_COUNT;
-  const streakSourceIso = useServerTimeForStreak
-    ? serverNow.toISOString()
-    : input.measuredAt;
+  const streakSourceIso = useServerTimeForStreak ? serverNow.toISOString() : input.measuredAt;
 
   const state = await prisma.userStreak.upsert({
     where: { userId: input.userId },
@@ -138,9 +199,7 @@ export const createGlucoseReading = async (
   const firstReadingCount = await prisma.glucoseReading.count({ where: { userId: input.userId } });
   const isFirst = firstReadingCount === 0;
   const lastSameType = recentSameType[0]?.valueMgDl ?? null;
-  const userStageDays = Math.floor(
-    (Date.now() - user.createdAt.getTime()) / 86_400_000,
-  );
+  const userStageDays = Math.floor((Date.now() - user.createdAt.getTime()) / 86_400_000);
 
   const feedback = computeFeedback({
     currentValue: input.valueMgDl,
@@ -201,22 +260,48 @@ export const createGlucoseReading = async (
   // partition key for the TimescaleDB hypertable). The user-facing edit
   // flow updates value/type/notes — not the medical timestamp. Anything
   // that would shift measuredAt should go through DELETE + create.
-  const reading = existing
-    ? await prisma.glucoseReading.update({
-        where: { clientUuid_measuredAt: { clientUuid: existing.clientUuid, measuredAt: existing.measuredAt } },
-        data: {
-          valueMgDl: input.valueMgDl,
-          readingType: input.readingType,
-          context: input.context,
-          ...(input.notes !== undefined ? { notes: input.notes } : {}),
-          source: input.source,
-          streakCreditedTo: new Date(streakResult.streakCreditedTo),
-          streakCreditedAtServerTime: useServerTimeForStreak,
-          antiCheatFlags: streakResult.antiCheatFlags,
-          version: input.version,
+  let reading: GlucoseReading;
+  if (existing) {
+    reading = await prisma.glucoseReading.update({
+      where: {
+        clientUuid_measuredAt: {
+          clientUuid: existing.clientUuid,
+          measuredAt: existing.measuredAt,
         },
-      })
-    : await prisma.glucoseReading.create({ data });
+      },
+      data: {
+        valueMgDl: input.valueMgDl,
+        readingType: input.readingType,
+        context: input.context,
+        ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        source: input.source,
+        streakCreditedTo: new Date(streakResult.streakCreditedTo),
+        streakCreditedAtServerTime: useServerTimeForStreak,
+        antiCheatFlags: streakResult.antiCheatFlags,
+        version: input.version,
+      },
+    });
+  } else {
+    try {
+      reading = await prisma.glucoseReading.create({ data });
+    } catch (err) {
+      // P2002 on (clientUuid, measuredAt) means a concurrent request lost
+      // the findFirst race and arrived first. Re-fetch and treat as replay.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        const winner = await prisma.glucoseReading.findFirst({
+          where: { clientUuid: input.clientUuid },
+        });
+        if (winner) {
+          logger.info(
+            { clientUuid: input.clientUuid, userId: input.userId },
+            "concurrent create resolved as idempotent replay",
+          );
+          return await buildReplayResult(winner, input.userId);
+        }
+      }
+      throw err;
+    }
+  }
 
   await prisma.userStreak.update({
     where: { userId: input.userId },
@@ -247,7 +332,12 @@ export const createGlucoseReading = async (
   });
 
   if (critical.isCritical && !critical.withinCooldown) {
-    await criticalQueue.add("dispatch", { readingId: reading.id, userId: input.userId, decision: critical });
+    await criticalQueue.add("dispatch", {
+      readingId: reading.id,
+      userId: input.userId,
+      decision: critical,
+      ...(input.requestId ? { requestId: input.requestId } : {}),
+    });
   }
 
   // Phase 2 step 3c — fire ANALYZE_READING for every glucose insert.
@@ -265,6 +355,21 @@ export const createGlucoseReading = async (
       { userId: input.userId, flags: streakResult.antiCheatFlags },
       "anti-cheat flags raised",
     );
+  }
+
+  captureAnalyticsEvent("reading_logged", input.userId, {
+    type: input.readingType,
+    source: input.source,
+    time_to_log_seconds: null,
+    user_stage: userStageDays,
+    streak_credited_to_server_time: useServerTimeForStreak,
+  });
+
+  if (streakResult.milestoneReached !== null) {
+    captureAnalyticsEvent("streak_milestone", input.userId, {
+      milestone_days: streakResult.milestoneReached,
+      longest_streak_days: streakResult.nextState.longestStreakDays,
+    });
   }
 
   return {
@@ -308,7 +413,12 @@ export const listGlucoseReadings = async (params: {
   const where: Prisma.GlucoseReadingWhereInput = {
     userId: params.userId,
     ...(params.from || params.to
-      ? { measuredAt: { ...(params.from ? { gte: params.from } : {}), ...(params.to ? { lte: params.to } : {}) } }
+      ? {
+          measuredAt: {
+            ...(params.from ? { gte: params.from } : {}),
+            ...(params.to ? { lte: params.to } : {}),
+          },
+        }
       : {}),
   };
 
@@ -316,12 +426,23 @@ export const listGlucoseReadings = async (params: {
     where,
     orderBy: { measuredAt: "desc" },
     take: params.limit + 1,
-    ...(params.cursor ? { skip: 1, cursor: { clientUuid_measuredAt: { clientUuid: params.cursor.split('_')[0]!, measuredAt: new Date(params.cursor.split('_')[1]!) } } } : {}),
+    ...(params.cursor
+      ? {
+          skip: 1,
+          cursor: {
+            clientUuid_measuredAt: {
+              clientUuid: params.cursor.split("_")[0]!,
+              measuredAt: new Date(params.cursor.split("_")[1]!),
+            },
+          },
+        }
+      : {}),
   });
 
   const hasMore = rows.length > params.limit;
   const data = hasMore ? rows.slice(0, params.limit) : rows;
   const lastItem = data[data.length - 1];
-  const cursor = hasMore && lastItem ? `${lastItem.clientUuid}_${lastItem.measuredAt.toISOString()}` : null;
+  const cursor =
+    hasMore && lastItem ? `${lastItem.clientUuid}_${lastItem.measuredAt.toISOString()}` : null;
   return { data, cursor, hasMore };
 };

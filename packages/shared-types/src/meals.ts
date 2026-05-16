@@ -30,15 +30,6 @@ export interface CreateMealLogInput {
   version?: number;
 }
 
-export const MEAL_TYPES: readonly MealType[] = [
-  "breakfast",
-  "lunch",
-  "dinner",
-  "snack",
-] as const;
+export const MEAL_TYPES: readonly MealType[] = ["breakfast", "lunch", "dinner", "snack"] as const;
 
-export const MEAL_CATEGORIES: readonly MealCategory[] = [
-  "light",
-  "normal",
-  "heavy_fried",
-] as const;
+export const MEAL_CATEGORIES: readonly MealCategory[] = ["light", "normal", "heavy_fried"] as const;

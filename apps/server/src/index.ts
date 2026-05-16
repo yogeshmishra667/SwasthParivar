@@ -1,3 +1,10 @@
+import {
+  initSentry,
+  captureUnhandled,
+  warnIfMisconfigured,
+} from "./shared/observability/sentry.js";
+initSentry();
+
 import os from "node:os";
 import { buildApp } from "./app.js";
 import { env, isDev } from "./config/env.js";
@@ -6,6 +13,13 @@ import { prisma, disconnectDatabase } from "./shared/database.js";
 import { redis, disconnectRedis } from "./shared/redis.js";
 import { closeQueueConnection } from "./shared/queue.js";
 import { startWorkers, stopWorkers, workerNames } from "./workers/index.js";
+import {
+  shutdownAnalytics,
+  warnIfMisconfigured as warnIfPostHogMisconfigured,
+} from "./shared/analytics/posthog.js";
+
+warnIfMisconfigured((msg) => logger.warn(msg));
+warnIfPostHogMisconfigured((msg) => logger.warn(msg));
 
 const lanAddresses = (): string[] => {
   const out: string[] = [];
@@ -61,9 +75,7 @@ const printBanner = async (): Promise<void> => {
   lines.push(`│  → http://localhost:${env.PORT}`);
   for (const ip of lans) lines.push(`│  → http://${ip}:${env.PORT}   (LAN)`);
   lines.push(`│  → http://localhost:${env.PORT}/health`);
-  lines.push(
-    `│  env: ${env.NODE_ENV} · node: ${process.version} · pid: ${process.pid}`,
-  );
+  lines.push(`│  env: ${env.NODE_ENV} · node: ${process.version} · pid: ${process.pid}`);
   lines.push(`│  db:      ${db.ok ? `ok (${db.ms}ms)` : `FAIL — ${db.err ?? "unknown"}`}`);
   lines.push(`│  redis:   ${r.ok ? `ok (${r.ms}ms)` : `FAIL — ${r.err ?? "unknown"}`}`);
   lines.push(`│  workers: ${workerNames.length} (${workerNames.join(", ")})`);
@@ -89,6 +101,7 @@ const shutdown = async (signal: string): Promise<void> => {
   server.close(() => logger.info("http server closed"));
   await stopWorkers();
   await closeQueueConnection();
+  await shutdownAnalytics();
   await disconnectDatabase();
   await disconnectRedis();
   process.exit(0);
@@ -98,4 +111,10 @@ process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("unhandledRejection", (reason) => {
   logger.error({ reason }, "unhandled rejection");
+  captureUnhandled(reason, { source: "unhandledRejection" });
+});
+
+process.on("uncaughtException", (err) => {
+  logger.error({ err }, "uncaught exception");
+  captureUnhandled(err, { source: "uncaughtException" });
 });

@@ -38,6 +38,6 @@ export const deleteSchedule = async (req: Request, res: Response): Promise<void>
 };
 
 export const getAdherence = async (req: Request, res: Response): Promise<void> => {
-  const days = Number(req.query["days"] ?? 30);
+  const days = Number(req.query.days ?? 30);
   ok(res, await service.adherenceLast(req.auth!.sub, days));
 };

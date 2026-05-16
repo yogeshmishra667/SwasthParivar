@@ -62,10 +62,7 @@ export const createMealLog = async (input: CreateMealInput): Promise<CreateMealR
   return { meal };
 };
 
-export const deleteMealLog = async (params: {
-  userId: string;
-  id: string;
-}): Promise<void> => {
+export const deleteMealLog = async (params: { userId: string; id: string }): Promise<void> => {
   const existing = await prisma.mealLog.findFirst({
     where: { id: params.id, userId: params.userId },
   });
@@ -133,7 +130,6 @@ export const listMealLogs = async (params: {
   const hasMore = rows.length > params.limit;
   const data = hasMore ? rows.slice(0, params.limit) : rows;
   const last = data[data.length - 1];
-  const cursor =
-    hasMore && last ? `${last.clientUuid}_${last.loggedAt.toISOString()}` : null;
+  const cursor = hasMore && last ? `${last.clientUuid}_${last.loggedAt.toISOString()}` : null;
   return { data, cursor, hasMore };
 };

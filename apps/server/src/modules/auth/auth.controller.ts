@@ -14,9 +14,9 @@ export const postVerifyOtp = async (req: Request, res: Response): Promise<void> 
   ok(res, result);
 };
 
-export const postRefresh = async (req: Request, res: Response): Promise<void> => {
+export const postRefresh = (req: Request, res: Response): void => {
   const { refreshToken } = req.body as { refreshToken: string };
-  const result = await service.refreshTokens(refreshToken);
+  const result = service.refreshTokens(refreshToken);
   ok(res, result);
 };
 

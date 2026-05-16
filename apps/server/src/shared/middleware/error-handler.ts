@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { DomainError, type ApiError, type ErrorCode } from "@swasth/shared-types";
 import { logger } from "../logger.js";
 import { isProd } from "../../config/env.js";
+import { captureUnhandled } from "../observability/sentry.js";
 
 const statusFor = (code: ErrorCode): number => {
   switch (code) {
@@ -58,7 +59,11 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   if (err instanceof DomainError) {
     const body: ApiError = {
       success: false,
-      error: { code: err.code, message: err.message, ...(err.details ? { details: err.details } : {}) },
+      error: {
+        code: err.code,
+        message: err.message,
+        ...(err.details ? { details: err.details } : {}),
+      },
     };
     res.status(statusFor(err.code)).json(body);
     return;
@@ -85,6 +90,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   }
 
   logger.error({ err, requestId: req.requestId, path: req.path }, "unhandled error");
+  captureUnhandled(err, { requestId: req.requestId, path: req.path, method: req.method });
 
   const body: ApiError = {
     success: false,

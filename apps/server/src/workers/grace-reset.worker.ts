@@ -14,7 +14,9 @@ import { logger } from "../shared/logger.js";
 //     don't double-fire.
 //   - Matches the existing notification + medication cron pattern.
 
-type GraceResetJob = { tick: true };
+interface GraceResetJob {
+  tick: true;
+}
 
 const REPEAT_PATTERN = "30 21 * * 0"; // Sunday 21:30 UTC = Monday 03:00 IST
 const REPEAT_KEY = "streak:grace:weekly-reset";

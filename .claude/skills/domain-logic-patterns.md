@@ -42,7 +42,7 @@ Never call `Date.now()` or `new Date()` inside an exported function. Time is sta
 ```ts
 // ❌
 export function computeStreak(reading: Reading) {
-  const now = new Date();  // non-deterministic — can't test reliably
+  const now = new Date(); // non-deterministic — can't test reliably
   // ...
 }
 
@@ -63,7 +63,11 @@ No `Math.random()`. No non-deterministic iteration. If variant selection is need
 const variant = variants[Math.floor(Math.random() * variants.length)];
 
 // ✅
-export function computeFeedback(input, history, opts: { recentVariantIndices: readonly number[] }): FeedbackResult {
+export function computeFeedback(
+  input,
+  history,
+  opts: { recentVariantIndices: readonly number[] },
+): FeedbackResult {
   const availableVariants = allVariants.filter((_, i) => !opts.recentVariantIndices.includes(i));
   // caller picks via seeded RNG or mod-arithmetic
 }
@@ -77,13 +81,13 @@ export function computeFeedback(input, history, opts: { recentVariantIndices: re
 export interface DetectorResult {
   pattern_type: string;
   conditions_involved: readonly string[];
-  severity_score: number;   // 0-100
-  severity_level: 'info' | 'warn' | 'critical';
+  severity_score: number; // 0-100
+  severity_level: "info" | "warn" | "critical";
   message_key: string;
   message_params: Record<string, unknown>;
-  trigger_readings: readonly string[];  // reading ids
+  trigger_readings: readonly string[]; // reading ids
   evidence: Record<string, unknown>;
-  confidence: number;       // 0-1; < 0.70 → caller stores only
+  confidence: number; // 0-1; < 0.70 → caller stores only
 }
 
 export function detectSpike(input: SpikeDetectorInput): DetectorResult | null;
@@ -96,11 +100,15 @@ Return `null` when insufficient data or confidence too low. Never throw for "not
 Typed discriminated unions:
 
 ```ts
-export type VoiceParseResult =
-  | { value: number; type: GlucoseType; requiresTypeConfirmation?: boolean;
-      requiresStrongConfirmation?: boolean; requiresDoubleConfirmation?: boolean;
-      uncertaintyDetected?: boolean; multipleValues?: readonly RankedValue[]; }
-  | null;  // null = could not extract a reading
+export type VoiceParseResult = {
+  value: number;
+  type: GlucoseType;
+  requiresTypeConfirmation?: boolean;
+  requiresStrongConfirmation?: boolean;
+  requiresDoubleConfirmation?: boolean;
+  uncertaintyDetected?: boolean;
+  multipleValues?: readonly RankedValue[];
+} | null; // null = could not extract a reading
 ```
 
 ## Minimum data guards (first line of any detector)
@@ -118,7 +126,7 @@ export function detectSpike(input: SpikeInput): DetectorResult | null {
   if (input.readings.length === 0) return null;
   const oldestMeasured = input.readings.at(-1)!.measured_at;
   const daysOfData = daysBetween(oldestMeasured, input.now);
-  if (daysOfData < 7) return null;  // minimum data guard
+  if (daysOfData < 7) return null; // minimum data guard
   // ...
 }
 ```
@@ -128,7 +136,7 @@ export function detectSpike(input: SpikeInput): DetectorResult | null {
 Spike/trend/median comparisons always filter to a single `reading_type`. Never mix `fasting` with `post_meal`. This is a medical-correctness rule, not a style choice.
 
 ```ts
-const fasting = input.readings.filter(r => r.reading_type === 'fasting');
+const fasting = input.readings.filter((r) => r.reading_type === "fasting");
 ```
 
 ## Property-testable invariants
@@ -136,14 +144,13 @@ const fasting = input.readings.filter(r => r.reading_type === 'fasting');
 Use `fast-check` to state invariants instead of enumerating cases.
 
 ```ts
-test('parsed glucose value is always within medical range (20–600) or null', () => {
-  fc.assert(fc.property(
-    fc.string(), fc.float({ min: 0, max: 1 }), fc.date(),
-    (transcript, conf, time) => {
+test("parsed glucose value is always within medical range (20–600) or null", () => {
+  fc.assert(
+    fc.property(fc.string(), fc.float({ min: 0, max: 1 }), fc.date(), (transcript, conf, time) => {
       const r = parseVoiceTranscript(transcript, conf, time);
       return r === null || (r.value >= 20 && r.value <= 600);
-    }
-  ));
+    }),
+  );
 });
 ```
 
@@ -173,4 +180,4 @@ Factories live in `packages/test-factories/src/` so server integration tests can
 - Call `Date.now()` / `new Date()` / `Math.random()`
 - Depend on Express `Request`/`Response` types
 
-The domain layer describes *what* to decide, not *how* to execute. The service layer executes.
+The domain layer describes _what_ to decide, not _how_ to execute. The service layer executes.

@@ -13,7 +13,12 @@ import * as controller from "./auth.controller.js";
 export const authRouter: Router = Router();
 
 authRouter.post("/send-otp", authRateLimit, validateBody(sendOtpSchema), controller.postSendOtp);
-authRouter.post("/verify-otp", authRateLimit, validateBody(verifyOtpSchema), controller.postVerifyOtp);
+authRouter.post(
+  "/verify-otp",
+  authRateLimit,
+  validateBody(verifyOtpSchema),
+  controller.postVerifyOtp,
+);
 authRouter.post("/refresh", validateBody(refreshTokenSchema), controller.postRefresh);
 authRouter.post(
   "/push-token",

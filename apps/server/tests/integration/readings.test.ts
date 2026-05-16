@@ -40,8 +40,7 @@ beforeAll(async () => {
 
   runPrisma(["migrate", "deploy"]);
   runPrisma(["db", "execute", "--stdin"], {
-    input:
-      "SELECT create_hypertable('glucose_readings', 'measured_at', if_not_exists => TRUE);",
+    input: "SELECT create_hypertable('glucose_readings', 'measured_at', if_not_exists => TRUE);",
   });
 
   const appModule = await import("../../src/app.js");
@@ -59,11 +58,9 @@ beforeAll(async () => {
       onboardingComplete: true,
     },
   });
-  accessToken = jwt.sign(
-    { sub: user.id, householdId: user.householdId },
-    process.env.JWT_SECRET!,
-    { expiresIn: "1h" },
-  );
+  accessToken = jwt.sign({ sub: user.id, householdId: user.householdId }, process.env.JWT_SECRET, {
+    expiresIn: "1h",
+  });
 }, 120_000);
 
 afterAll(async () => {
@@ -118,7 +115,7 @@ describe("POST /api/v1/readings/glucose", () => {
     expect(res.body.data.critical.isCritical).toBe(false);
   });
 
-  it("rejects stale version with READING_STALE_VERSION", async () => {
+  it("rejects strictly-older version with READING_STALE_VERSION", async () => {
     const clientUuid = randomUUID();
     const measuredAt = new Date().toISOString();
     const first = await request(app)
@@ -149,6 +146,99 @@ describe("POST /api/v1/readings/glucose", () => {
       });
     expect(stale.status).toBe(409);
     expect(stale.body.error.code).toBe("READING_STALE_VERSION");
+  });
+
+  it("treats same {clientUuid, version} replay as idempotent (200, single row, no duplicate side effects)", async () => {
+    const household = await prisma.household.create({ data: {} });
+    const user = await prisma.user.create({
+      data: {
+        phone: `+9198${Math.floor(10_000_000 + Math.random() * 89_999_999)}`,
+        name: "Idempotency Tester",
+        age: 60,
+        householdId: household.id,
+        onboardingComplete: true,
+      },
+    });
+    const token = jwt.sign(
+      { sub: user.id, householdId: user.householdId },
+      process.env.JWT_SECRET!,
+      { expiresIn: "1h" },
+    );
+
+    const clientUuid = randomUUID();
+    const payload = {
+      clientUuid,
+      valueMgDl: 118,
+      readingType: "fasting" as const,
+      context: "normal" as const,
+      source: "manual" as const,
+      measuredAt: new Date().toISOString(),
+      version: 1,
+    };
+
+    const first = await request(app)
+      .post("/api/v1/readings/glucose")
+      .set("Authorization", `Bearer ${token}`)
+      .send(payload);
+    expect(first.status).toBe(201);
+    const firstReadingId = first.body.data.reading.id;
+
+    // Replay the same call — must succeed, return the same reading id, no second row.
+    const replay = await request(app)
+      .post("/api/v1/readings/glucose")
+      .set("Authorization", `Bearer ${token}`)
+      .send(payload);
+    expect(replay.status).toBe(201);
+    expect(replay.body.success).toBe(true);
+    expect(replay.body.data.reading.id).toBe(firstReadingId);
+    expect(replay.body.data.reading.valueMgDl).toBe(118);
+
+    // Single row in DB.
+    const rows = await prisma.glucoseReading.findMany({ where: { clientUuid } });
+    expect(rows).toHaveLength(1);
+
+    // Feedback events: exactly ONE event for this reading (replay must not re-create).
+    const feedbackEvents = await prisma.feedbackEvent.findMany({
+      where: { readingId: firstReadingId },
+    });
+    expect(feedbackEvents).toHaveLength(1);
+  });
+
+  it("accepts version bump on same clientUuid as an edit", async () => {
+    const clientUuid = randomUUID();
+    const measuredAt = new Date().toISOString();
+    const first = await request(app)
+      .post("/api/v1/readings/glucose")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        clientUuid,
+        valueMgDl: 120,
+        readingType: "fasting",
+        context: "normal",
+        source: "manual",
+        measuredAt,
+        version: 1,
+      });
+    expect(first.status).toBe(201);
+
+    const edited = await request(app)
+      .post("/api/v1/readings/glucose")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        clientUuid,
+        valueMgDl: 125,
+        readingType: "fasting",
+        context: "normal",
+        source: "manual",
+        measuredAt,
+        version: 2,
+      });
+    expect(edited.status).toBe(201);
+    expect(edited.body.data.reading.valueMgDl).toBe(125);
+
+    const rows = await prisma.glucoseReading.findMany({ where: { clientUuid } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].version).toBe(2);
   });
 
   it("flags critical=true for glucose < 65", async () => {
@@ -216,7 +306,11 @@ describe("POST /api/v1/readings/glucose", () => {
       const readingId = postRes.body.data.reading.id;
       let foundForReading = false;
       for (let attempt = 0; attempt < 20 && !foundForReading; attempt++) {
-        const jobs = await probeQueue.getJobs(["waiting", "active", "delayed", "completed"], 0, 100);
+        const jobs = await probeQueue.getJobs(
+          ["waiting", "active", "delayed", "completed"],
+          0,
+          100,
+        );
         foundForReading = jobs.some((j) => j.data?.readingId === readingId);
         if (!foundForReading) await new Promise((r) => setTimeout(r, 100));
       }

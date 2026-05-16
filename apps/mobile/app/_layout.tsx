@@ -1,3 +1,6 @@
+import { initSentry } from "@/services/sentry";
+initSentry();
+
 import "@/i18n/config";
 import "../global.css";
 import "react-native-get-random-values";
@@ -13,8 +16,9 @@ import { useProfileInactivity } from "@/hooks/useProfileInactivity";
 import { useSyncDrain } from "@/hooks/useSyncDrain";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { FontScaleProvider } from "@/components/shared/FontScaleProvider";
+import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { ProfileSelectorModal } from "@/components/profile/ProfileSelectorModal";
-import Constants from "expo-constants";
+import { isExpoGo } from "@/utils/runtime";
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -43,7 +47,6 @@ export default function RootLayout(): JSX.Element | null {
     if (!ready || !accessToken) return;
     // Dynamic import: expo-notifications crashes Expo Go on SDK 53+
     // when imported at the top level, so we load it lazily.
-    const isExpoGo = Constants.appOwnership === "expo";
     if (isExpoGo) return;
     void import("@/services/notifications").then(({ registerAndSyncPushToken }) => {
       void registerAndSyncPushToken();
@@ -53,21 +56,23 @@ export default function RootLayout(): JSX.Element | null {
   if (!ready) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <FontScaleProvider>
-          <StatusBar style="dark" />
-          <OfflineBanner />
-          <ProfileSelectorModal />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(onboarding)" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="sos" options={{ presentation: "fullScreenModal" }} />
-          </Stack>
-        </FontScaleProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <FontScaleProvider>
+            <StatusBar style="dark" />
+            <OfflineBanner />
+            <ProfileSelectorModal />
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(onboarding)" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="sos" options={{ presentation: "fullScreenModal" }} />
+            </Stack>
+          </FontScaleProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

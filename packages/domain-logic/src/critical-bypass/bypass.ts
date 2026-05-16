@@ -1,5 +1,9 @@
 import { GLUCOSE_CRITICAL_HIGH, GLUCOSE_CRITICAL_LOW } from "@swasth/shared-types";
-import { CRITICAL_COOLDOWN_MINUTES, type BypassDecision, type BypassDecisionInput } from "./types.js";
+import {
+  CRITICAL_COOLDOWN_MINUTES,
+  type BypassDecision,
+  type BypassDecisionInput,
+} from "./types.js";
 
 const MS_PER_MIN = 60_000;
 
@@ -26,8 +30,7 @@ export const decideCriticalBypass = (input: BypassDecisionInput): BypassDecision
 
   const nowMs = Date.parse(input.nowIso);
   const lastMs = input.lastBypassTriggeredAtIso ? Date.parse(input.lastBypassTriggeredAtIso) : null;
-  const withinCooldown =
-    lastMs !== null && nowMs - lastMs < CRITICAL_COOLDOWN_MINUTES * MS_PER_MIN;
+  const withinCooldown = lastMs !== null && nowMs - lastMs < CRITICAL_COOLDOWN_MINUTES * MS_PER_MIN;
 
   const sortedContacts = [...input.emergencyContacts].sort((a, b) => a.priority - b.priority);
   const pushTargets = withinCooldown

@@ -1,9 +1,9 @@
 import { useEffect, useState, type ComponentType } from "react";
 import { View, Text, Pressable, Platform } from "react-native";
-import Constants from "expo-constants";
 import type { VoiceParseResult } from "@swasth/domain-logic";
 import { Icon } from "@/components/ui/Icon";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
+import { isExpoGo } from "@/utils/runtime";
 
 interface VoiceInputProps {
   onParsed: (result: VoiceParseResult) => void;
@@ -14,7 +14,6 @@ interface VoiceInputProps {
 // In Expo Go on Android the native module isn't present and the import
 // crashes the bundle, so we lazy-load the implementation only when the
 // runtime supports it (any custom dev build, or Expo Go on iOS).
-const isExpoGo = Constants.appOwnership === "expo";
 const voiceUnavailable = isExpoGo && Platform.OS === "android";
 
 const VoiceUnavailable = ({ onFail }: VoiceInputProps): JSX.Element => {

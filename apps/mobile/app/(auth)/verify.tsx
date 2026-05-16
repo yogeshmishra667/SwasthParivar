@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, TextInput, Alert, KeyboardAvoidingView, Platform, ScrollView, Pressable, Keyboard } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Pressable,
+  Keyboard,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
@@ -64,18 +74,22 @@ export default function VerifyScreen(): JSX.Element {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior="padding"
         style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24, paddingBottom: 48 }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: "center",
+            padding: 24,
+            paddingBottom: 48,
+          }}
           keyboardShouldPersistTaps="handled"
         >
-          
-          <Pressable 
-            onPress={() => router.back()} 
+          <Pressable
+            onPress={() => router.back()}
             className="absolute left-6 top-6 z-10"
             style={{ minHeight: TOUCH_TARGET_MIN, minWidth: TOUCH_TARGET_MIN }}
             accessibilityLabel="Back"
@@ -91,12 +105,16 @@ export default function VerifyScreen(): JSX.Element {
               {t("auth.otpSentTitle", { defaultValue: "OTP Sent" })}
             </Text>
             <Text className="mt-2 text-center text-body text-gray-500">
-              {t("auth.otpSentSubtitle", { defaultValue: `We have sent a 6-digit code to +91 ${phone || ""}` })}
+              {t("auth.otpSentSubtitle", {
+                defaultValue: `We have sent a 6-digit code to +91 ${phone || ""}`,
+              })}
             </Text>
           </View>
 
           <View className="mb-6">
-            <Text className="mb-2 text-important font-semibold text-gray-800">{t("auth.enterOtp")}</Text>
+            <Text className="mb-2 text-important font-semibold text-gray-800">
+              {t("auth.enterOtp")}
+            </Text>
             <TextInput
               value={otp}
               onChangeText={(v) => setOtp(v.replace(/[^0-9]/g, ""))}
@@ -114,12 +132,11 @@ export default function VerifyScreen(): JSX.Element {
             />
           </View>
 
-          <Button 
-            label={t("auth.verify")} 
-            onPress={() => void verify()} 
-            disabled={loading || otp.length < 6} 
+          <Button
+            label={t("auth.verify")}
+            onPress={() => void verify()}
+            disabled={loading || otp.length < 6}
           />
-
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

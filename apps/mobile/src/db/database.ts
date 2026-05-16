@@ -1,4 +1,11 @@
 import type { Database } from "@nozbe/watermelondb";
+import type * as WatermelonModule from "@nozbe/watermelondb";
+import type SQLiteAdapterCtor from "@nozbe/watermelondb/adapters/sqlite";
+import type * as SchemaModule from "./schema";
+import type * as GlucoseReadingModule from "./models/GlucoseReading";
+import type * as MedicationScheduleModule from "./models/MedicationSchedule";
+import type * as MedicationLogModule from "./models/MedicationLog";
+import type * as UserStreakModule from "./models/UserStreak";
 import { logError } from "@/services/analytics";
 
 /**
@@ -31,23 +38,21 @@ export const getDatabase = (): Database | null => {
   if (cached !== undefined) return cached;
 
   try {
-    /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
-    const wmdb = require("@nozbe/watermelondb") as typeof import("@nozbe/watermelondb");
+    /* eslint-disable @typescript-eslint/no-require-imports */
+    const wmdb = require("@nozbe/watermelondb") as typeof WatermelonModule;
     const SQLiteAdapter = (
       require("@nozbe/watermelondb/adapters/sqlite") as {
-        default: typeof import("@nozbe/watermelondb/adapters/sqlite").default;
+        default: typeof SQLiteAdapterCtor;
       }
     ).default;
-    const { dbSchema } = require("./schema") as typeof import("./schema");
+    const { dbSchema } = require("./schema") as typeof SchemaModule;
     const { GlucoseReadingModel } =
-      require("./models/GlucoseReading") as typeof import("./models/GlucoseReading");
+      require("./models/GlucoseReading") as typeof GlucoseReadingModule;
     const { MedicationScheduleModel } =
-      require("./models/MedicationSchedule") as typeof import("./models/MedicationSchedule");
-    const { MedicationLogModel } =
-      require("./models/MedicationLog") as typeof import("./models/MedicationLog");
-    const { UserStreakModel } =
-      require("./models/UserStreak") as typeof import("./models/UserStreak");
-    /* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
+      require("./models/MedicationSchedule") as typeof MedicationScheduleModule;
+    const { MedicationLogModel } = require("./models/MedicationLog") as typeof MedicationLogModule;
+    const { UserStreakModel } = require("./models/UserStreak") as typeof UserStreakModule;
+    /* eslint-enable @typescript-eslint/no-require-imports */
 
     const adapter = new SQLiteAdapter({
       schema: dbSchema,

@@ -11,18 +11,20 @@ Never instantiate `new PrismaClient()` inside request handlers. One singleton:
 
 ```ts
 // apps/server/src/shared/database/prisma.ts
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
 declare global {
   // eslint-disable-next-line no-var
   var __prisma: PrismaClient | undefined;
 }
 
-export const prisma = global.__prisma ?? new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error'] : ['error'],
-});
+export const prisma =
+  global.__prisma ??
+  new PrismaClient({
+    log: process.env.NODE_ENV === "development" ? ["query", "error"] : ["error"],
+  });
 
-if (process.env.NODE_ENV !== 'production') global.__prisma = prisma;
+if (process.env.NODE_ENV !== "production") global.__prisma = prisma;
 ```
 
 Pool: `min=2, max=10`. Set via `DATABASE_URL=...?connection_limit=10`.
@@ -55,10 +57,10 @@ Never mix fasting with post_meal in any comparison. Always filter `reading_type`
 const last7dFasting = await prisma.glucoseReading.findMany({
   where: {
     user_id,
-    reading_type: 'fasting',
+    reading_type: "fasting",
     measured_at: { gte: subDays(now, 7) },
   },
-  orderBy: { measured_at: 'desc' },
+  orderBy: { measured_at: "desc" },
 });
 ```
 
@@ -77,7 +79,7 @@ async function upsertReading(input: ReadingInput) {
   }
 
   if (input.version <= existing.version) {
-    throw new ConflictError('READING_STALE_VERSION', 409);
+    throw new ConflictError("READING_STALE_VERSION", 409);
   }
 
   return prisma.glucoseReading.update({
@@ -96,7 +98,7 @@ Never offset. Always cursor on `(measured_at, id)`:
 ```ts
 const pageSize = 50;
 const cursor = req.query.cursor
-  ? JSON.parse(Buffer.from(req.query.cursor, 'base64').toString())
+  ? JSON.parse(Buffer.from(req.query.cursor, "base64").toString())
   : undefined;
 
 const rows = await prisma.glucoseReading.findMany({
@@ -109,14 +111,16 @@ const rows = await prisma.glucoseReading.findMany({
       ],
     }),
   },
-  orderBy: [{ measured_at: 'desc' }, { id: 'desc' }],
+  orderBy: [{ measured_at: "desc" }, { id: "desc" }],
   take: pageSize + 1,
 });
 
 const hasMore = rows.length > pageSize;
 const data = rows.slice(0, pageSize);
 const nextCursor = hasMore
-  ? Buffer.from(JSON.stringify({ t: data.at(-1)!.measured_at, id: data.at(-1)!.id })).toString('base64')
+  ? Buffer.from(JSON.stringify({ t: data.at(-1)!.measured_at, id: data.at(-1)!.id })).toString(
+      "base64",
+    )
   : undefined;
 
 return { data, cursor: nextCursor, hasMore };
