@@ -39,6 +39,8 @@
     "home": "Home",
     "log": "Log",
     "medications": "Meds",
+    "insights": "Insights",
+    "family": "Family",
     "settings": "Settings"
   },
   "dashboard": {
@@ -139,5 +141,125 @@
     "title": "Who is logging?",
     "subtitle": "Pick the right profile so readings are saved for the correct user.",
     "keepCurrent": "Keep current profile"
+  },
+  "log": {
+    "modeGlucose": "Sugar",
+    "modeBp": "BP",
+    "modeMeal": "Meal"
+  },
+  "bp": {
+    "title": "Log blood pressure",
+    "systolic": "Upper (Systolic)",
+    "diastolic": "Lower (Diastolic)",
+    "pulse": "Pulse (optional)",
+    "confirmSave": "Save {{sys}}/{{dia}} for {{profile}}?",
+    "saved": "BP saved",
+    "saveFailed": "Could not save — try again.",
+    "savedOffline": "Saved locally — will sync when online.",
+    "invalidPair": "Upper must be greater than lower.",
+    "rangeHint": "Upper: 60-250, Lower: 40-150",
+    "latest": "Last BP",
+    "highBanner": "BP is a bit elevated — hydrate and rest."
+  },
+  "meals": {
+    "title": "What did you eat?",
+    "subtitle": "Quick log — just tap.",
+    "light": "Light",
+    "lightHint": "Salad, dal, roti — low oil",
+    "normal": "Normal",
+    "normalHint": "Everyday food",
+    "heavy": "Heavy / fried",
+    "heavyHint": "Puri, samosa, mithai",
+    "type": {
+      "breakfast": "Breakfast",
+      "lunch": "Lunch",
+      "dinner": "Dinner",
+      "snack": "Snack"
+    },
+    "saved": "Meal noted 🙏",
+    "saveFailed": "Could not save — try again.",
+    "todayCount": "{{count}} meals today",
+    "noMealsToday": "No meals logged yet today.",
+    "logMore": "Log another meal"
+  },
+  "insights": {
+    "title": "Patterns",
+    "lockedTitle": "📊 Day {{stage}} of 14",
+    "lockedBody": "Your real patterns unlock after 14 days. Keep logging — {{stage}} day(s) done so far!",
+    "lockedCTA": "Log a reading",
+    "empty": "No patterns found yet — keep logging.",
+    "unread": "{{count}} new",
+    "acknowledge": "Got it",
+    "helpful": "Was this helpful?",
+    "helpfulYes": "Yes 👍",
+    "helpfulNo": "No 👎",
+    "severity": {
+      "info": "Info",
+      "warn": "Heads up",
+      "critical": "Important"
+    },
+    "type": {
+      "spike": "Sudden spike",
+      "trend": "Trend",
+      "meal_correlation": "Meal pattern",
+      "anomaly": "Unusual",
+      "cross_condition": "Condition link"
+    },
+    "loadFailed": "Could not load insights — pull to refresh."
+  },
+  "summary": {
+    "headline": "Today",
+    "coldStartTag": "Getting started"
+  },
+  "healthScore": {
+    "title": "Health score",
+    "of100": "/ 100",
+    "components": {
+      "logging": "Logging",
+      "stability": "Stability",
+      "trend": "Trend",
+      "medication": "Meds",
+      "streak": "Streak"
+    },
+    "asOf": "As of {{date}}"
+  },
+  "hba1c": {
+    "title": "HbA1c estimate",
+    "estimate": "{{value}}%",
+    "estimateTag": "Estimate — confirm via lab test",
+    "insufficient": "Need 30+ readings before an estimate is available.",
+    "asOf": "Based on last 90 days",
+    "learnMore": "This is only an estimate — ask your doctor for a lab test to confirm."
+  },
+  "family": {
+    "title": "Family",
+    "subtitle": "Connect with a guardian or your patients.",
+    "tabPatients": "My patients",
+    "tabGuardians": "My guardians",
+    "tabInvites": "Pending invites",
+    "inviteTitle": "Invite a guardian",
+    "inviteHint": "Enter the guardian's phone — they should already have the app.",
+    "inviteSend": "Send invite",
+    "inviteSent": "Invite sent 🙏",
+    "inviteFailed": "Could not send invite — check the phone number.",
+    "guardianPhone": "Guardian's phone",
+    "relationship": "Relationship (optional)",
+    "alertEnabled": "Alerts on",
+    "sensitivity": "Alert sensitivity",
+    "sensitivityLow": "Low",
+    "sensitivityMedium": "Normal",
+    "sensitivityHigh": "High",
+    "accept": "Accept",
+    "decline": "Decline",
+    "revoke": "Revoke access",
+    "revokeConfirm": "Revoke access? This can be restored later.",
+    "noPatients": "No patients connected yet.",
+    "noGuardians": "No guardians connected yet.",
+    "viewDashboard": "View dashboard",
+    "pendingFromYou": "You invited them — waiting",
+    "pendingToYou": "{{name}} invited you",
+    "loadFailed": "Could not load family list.",
+    "guardianHeader": "Guardian view — read only",
+    "lastUpdated": "Last update: {{time}}"
   }
 }
