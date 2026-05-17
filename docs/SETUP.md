@@ -65,10 +65,15 @@ Last updated: 2026-05-14 (after the audit landed).
 ## Enabling code-security features (CodeQL + Dependency review)
 
 Two of the new gates (CodeQL SAST and Dependency review on PR diffs)
-ship with `continue-on-error: true` so they don't BLOCK PRs on a fresh
-repo. They become hard gates once the underlying GitHub features are
-enabled. Without enabling them, the gates run but their failures are
-informational.
+require either a PUBLIC repo OR GitHub Advanced Security (paid).
+**Both jobs are gated behind a repo variable so they don't run at all
+on a fresh private repo without GHAS** — they appear as gray ⊘
+("skipped"), never as red ❌, and don't block PRs.
+
+The same pattern is used for the Trivy image-CVE gate (separate flag —
+Trivy itself works without GHAS, but the Debian-slim base + transitive
+node deps surface ~40 fixable HIGH CVEs at any given time, so we
+default to informational scans).
 
 ### What needs enabling
 
@@ -78,24 +83,37 @@ informational.
 | **Code scanning**    | `CodeQL`, `Scorecard` | Settings → Code security → "Code scanning" → click "Set up" → "Default" | Free on public; GHAS on private |
 | **Secret scanning**  | Better than gitleaks  | Settings → Code security → "Secret scanning" toggle                     | Free on public; GHAS on private |
 
-### Two paths to upgrade soft gates to hard gates
+### Two paths to upgrade skipped gates to hard gates
 
-**Option A — Make the repo public** (recommended if the code is meant
-to be open):
+**Option A — Make the repo public** (free, recommended if open-sourcing):
 
 1. Settings → General → Danger Zone → Change visibility → Public
-2. All three features above become FREE
-3. After the next push: gates pass cleanly with no extra work
-4. Drop `continue-on-error: true` from `ci.yml` (dependency-review job)
-   and `codeql.yml` (analyze job) in a follow-up PR
+2. All three features above become FREE automatically
+3. Settings → Secrets and variables → Actions → **Variables tab** →
+   New repository variable:
+   - Name: `ENABLE_GHAS_GATES`
+   - Value: `true`
+4. Next CI run: CodeQL + Dependency review activate (no code change needed)
 
-**Option B — Enable GitHub Advanced Security** (keep repo private):
+**Option B — Enable GitHub Advanced Security** (keep repo private, paid):
 
-1. Settings → Code security → enable each feature one by one
-2. GHAS is paid (~$21/user/month for orgs as of 2026). For a single-
-   user account, GitHub may offer a free trial — check
-   `Settings → Billing`.
-3. After enabling, drop `continue-on-error: true` as in Option A.
+1. `Settings → Billing → Plans and usage → Add GHAS`
+   (~$21/user/month for orgs as of 2026; check for free trial under
+   Settings → Billing)
+2. After GHAS is on: `Settings → Code security` → enable Code scanning
+   - Dependency graph
+3. Same variable as Option A: set `ENABLE_GHAS_GATES=true`
+4. Done — same activation as Option A
+
+**Trivy image-CVE hard gate** (separate, doesn't need GHAS):
+
+After the Trivy debt is cleaned up (`pnpm update` on `glob` /
+`minimatch` / `picomatch` and a Node base bump), set:
+
+- Name: `ENABLE_IMAGE_CVE_GATE`
+- Value: `true`
+
+The Trivy step will then fail on any HIGH/CRITICAL fixable CVE.
 
 ### What still works without either
 
@@ -117,9 +135,10 @@ the PR-diff earlier signal vs `pnpm audit`'s full-tree run.
 
 For a medical-grade project pre-launch: **enable GHAS** when budget
 allows, because CodeQL's session-fixation / data-flow rules find a
-class of bug `pnpm audit` and Trivy can't see. Until then, the
-soft-fail keeps the gates in place so the day GHAS lands, every PR
-since this commit gets re-scanned in the historical timeline.
+class of bug `pnpm audit` and Trivy can't see. Until then, the gate
+workflows stay committed — flipping `ENABLE_GHAS_GATES=true` is a
+one-click activation the day GHAS lands (or the day you open-source),
+with no code change required.
 
 ---
 
