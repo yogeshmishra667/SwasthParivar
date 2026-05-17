@@ -44,6 +44,13 @@ jobs:
     name: Scorecard analysis
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # GATED on `vars.ENABLE_GHAS_GATES`. On private repos without GHAS,
+    # the action's GraphQL queries fail with "Resource not accessible by
+    # integration" (it needs scopes the default GITHUB_TOKEN can't grant
+    # for a private repo). On a public repo OR with GHAS enabled, it
+    # runs cleanly. Same gate flag as CodeQL + dependency-review for
+    # consistency — flip the variable, all three activate together.
+    if: vars.ENABLE_GHAS_GATES == 'true'
     permissions:
       # Required to upload SARIF results to Security tab.
       security-events: write
