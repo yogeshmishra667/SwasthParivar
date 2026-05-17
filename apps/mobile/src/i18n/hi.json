@@ -39,6 +39,8 @@
     "home": "Home",
     "log": "Log",
     "medications": "Dawai",
+    "insights": "Insights",
+    "family": "Family",
     "settings": "Settings"
   },
   "dashboard": {
@@ -139,5 +141,125 @@
     "title": "Kaun log kar raha hai?",
     "subtitle": "Sahi profile chunein — taki reading sahi user ke liye save ho.",
     "keepCurrent": "Current profile rakhein"
+  },
+  "log": {
+    "modeGlucose": "Sugar",
+    "modeBp": "BP",
+    "modeMeal": "Khana"
+  },
+  "bp": {
+    "title": "BP log karein",
+    "systolic": "Upper (Systolic)",
+    "diastolic": "Lower (Diastolic)",
+    "pulse": "Pulse (optional)",
+    "confirmSave": "{{sys}}/{{dia}} — {{profile}} ke liye save karein?",
+    "saved": "BP save ho gaya",
+    "saveFailed": "Save nahi ho paya — dobara try karein.",
+    "savedOffline": "Locally save ho gaya — sync hone par update hoga.",
+    "invalidPair": "Upper, lower se zyada hona chahiye.",
+    "rangeHint": "Upper: 60-250, Lower: 40-150",
+    "latest": "Aakhri BP",
+    "highBanner": "BP thoda zyada hai — paani peeyein, aaram karein."
+  },
+  "meals": {
+    "title": "Aaj kya khaya?",
+    "subtitle": "Quick log — bas tap karein.",
+    "light": "Halka",
+    "lightHint": "Salad, daal, roti — kam tel",
+    "normal": "Normal",
+    "normalHint": "Roz wala khana",
+    "heavy": "Bhaari / Tela",
+    "heavyHint": "Puri, samosa, mithai",
+    "type": {
+      "breakfast": "Nashta",
+      "lunch": "Dopahar",
+      "dinner": "Raat",
+      "snack": "Snack"
+    },
+    "saved": "Khana note ho gaya 🙏",
+    "saveFailed": "Save nahi hua — phir try karein.",
+    "todayCount": "Aaj ke {{count}} meal",
+    "noMealsToday": "Aaj abhi tak koi meal log nahi hua.",
+    "logMore": "Aur meal log karein"
+  },
+  "insights": {
+    "title": "Patterns",
+    "lockedTitle": "📊 Day {{stage}} of 14",
+    "lockedBody": "14 din baad apke real patterns dikhne lagenge. Bas regular log karte rahein — abhi tak {{stage}} din complete!",
+    "lockedCTA": "Aaj ka log karein",
+    "empty": "Abhi koi pattern nahi mila — log karte rahein.",
+    "unread": "{{count}} naya",
+    "acknowledge": "Samajh gaye",
+    "helpful": "Helpful tha?",
+    "helpfulYes": "Haan 👍",
+    "helpfulNo": "Nahi 👎",
+    "severity": {
+      "info": "Info",
+      "warn": "Dhyaan dein",
+      "critical": "Zaroori"
+    },
+    "type": {
+      "spike": "Sudden spike",
+      "trend": "Trend",
+      "meal_correlation": "Meal pattern",
+      "anomaly": "Asaadharan",
+      "cross_condition": "Conditions link"
+    },
+    "loadFailed": "Insights load nahi huye — pull to refresh."
+  },
+  "summary": {
+    "headline": "Aaj ka din",
+    "coldStartTag": "Shuruaat"
+  },
+  "healthScore": {
+    "title": "Health score",
+    "of100": "/ 100",
+    "components": {
+      "logging": "Logging",
+      "stability": "Stability",
+      "trend": "Trend",
+      "medication": "Dawai",
+      "streak": "Streak"
+    },
+    "asOf": "Date: {{date}}"
+  },
+  "hba1c": {
+    "title": "HbA1c estimate",
+    "estimate": "{{value}}%",
+    "estimateTag": "Estimate — lab confirm karwayein",
+    "insufficient": "30 readings ke baad estimate milega.",
+    "asOf": "Last 90 din ka data",
+    "learnMore": "Yeh sirf estimate hai — doctor se lab test confirm karein."
+  },
+  "family": {
+    "title": "Parivar",
+    "subtitle": "Apne guardian ya patient ke saath connect karein.",
+    "tabPatients": "Mere patients",
+    "tabGuardians": "Mere guardians",
+    "tabInvites": "Pending invites",
+    "inviteTitle": "Guardian ko invite karein",
+    "inviteHint": "Guardian ka phone number — wo pehle app install kar lein.",
+    "inviteSend": "Invite bhejein",
+    "inviteSent": "Invite bhej diya gaya 🙏",
+    "inviteFailed": "Invite nahi ja paya — phone number check karein.",
+    "guardianPhone": "Guardian ka phone",
+    "relationship": "Rishta (optional)",
+    "alertEnabled": "Alerts on",
+    "sensitivity": "Alert sensitivity",
+    "sensitivityLow": "Kam",
+    "sensitivityMedium": "Normal",
+    "sensitivityHigh": "Zyada",
+    "accept": "Accept karein",
+    "decline": "Decline",
+    "revoke": "Access hatao",
+    "revokeConfirm": "Access hatayein? Yeh wapas restore kar sakte hain.",
+    "noPatients": "Koi patient connect nahi hai.",
+    "noGuardians": "Koi guardian connect nahi hai.",
+    "viewDashboard": "Dashboard dekhein",
+    "pendingFromYou": "Aapne invite kiya — wait kar rahe hain",
+    "pendingToYou": "{{name}} ne aapko invite kiya hai",
+    "loadFailed": "Family list load nahi hui.",
+    "guardianHeader": "Guardian view — read only",
+    "lastUpdated": "Last update: {{time}}"
   }
 }

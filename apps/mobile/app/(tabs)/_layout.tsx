@@ -11,6 +11,10 @@ const iconFor = (routeName: string): IconName => {
       return "add-circle-outline";
     case "medications":
       return "medkit-outline";
+    case "insights":
+      return "bulb-outline";
+    case "family":
+      return "people-outline";
     case "settings":
       return "settings-outline";
     default:
@@ -37,6 +41,8 @@ export default function TabsLayout(): JSX.Element {
       <Tabs.Screen name="dashboard" options={{ title: t("tabs.home") }} />
       <Tabs.Screen name="log" options={{ title: t("tabs.log") }} />
       <Tabs.Screen name="medications" options={{ title: t("tabs.medications") }} />
+      <Tabs.Screen name="insights" options={{ title: t("tabs.insights") }} />
+      <Tabs.Screen name="family" options={{ title: t("tabs.family") }} />
       <Tabs.Screen name="settings" options={{ title: t("tabs.settings") }} />
     </Tabs>
   );

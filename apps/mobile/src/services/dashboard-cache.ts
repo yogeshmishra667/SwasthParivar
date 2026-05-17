@@ -20,16 +20,58 @@ import { logError } from "@/services/analytics";
  * incompatible schema changes.
  */
 
+export interface CachedDashboardSummary {
+  headline: string;
+  details: readonly string[];
+  language: "hi" | "en";
+  coldStart: boolean;
+}
+
+export interface CachedBPLatest {
+  systolic: number;
+  diastolic: number;
+  pulse: number | null;
+  measuredAt: string;
+}
+
+export interface CachedMealToday {
+  id: string;
+  mealType: string;
+  mealCategory: string;
+  loggedAt: string;
+}
+
+export interface CachedHealthScore {
+  score: number;
+  components: {
+    logging: number;
+    stability: number;
+    trend: number;
+    medication: number;
+    streak: number;
+  };
+  computedForDate: string;
+}
+
 export interface CachedDashboard {
   streak: { currentStreakDays: number };
   latestReading: { valueMgDl: number; readingType: string; measuredAt: string } | null;
   todayReadingCount: number;
   medications: { id: string; medicineName: string }[];
+  // Phase 2 fields — optional so v1 caches still parse.
+  summary?: CachedDashboardSummary;
+  bpLatest?: CachedBPLatest | null;
+  mealsToday?: CachedMealToday[];
+  insightsUnacknowledgedCount?: number;
+  healthScore?: CachedHealthScore | null;
   /** ISO timestamp of the last successful API fetch. */
   fetchedAt: string;
 }
 
-const KEY = "swasth.dashboardCache.v1";
+// Bumped from v1 → v2 in Phase 2 to add summary / bp / meals / health
+// score. Old v1 entries are ignored (loadDashboardCache returns null),
+// which simply re-fetches on next open — no data loss.
+const KEY = "swasth.dashboardCache.v2";
 
 export const loadDashboardCache = async (): Promise<CachedDashboard | null> => {
   try {

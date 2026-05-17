@@ -3,9 +3,17 @@ import { View, Text, ScrollView, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
+
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
 import { SyncStatusBadge } from "@/components/shared/SyncStatusBadge";
 import { WelcomeBackBanner } from "@/components/dashboard/WelcomeBackBanner";
+import { SummaryCard } from "@/components/dashboard/SummaryCard";
+import { BPCard } from "@/components/dashboard/BPCard";
+import { MealsTodayCard } from "@/components/dashboard/MealsTodayCard";
+import { HealthScoreCard } from "@/components/dashboard/HealthScoreCard";
+import { HbA1cCard } from "@/components/dashboard/HbA1cCard";
+import { InsightsBadge } from "@/components/dashboard/InsightsBadge";
+import { GlucoseTrendChart, type TrendPoint } from "@/components/dashboard/GlucoseTrendChart";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -15,16 +23,37 @@ import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
 import {
   type CachedDashboard,
+  type CachedDashboardSummary,
   daysSinceLatestReading,
   loadDashboardCache,
   saveDashboardCache,
 } from "@/services/dashboard-cache";
 
 interface DashboardData {
+  summary?: CachedDashboardSummary;
   streak: { currentStreakDays: number };
   latestReading: { valueMgDl: number; readingType: string; measuredAt: string } | null;
   todayReadingCount: number;
   medications: { id: string; medicineName: string }[];
+  bpLatest: {
+    systolic: number;
+    diastolic: number;
+    pulse: number | null;
+    measuredAt: string;
+  } | null;
+  mealsToday: { id: string; mealType: string; mealCategory: string; loggedAt: string }[];
+  insightsUnacknowledgedCount: number;
+  healthScore: {
+    score: number;
+    components: {
+      logging: number;
+      stability: number;
+      trend: number;
+      medication: number;
+      streak: number;
+    };
+    computedForDate: string;
+  } | null;
 }
 
 const EMPTY: DashboardData = {
@@ -32,11 +61,15 @@ const EMPTY: DashboardData = {
   latestReading: null,
   todayReadingCount: 0,
   medications: [],
+  bpLatest: null,
+  mealsToday: [],
+  insightsUnacknowledgedCount: 0,
+  healthScore: null,
 };
 
 const AVATAR_COLORS = ["#2563EB", "#16A34A", "#D97706", "#DC2626", "#8B5CF6"];
 
-const STALE_THRESHOLD_MS = 60 * 60 * 1000; // 1h — beyond this, show "Last updated".
+const STALE_THRESHOLD_MS = 60 * 60 * 1000;
 
 const formatRelativeTime = (iso: string): string => {
   const ms = Date.now() - new Date(iso).getTime();
@@ -57,9 +90,9 @@ export default function DashboardScreen(): JSX.Element {
   const [stale, setStale] = useState(false);
   const [hydratedFromCache, setHydratedFromCache] = useState(false);
   const [timeAnomaly, setTimeAnomaly] = useState(false);
+  const [userStageDays, setUserStageDays] = useState(0);
+  const [trendPoints, setTrendPoints] = useState<readonly TrendPoint[]>([]);
 
-  // Local-first read: paint cached data immediately so the screen is
-  // never empty, then fetch in the background and update.
   useEffect(() => {
     void (async () => {
       const cache = await loadDashboardCache();
@@ -69,6 +102,11 @@ export default function DashboardScreen(): JSX.Element {
           latestReading: cache.latestReading,
           todayReadingCount: cache.todayReadingCount,
           medications: cache.medications,
+          ...(cache.summary ? { summary: cache.summary } : {}),
+          bpLatest: cache.bpLatest ?? null,
+          mealsToday: cache.mealsToday ?? [],
+          insightsUnacknowledgedCount: cache.insightsUnacknowledgedCount ?? 0,
+          healthScore: cache.healthScore ?? null,
         });
         setCacheFetchedAt(cache.fetchedAt);
         setHydratedFromCache(true);
@@ -81,7 +119,10 @@ export default function DashboardScreen(): JSX.Element {
   const fetchAll = useCallback(async () => {
     try {
       const [dashRes, userRes] = await Promise.all([
-        api.get<{ success: boolean; data: DashboardData }>("/dashboard", {
+        api.get<{
+          success: boolean;
+          data: DashboardData & { summary?: CachedDashboardSummary };
+        }>("/dashboard", {
           params: activeProfileId ? { targetUserId: activeProfileId } : undefined,
         }),
         api.get<{
@@ -90,6 +131,7 @@ export default function DashboardScreen(): JSX.Element {
             householdId: string;
             householdProfiles: { id: string; name: string; age: number; conditions: string[] }[];
             timeAnomalyCount?: number;
+            createdAt?: string;
           };
         }>("/users/me"),
       ]);
@@ -105,11 +147,43 @@ export default function DashboardScreen(): JSX.Element {
         })),
       );
       setTimeAnomaly((userRes.data.timeAnomalyCount ?? 0) >= 2);
+
+      if (userRes.data.createdAt !== undefined) {
+        const days = Math.floor(
+          (Date.now() - new Date(userRes.data.createdAt).getTime()) / 86_400_000,
+        );
+        setUserStageDays(days);
+      }
+
+      // Fetch trend points (last 14 days). Cheap to grab alongside the
+      // dashboard; failures here are non-fatal (chart shows empty state).
+      try {
+        const fromIso = new Date(Date.now() - 14 * 86_400_000).toISOString();
+        const trendRes = await api.get<{
+          success: boolean;
+          data: { data: TrendPoint[] };
+        }>("/readings/glucose", { params: { from: fromIso, limit: 100 } });
+        setTrendPoints(trendRes.data.data);
+      } catch (e) {
+        logError("dashboard.trend", e);
+      }
+
       setStale(false);
 
       const fetchedAt = new Date().toISOString();
       setCacheFetchedAt(fetchedAt);
-      const next: CachedDashboard = { ...fresh, fetchedAt };
+      const next: CachedDashboard = {
+        streak: fresh.streak,
+        latestReading: fresh.latestReading,
+        todayReadingCount: fresh.todayReadingCount,
+        medications: fresh.medications,
+        ...(fresh.summary ? { summary: fresh.summary } : {}),
+        bpLatest: fresh.bpLatest,
+        mealsToday: fresh.mealsToday,
+        insightsUnacknowledgedCount: fresh.insightsUnacknowledgedCount,
+        healthScore: fresh.healthScore,
+        fetchedAt,
+      };
       void saveDashboardCache(next);
     } catch (e) {
       logError("dashboard", e);
@@ -188,7 +262,19 @@ export default function DashboardScreen(): JSX.Element {
           loggedToday={data.todayReadingCount > 0}
         />
 
-        {/* Hero — latest reading (most actionable signal) */}
+        {/* Phase 2: server-composed natural-language summary. Top-of-fold
+            because it answers "how am I today?" in one glance. */}
+        {data.summary && (
+          <SummaryCard
+            headline={data.summary.headline}
+            details={data.summary.details}
+            coldStart={data.summary.coldStart}
+          />
+        )}
+
+        <InsightsBadge count={data.insightsUnacknowledgedCount} />
+
+        {/* Hero — latest glucose reading. */}
         <Card>
           <Text className="text-body text-neutral">{t("dashboard.lastReading")}</Text>
           {latest ? (
@@ -233,6 +319,26 @@ export default function DashboardScreen(): JSX.Element {
             </Card>
           </View>
         </View>
+
+        {/* 14-day glucose trend chart — Skia-accelerated Victory Native. */}
+        <GlucoseTrendChart points={trendPoints} />
+
+        {/* Phase 2 — BP latest + today's meals strip. */}
+        <BPCard latest={data.bpLatest} />
+        <MealsTodayCard mealsToday={data.mealsToday} />
+
+        {data.healthScore && (
+          <HealthScoreCard
+            score={data.healthScore.score}
+            components={data.healthScore.components}
+            computedForDate={data.healthScore.computedForDate}
+          />
+        )}
+
+        {/* HbA1c estimate — always renders. Shows a locked progress
+            card before day 14, then the estimate (or "need more
+            readings" copy) once unlocked. */}
+        <HbA1cCard userStageDays={userStageDays} />
 
         <Button label={t("dashboard.logReading")} onPress={() => router.push("/(tabs)/log")} />
       </ScrollView>

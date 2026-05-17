@@ -1,15 +1,25 @@
-import { useState } from "react";
-import { View, Text } from "react-native";
+// Phase 2 — Unified log screen. Three modes (sugar | BP | meal) share
+// one header + profile-aware confirmation pattern. Each mode owns its
+// own input/confirm sub-flow so the glucose path stays 1:1 with Phase 1
+// and the new surfaces don't accidentally inherit voice-parsing wiring
+// they don't need.
+
+import { useCallback, useState } from "react";
+import { View, Text, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { isCriticalGlucose } from "@swasth/shared-types";
-import type { GlucoseReadingType } from "@swasth/shared-types";
+import type { GlucoseReadingType, MealCategory, MealType } from "@swasth/shared-types";
 import type { VoiceParseResult } from "@swasth/domain-logic";
 import { useTranslation } from "react-i18next";
+
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
 import { VoiceInput } from "@/components/logging/VoiceInput";
 import { NumpadInput } from "@/components/logging/NumpadInput";
 import { ConfirmationScreen } from "@/components/logging/ConfirmationScreen";
+import { BPInput } from "@/components/logging/BPInput";
+import { BPConfirmationScreen } from "@/components/logging/BPConfirmationScreen";
+import { MealQuickLog } from "@/components/logging/MealQuickLog";
 import { CriticalAlert } from "@/components/logging/CriticalAlert";
 import { UndoToast } from "@/components/shared/UndoToast";
 import { Button } from "@/components/ui/Button";
@@ -17,17 +27,26 @@ import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
 import { saveGlucoseReading } from "@/services/readings";
+import { saveBPReading } from "@/services/bp";
+import { saveMealLog } from "@/services/meals";
 import { useActiveProfile } from "@/hooks/useActiveProfile";
 import { hapticSave } from "@/utils/haptics";
 import { track } from "@/services/analytics";
 
+type LogMode = "glucose" | "bp" | "meal";
 type Stage = "input" | "confirm" | "saved";
-type InputMode = "voice" | "numpad";
+type InputMethod = "voice" | "numpad";
 
-interface Parsed {
+interface ParsedGlucose {
   value: number;
   type: GlucoseReadingType;
   uncertain: boolean;
+}
+
+interface ParsedBP {
+  systolic: number;
+  diastolic: number;
+  pulse?: number;
 }
 
 export default function LogScreen(): JSX.Element {
@@ -35,24 +54,59 @@ export default function LogScreen(): JSX.Element {
   const router = useRouter();
   const activeProfile = useActiveProfile();
   const userId = activeProfile?.id ?? null;
+
+  const [mode, setMode] = useState<LogMode>("glucose");
   const [stage, setStage] = useState<Stage>("input");
-  const [mode, setMode] = useState<InputMode>("voice");
-  const [parsed, setParsed] = useState<Parsed | null>(null);
-  const [undoVisible, setUndoVisible] = useState(false);
+  const [inputMethod, setInputMethod] = useState<InputMethod>("voice");
+
+  // Glucose
+  const [parsedGlucose, setParsedGlucose] = useState<ParsedGlucose | null>(null);
   const [lastReadingId, setLastReadingId] = useState<string | null>(null);
-  const [savedOffline, setSavedOffline] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
   const [streakDays, setStreakDays] = useState(0);
+  const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
   const [criticalAlert, setCriticalAlert] = useState<{
     visible: boolean;
     value: number;
     direction: "low" | "high";
   }>({ visible: false, value: 0, direction: "low" });
 
+  // BP
+  const [parsedBP, setParsedBP] = useState<ParsedBP | null>(null);
+
+  // Shared post-save state
+  const [undoVisible, setUndoVisible] = useState(false);
+  const [savedOffline, setSavedOffline] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedSummary, setSavedSummary] = useState<{
+    headline: string;
+    detail?: string;
+  } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const resetForNext = useCallback((): void => {
+    setStage("input");
+    setInputMethod("voice");
+    setParsedGlucose(null);
+    setParsedBP(null);
+    setLastReadingId(null);
+    setStreakDays(0);
+    setFeedbackMsg(null);
+    setSavedSummary(null);
+    setUndoVisible(false);
+    setSavedOffline(false);
+    setSaveError(null);
+  }, []);
+
+  const switchMode = (next: LogMode): void => {
+    if (next === mode) return;
+    setMode(next);
+    resetForNext();
+  };
+
+  // ── Glucose ───────────────────────────────────────────────
   const handleVoice = (result: VoiceParseResult): void => {
     if (result.kind !== "ok") return;
-    setParsed({
+    setParsedGlucose({
       value: result.value,
       type: result.readingType,
       uncertain: result.requiresTypeConfirmation,
@@ -61,80 +115,175 @@ export default function LogScreen(): JSX.Element {
   };
 
   const handleNumpad = (value: number): void => {
-    setParsed({ value, type: "fasting", uncertain: true });
+    setParsedGlucose({ value, type: "fasting", uncertain: true });
     setStage("confirm");
   };
 
-  const save = async (type: GlucoseReadingType, context: "normal" | "festive"): Promise<void> => {
-    if (!parsed || !userId) return;
+  const saveGlucose = async (
+    type: GlucoseReadingType,
+    context: "normal" | "festive",
+  ): Promise<void> => {
+    if (!parsedGlucose || !userId) return;
     hapticSave();
     setSaveError(null);
+    setSaving(true);
 
-    const result = await saveGlucoseReading({
-      userId,
-      valueMgDl: parsed.value,
-      readingType: type,
-      context,
-      // `mode` is the input affordance (voice|numpad). Server `source`
-      // is broader (manual|voice|device); numpad maps to manual.
-      source: mode === "voice" ? "voice" : "manual",
-      measuredAtIso: new Date().toISOString(),
-    });
+    try {
+      const result = await saveGlucoseReading({
+        userId,
+        valueMgDl: parsedGlucose.value,
+        readingType: type,
+        context,
+        source: inputMethod === "voice" ? "voice" : "manual",
+        measuredAtIso: new Date().toISOString(),
+      });
 
-    if (result.kind === "synced") {
-      setLastReadingId(result.readingId);
-      setStreakDays(result.streak.currentStreakDays);
-      setFeedbackMsg(t(`feedback.${result.feedback.tone}`, { defaultValue: t("logging.saved") }));
-      setSavedOffline(false);
-      if (result.critical.isCritical && result.critical.direction) {
-        setCriticalAlert({
-          visible: true,
-          value: parsed.value,
-          direction: result.critical.direction,
+      if (result.kind === "synced") {
+        setLastReadingId(result.readingId);
+        setStreakDays(result.streak.currentStreakDays);
+        setFeedbackMsg(t(`feedback.${result.feedback.tone}`, { defaultValue: t("logging.saved") }));
+        setSavedOffline(false);
+        if (result.critical.isCritical && result.critical.direction) {
+          setCriticalAlert({
+            visible: true,
+            value: parsedGlucose.value,
+            direction: result.critical.direction,
+          });
+          track("critical_bypass_triggered", { value: parsedGlucose.value });
+        }
+        setUndoVisible(true);
+        setSavedSummary({
+          headline: `${parsedGlucose.value} mg/dL`,
+          detail: t(`feedback.${result.feedback.tone}`, { defaultValue: t("logging.saved") }),
         });
-        track("critical_bypass_triggered", { value: parsed.value });
+        setStage("saved");
+        return;
       }
-      setUndoVisible(true);
-      setStage("saved");
-      return;
-    }
 
-    if (result.kind === "queued") {
-      // Offline path — queued in WatermelonDB; the drain hook will
-      // push it later. Make the offline status clear.
-      setLastReadingId(null);
-      setSavedOffline(true);
-      setStreakDays(0);
-      setFeedbackMsg(t("logging.savedOffline"));
-      // Critical-value safety still fires from the local check —
-      // patient shouldn't lose the alert just because they're offline.
-      if (isCriticalGlucose(parsed.value)) {
-        const dir = parsed.value < 65 ? "low" : "high";
-        setCriticalAlert({ visible: true, value: parsed.value, direction: dir });
-        track("critical_bypass_triggered", { value: parsed.value });
+      if (result.kind === "queued") {
+        setSavedOffline(true);
+        setFeedbackMsg(t("logging.savedOffline"));
+        if (isCriticalGlucose(parsedGlucose.value)) {
+          const dir = parsedGlucose.value < 65 ? "low" : "high";
+          setCriticalAlert({ visible: true, value: parsedGlucose.value, direction: dir });
+          track("critical_bypass_triggered", { value: parsedGlucose.value });
+        }
+        setSavedSummary({
+          headline: `${parsedGlucose.value} mg/dL`,
+          detail: t("logging.savedOffline"),
+        });
+        setStage("saved");
+        return;
       }
-      setStage("saved");
-      return;
-    }
 
-    // Server rejected the reading (4xx, validation, auth, conflict).
-    // Critical-value alert still fires regardless of rejection reason.
-    if (isCriticalGlucose(parsed.value)) {
-      const dir = parsed.value < 65 ? "low" : "high";
-      setCriticalAlert({ visible: true, value: parsed.value, direction: dir });
-      track("critical_bypass_triggered", { value: parsed.value });
+      if (isCriticalGlucose(parsedGlucose.value)) {
+        const dir = parsedGlucose.value < 65 ? "low" : "high";
+        setCriticalAlert({ visible: true, value: parsedGlucose.value, direction: dir });
+        track("critical_bypass_triggered", { value: parsedGlucose.value });
+      }
+      setSaveError(t("logging.saveFailed"));
+    } finally {
+      setSaving(false);
     }
-    setSaveError(t("logging.saveFailed"));
   };
 
-  if (stage === "confirm" && parsed) {
+  // ── BP ─────────────────────────────────────────────────────
+  const handleBPSubmit = (params: ParsedBP): void => {
+    setParsedBP(params);
+    setStage("confirm");
+  };
+
+  const saveBP = async (): Promise<void> => {
+    if (!parsedBP || !userId) return;
+    hapticSave();
+    setSaveError(null);
+    setSaving(true);
+    try {
+      const result = await saveBPReading({
+        userId,
+        systolic: parsedBP.systolic,
+        diastolic: parsedBP.diastolic,
+        ...(parsedBP.pulse !== undefined ? { pulse: parsedBP.pulse } : {}),
+        source: "manual",
+        measuredAtIso: new Date().toISOString(),
+      });
+
+      if (result.kind === "synced") {
+        setSavedOffline(false);
+        setSavedSummary({
+          headline: `${parsedBP.systolic}/${parsedBP.diastolic} mmHg`,
+          detail: t("bp.saved"),
+        });
+        setStage("saved");
+        return;
+      }
+      if (result.kind === "queued") {
+        setSavedOffline(true);
+        setSavedSummary({
+          headline: `${parsedBP.systolic}/${parsedBP.diastolic} mmHg`,
+          detail: t("bp.savedOffline"),
+        });
+        setStage("saved");
+        return;
+      }
+      setSaveError(t("bp.saveFailed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Meal ───────────────────────────────────────────────────
+  const saveMeal = async (params: {
+    mealType: MealType;
+    mealCategory: MealCategory;
+  }): Promise<void> => {
+    if (!userId) return;
+    hapticSave();
+    setSaveError(null);
+    setSaving(true);
+    try {
+      const result = await saveMealLog({
+        userId,
+        mealType: params.mealType,
+        mealCategory: params.mealCategory,
+        loggedAtIso: new Date().toISOString(),
+      });
+
+      const categoryLabel =
+        params.mealCategory === "light"
+          ? t("meals.light")
+          : params.mealCategory === "normal"
+            ? t("meals.normal")
+            : t("meals.heavy");
+      const detail = `${t(`meals.type.${params.mealType}`)} • ${categoryLabel}`;
+
+      if (result.kind === "synced") {
+        setSavedOffline(false);
+        setSavedSummary({ headline: t("meals.saved"), detail });
+        setStage("saved");
+        return;
+      }
+      if (result.kind === "queued") {
+        setSavedOffline(true);
+        setSavedSummary({ headline: t("meals.saved"), detail: t("logging.savedOffline") });
+        setStage("saved");
+        return;
+      }
+      setSaveError(t("meals.saveFailed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Render ────────────────────────────────────────────────
+  if (stage === "confirm" && mode === "glucose" && parsedGlucose) {
     return (
       <>
         <ConfirmationScreen
-          value={parsed.value}
-          type={parsed.type}
-          uncertainType={parsed.uncertain}
-          onConfirm={(t, ctx) => void save(t, ctx)}
+          value={parsedGlucose.value}
+          type={parsedGlucose.type}
+          uncertainType={parsedGlucose.uncertain}
+          onConfirm={(type, ctx) => void saveGlucose(type, ctx)}
           onEdit={() => {
             setSaveError(null);
             setStage("input");
@@ -152,24 +301,27 @@ export default function LogScreen(): JSX.Element {
     );
   }
 
-  if (stage === "saved") {
-    const resetForNext = (): void => {
-      setUndoVisible(false);
-      setLastReadingId(null);
-      setParsed(null);
-      setFeedbackMsg(null);
-      setStreakDays(0);
-      setSavedOffline(false);
-      setSaveError(null);
-      setMode("voice");
-      setStage("input");
-    };
+  if (stage === "confirm" && mode === "bp" && parsedBP) {
+    return (
+      <BPConfirmationScreen
+        systolic={parsedBP.systolic}
+        diastolic={parsedBP.diastolic}
+        {...(parsedBP.pulse !== undefined ? { pulse: parsedBP.pulse } : {})}
+        onConfirm={() => void saveBP()}
+        onEdit={() => {
+          setSaveError(null);
+          setStage("input");
+        }}
+      />
+    );
+  }
 
+  if (stage === "saved") {
     return (
       <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-row items-center justify-between px-4 py-3">
           <Text className="text-hero font-bold">
-            {t("logging.savedTitle", { defaultValue: "Saved" })}
+            {t("logging.savedTitle", { defaultValue: t("logging.saved") })}
           </Text>
           <ActiveProfileBadge />
         </View>
@@ -183,15 +335,17 @@ export default function LogScreen(): JSX.Element {
                 color={savedOffline ? "#D97706" : "#16A34A"}
                 accessibilityLabel={savedOffline ? "Saved locally" : "Saved"}
               />
-              {parsed && (
-                <Text className="text-hero font-bold">
-                  {parsed.value} <Text className="text-body font-normal text-neutral">mg/dL</Text>
-                </Text>
+              {savedSummary && (
+                <>
+                  <Text className="text-hero font-bold">{savedSummary.headline}</Text>
+                  {savedSummary.detail !== undefined && (
+                    <Text className="text-important text-center text-neutral">
+                      {savedSummary.detail}
+                    </Text>
+                  )}
+                </>
               )}
-              {feedbackMsg !== null && (
-                <Text className="text-important text-center">{feedbackMsg}</Text>
-              )}
-              {streakDays > 0 && (
+              {streakDays > 0 && mode === "glucose" && (
                 <View className="flex-row items-center gap-2">
                   <Icon name="flame" size={20} color="#F59E0B" />
                   <Text className="text-body">
@@ -199,12 +353,21 @@ export default function LogScreen(): JSX.Element {
                   </Text>
                 </View>
               )}
+              {feedbackMsg !== null && mode === "glucose" && (
+                <Text className="text-important text-center">{feedbackMsg}</Text>
+              )}
             </View>
           </Card>
 
           <View className="gap-2">
             <Button
-              label={t("logging.logAnother", { defaultValue: "Ek aur reading log karein" })}
+              label={
+                mode === "glucose"
+                  ? t("logging.logAnother", { defaultValue: "Ek aur reading log karein" })
+                  : mode === "bp"
+                    ? t("bp.title")
+                    : t("meals.logMore")
+              }
               onPress={resetForNext}
             />
             <Button
@@ -215,9 +378,9 @@ export default function LogScreen(): JSX.Element {
           </View>
         </View>
 
-        {/* Undo only when we have a server id — offline rows live in the
-            local queue and the dashboard can edit them once synced. */}
-        {!savedOffline && (
+        {/* Glucose-only undo. BP/Meals don't expose a server-side delete from
+            the saved screen yet — adding undo there is queued for Phase 3. */}
+        {mode === "glucose" && !savedOffline && (
           <UndoToast
             visible={undoVisible}
             message={t("logging.readingSaved")}
@@ -248,25 +411,61 @@ export default function LogScreen(): JSX.Element {
     );
   }
 
+  // ── Input stage ───────────────────────────────────────────
   return (
-    <SafeAreaView className="flex-1 gap-6 bg-white p-6">
-      <View className="items-end">
+    <SafeAreaView className="flex-1 bg-white">
+      <View className="flex-row items-center justify-end px-4 py-3">
         <ActiveProfileBadge />
       </View>
 
-      {mode === "voice" ? (
-        <VoiceInput onParsed={handleVoice} onFail={() => setMode("numpad")} />
-      ) : (
-        <NumpadInput onSubmit={handleNumpad} />
-      )}
+      <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}>
+        {/* Mode chooser — three full-width Buttons (the existing
+            primary Button component is battle-tested across the app). */}
+        <View className="flex-row gap-2">
+          <View className="flex-1">
+            <Button
+              label={t("log.modeGlucose")}
+              variant={mode === "glucose" ? "primary" : "ghost"}
+              onPress={() => switchMode("glucose")}
+            />
+          </View>
+          <View className="flex-1">
+            <Button
+              label={t("log.modeBp")}
+              variant={mode === "bp" ? "primary" : "ghost"}
+              onPress={() => switchMode("bp")}
+            />
+          </View>
+          <View className="flex-1">
+            <Button
+              label={t("log.modeMeal")}
+              variant={mode === "meal" ? "primary" : "ghost"}
+              onPress={() => switchMode("meal")}
+            />
+          </View>
+        </View>
 
-      <Button
-        label={mode === "voice" ? t("logging.useNumpad") : t("logging.useVoice")}
-        variant="ghost"
-        onPress={() => setMode((m) => (m === "voice" ? "numpad" : "voice"))}
-      />
+        {mode === "glucose" ? (
+          <View className="gap-6">
+            {inputMethod === "voice" ? (
+              <VoiceInput onParsed={handleVoice} onFail={() => setInputMethod("numpad")} />
+            ) : (
+              <NumpadInput onSubmit={handleNumpad} />
+            )}
+            <Button
+              label={inputMethod === "voice" ? t("logging.useNumpad") : t("logging.useVoice")}
+              variant="ghost"
+              onPress={() => setInputMethod((m) => (m === "voice" ? "numpad" : "voice"))}
+            />
+          </View>
+        ) : mode === "bp" ? (
+          <BPInput onSubmit={handleBPSubmit} />
+        ) : (
+          <MealQuickLog onSave={(p) => void saveMeal(p)} saving={saving} />
+        )}
 
-      {saveError !== null && <Text className="text-body text-warning">{saveError}</Text>}
+        {saveError !== null && <Text className="text-body text-warning">{saveError}</Text>}
+      </ScrollView>
     </SafeAreaView>
   );
 }
