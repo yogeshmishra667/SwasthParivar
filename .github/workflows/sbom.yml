@@ -9,9 +9,14 @@ name: SBOM
 #                        ACTUALLY ship, including transitively-installed
 #                        base-image OS packages)
 #
-# Both are uploaded as workflow artefacts on every push to main and
-# attached as release assets when a tag is cut. PR runs also generate
-# the artefacts so reviewers can diff dep additions.
+# SBOMs are attached as release assets when a tag is cut. PR + main-push
+# runs were removed because: (a) SBOM is an inventory artefact, not a
+# quality gate ("Doesn't FAIL on vulns" — see below); (b) the per-PR
+# generation cost (~5 min) burned through the GitHub Actions Pro quota
+# faster than any value it delivered. CVE catching is handled by
+# `pnpm audit` + Trivy + Dependabot, not the SBOM. If a reviewer needs
+# to diff dep additions on a PR, the `pnpm-lock.yaml` diff is the source
+# of truth — the SBOM is downstream of it.
 #
 # WHY this exists:
 #   - Supply-chain transparency. Auditors, customers, and CVE-scanners
@@ -29,10 +34,10 @@ name: SBOM
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
-  pull_request:
-    branches: [main]
+  # Manual trigger for ad-hoc SBOM generation (e.g. responding to a
+  # CVE inquiry without cutting a new release tag).
+  workflow_dispatch:
 
 concurrency:
   group: sbom-${{ github.workflow }}-${{ github.ref }}
