@@ -8,3 +8,4 @@ export * from "./profile.js";
 export * from "./medications.js";
 export * from "./meals.js";
 export * from "./insights.js";
+export * from "./chat.js";
