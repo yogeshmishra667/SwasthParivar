@@ -412,7 +412,7 @@ jobs:
       #   3. Plan a recurring "Trivy debt" task to keep up with base bumps.
       - name: Scan image with Trivy (HIGH+CRITICAL, fixable)
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: swasth-server:ci
           format: table
