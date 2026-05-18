@@ -14,6 +14,9 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
+import { fetchOtpProvider } from "@/services/auth-config";
+import { startFirebasePhoneAuth } from "@/services/firebase-auth";
+import { logError } from "@/services/analytics";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 
 export default function LoginScreen(): JSX.Element {
@@ -29,9 +32,21 @@ export default function LoginScreen(): JSX.Element {
     }
     setLoading(true);
     try {
-      await api.post("/auth/send-otp", { phone: `+91${phone}` });
-      router.push({ pathname: "/(auth)/verify", params: { phone } });
-    } catch {
+      // Provider check first — the rest of the flow forks here.
+      // - firebase: skip our /send-otp, mobile SDK delivers the SMS.
+      // - whatsapp / log: hit /send-otp as before.
+      const provider = await fetchOtpProvider();
+      const phoneE164 = `+91${phone}`;
+
+      if (provider === "firebase") {
+        await startFirebasePhoneAuth(phoneE164);
+      } else {
+        await api.post("/auth/send-otp", { phone: phoneE164 });
+      }
+
+      router.push({ pathname: "/(auth)/verify", params: { phone, provider } });
+    } catch (err) {
+      logError("login.sendOtp", err);
       Alert.alert("Dikkat hui", "Kripya thodi der baad try karein.");
     } finally {
       setLoading(false);

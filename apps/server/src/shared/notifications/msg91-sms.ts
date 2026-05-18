@@ -50,3 +50,41 @@ export const sendSms = async (msg: SmsMessage): Promise<SmsResult> => {
 
 export const sendSmsBatch = async (messages: SmsMessage[]): Promise<SmsResult[]> =>
   await Promise.all(messages.map(sendSms));
+
+const MSG91_OTP_ENDPOINT = "https://control.msg91.com/api/v5/otp";
+
+/**
+ * Send a server-generated OTP via MSG91's dedicated OTP API. Distinct
+ * from `sendSms` (Flow API) because the OTP endpoint accepts a custom
+ * `otp` parameter and routes through a pre-approved DLT template tied
+ * to MSG91_OTP_TEMPLATE_ID — required by Indian telecom regulators.
+ */
+export const sendMsg91Otp = async (phone: string, otp: string): Promise<SmsResult> => {
+  if (!env.MSG91_API_KEY || !env.MSG91_OTP_TEMPLATE_ID) {
+    logger.warn({ phone }, "MSG91 OTP not configured — skipping SMS fallback");
+    return { phone, success: false, errorCode: "NOT_CONFIGURED" };
+  }
+
+  const mobile = phone.replace(/^\+/, "");
+  const url = new URL(MSG91_OTP_ENDPOINT);
+  url.searchParams.set("template_id", env.MSG91_OTP_TEMPLATE_ID);
+  url.searchParams.set("mobile", mobile);
+  url.searchParams.set("authkey", env.MSG91_API_KEY);
+  url.searchParams.set("otp", otp);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) {
+      logger.error({ status: res.status, phone }, "msg91 otp http error");
+      return { phone, success: false, errorCode: `HTTP_${res.status}` };
+    }
+    return { phone, success: true };
+  } catch (err) {
+    logger.error({ err, phone }, "msg91 otp send failed");
+    return { phone, success: false, errorCode: "NETWORK_ERROR" };
+  }
+};

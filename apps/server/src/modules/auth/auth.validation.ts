@@ -20,3 +20,9 @@ export const pushTokenSchema = z.object({
   platform: z.enum(["ios", "android", "web"]),
   deviceId: z.string().optional(),
 });
+
+export const verifyFirebaseSchema = z.object({
+  // Firebase ID tokens are JWTs around 1KB; min 100 catches a missing
+  // body or a truncated token before it hits the verify call.
+  idToken: z.string().min(100),
+});

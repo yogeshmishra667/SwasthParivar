@@ -4,3 +4,13 @@
 
 expo-env.d.ts
 # @end expo-cli
+
+# Firebase config files — project-specific identifiers. Not strictly
+# secret but treated as such to keep them out of public history. Each
+# dev/CI fetches from Firebase Console or pulls via EAS secrets.
+google-services.json
+GoogleService-Info.plist
+
+# Local env (Expo only loads .env from the Expo project dir).
+.env
+.env.local

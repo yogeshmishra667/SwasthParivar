@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.swasthparivar.app",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Aapki sugar reading voice se log karne ke liye.",
         "NSSpeechRecognitionUsageDescription": "Hindi aur English me reading samajhne ke liye.",
@@ -25,6 +26,7 @@
     },
     "android": {
       "package": "com.swasthparivar.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#2563EB"
@@ -50,13 +52,22 @@
           "color": "#2563EB"
         }
       ],
-      "expo-speech-recognition"
+      "expo-speech-recognition",
+      "@sentry/react-native",
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      [
+        "expo-build-properties",
+        {
+          "ios": { "useFrameworks": "static" }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "apiBaseUrl": "http://10.166.133.196:4000/api/v1"
+      "apiBaseUrl": "http://10.254.69.196:4000/api/v1"
     }
   }
 }

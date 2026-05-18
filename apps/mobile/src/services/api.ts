@@ -10,7 +10,7 @@ import { TIMEOUTS } from "@/utils/constants";
 
 const baseURL =
   (Constants.expoConfig?.extra as { apiBaseUrl?: string } | undefined)?.apiBaseUrl ??
-  "http://10.166.133.196:4000/api/v1";
+  "http://10.254.69.196:4000/api/v1";
 
 const client: AxiosInstance = axios.create({
   baseURL,

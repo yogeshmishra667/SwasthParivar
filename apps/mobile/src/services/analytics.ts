@@ -5,14 +5,27 @@ const extra = Constants.expoConfig?.extra as
   | { posthogKey?: string; posthogHost?: string }
   | undefined;
 
-const apiKey = extra?.posthogKey;
+const stringFromEnvOrExtra = (
+  envName: string,
+  extraValue: string | undefined,
+): string | undefined => {
+  const envValue: unknown = process.env[envName];
+  if (typeof envValue === "string" && envValue.length > 0) return envValue;
+  if (typeof extraValue === "string" && extraValue.length > 0) return extraValue;
+  return undefined;
+};
+
+// Var name follows docs/SETUP.md ("Step 3 — Option B"). Mobile uses
+// EXPO_PUBLIC_POSTHOG_KEY (NOT _API_KEY) so it visually matches the
+// EAS env command we tell teammates to run.
+const apiKey = stringFromEnvOrExtra("EXPO_PUBLIC_POSTHOG_KEY", extra?.posthogKey);
 
 // Default to the US ingest host to match `apps/server/src/shared/
-// analytics/posthog.ts`. EU teams override via `app.json` →
-// `extra.posthogHost = "https://eu.i.posthog.com"`. (The legacy
-// `app.posthog.com` URL still resolves but is route-deprecated; matching
-// the server URL keeps both surfaces in lockstep when we change region.)
-const host = extra?.posthogHost ?? "https://us.i.posthog.com";
+// analytics/posthog.ts`. EU teams override via `EXPO_PUBLIC_POSTHOG_HOST`
+// or `app.json` → `extra.posthogHost = "https://eu.i.posthog.com"`.
+const host =
+  stringFromEnvOrExtra("EXPO_PUBLIC_POSTHOG_HOST", extra?.posthogHost) ??
+  "https://us.i.posthog.com";
 
 export const analytics = apiKey ? new PostHog(apiKey, { host }) : null;
 

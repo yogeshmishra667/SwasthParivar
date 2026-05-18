@@ -193,6 +193,49 @@ For prod incidents that aren't a third-party outage, see `docs/runbooks/rollback
 
 ---
 
+## Switch OTP provider
+
+OTP delivery is gated by the `auth.otp.provider` flag (see
+`apps/server/src/modules/auth/auth.service.ts`). Three values:
+
+| Value      | What happens server-side                          | What happens mobile-side                                               |
+| ---------- | ------------------------------------------------- | ---------------------------------------------------------------------- |
+| `firebase` | `/send-otp` no-ops, `/verify-firebase` mints JWT  | `@react-native-firebase/auth` sends SMS, ID token → `/verify-firebase` |
+| `whatsapp` | WhatsApp Business API primary, MSG91 SMS fallback | Existing OTP screen → `/verify-otp`                                    |
+| `log`      | OTP only logged (dev), `000000` bypass works      | Existing OTP screen → `/verify-otp` (use `000000` in dev)              |
+
+Default is `log` (kept the dev bypass alive so we never silently
+"send" an OTP we didn't actually deliver). Flip:
+
+```bash
+# Via admin endpoint (production):
+curl -X PUT https://api.swasthparivar.com/admin/flags/auth.otp.provider \
+  -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+  -H "X-Admin-Actor: $(whoami)" \
+  -d '{"value": "firebase"}'
+
+# Or directly via Redis (local/dev):
+redis-cli SET flag:auth.otp.provider '"firebase"'
+```
+
+The mobile app fetches `GET /auth/config` on the login screen and
+branches accordingly. The mobile cache is 60s — restart for an instant
+flip on a single device.
+
+Pre-flight before flipping to `firebase`:
+
+- `FIREBASE_SERVICE_ACCOUNT_JSON` set in `apps/server/.env`
+- `google-services.json` and `GoogleService-Info.plist` in `apps/mobile/`
+- App built via `npx expo run:android` (NOT Expo Go — native modules)
+
+Pre-flight before flipping to `whatsapp`:
+
+- Meta business verification approved + production WABA (not test)
+- WhatsApp template approved with name in `WHATSAPP_OTP_TEMPLATE_NAME`
+- MSG91 template with DLT ID + ID in `MSG91_OTP_TEMPLATE_ID` (SMS fallback)
+
+---
+
 ## Rollback a bad deploy
 
 See `docs/runbooks/rollback.md`. The TL;DR:
