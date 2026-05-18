@@ -412,53 +412,74 @@ export default function LogScreen(): JSX.Element {
   }
 
   // ── Input stage ───────────────────────────────────────────
+  // Mode chooser row — shared header for all three modes.
+  const modeChooser = (
+    <View className="flex-row gap-2 px-4 pb-3">
+      <View className="flex-1">
+        <Button
+          label={t("log.modeGlucose")}
+          variant={mode === "glucose" ? "primary" : "ghost"}
+          onPress={() => switchMode("glucose")}
+        />
+      </View>
+      <View className="flex-1">
+        <Button
+          label={t("log.modeBp")}
+          variant={mode === "bp" ? "primary" : "ghost"}
+          onPress={() => switchMode("bp")}
+        />
+      </View>
+      <View className="flex-1">
+        <Button
+          label={t("log.modeMeal")}
+          variant={mode === "meal" ? "primary" : "ghost"}
+          onPress={() => switchMode("meal")}
+        />
+      </View>
+    </View>
+  );
+
+  // Glucose mode keeps the Phase 1 layout exactly — VoiceInput / numpad
+  // rendered OUTSIDE of any ScrollView. Wrapping the mic Pressable in a
+  // ScrollView on Android intercepts its tap events and the voice
+  // capture never starts, which is the regression hit during the
+  // Phase 2 refactor.
+  if (mode === "glucose") {
+    return (
+      <SafeAreaView className="flex-1 gap-6 bg-white">
+        <View className="flex-row items-center justify-end px-4 py-3">
+          <ActiveProfileBadge />
+        </View>
+        {modeChooser}
+        <View className="flex-1 gap-6 px-6">
+          {inputMethod === "voice" ? (
+            <VoiceInput onParsed={handleVoice} onFail={() => setInputMethod("numpad")} />
+          ) : (
+            <NumpadInput onSubmit={handleNumpad} />
+          )}
+          <Button
+            label={inputMethod === "voice" ? t("logging.useNumpad") : t("logging.useVoice")}
+            variant="ghost"
+            onPress={() => setInputMethod((m) => (m === "voice" ? "numpad" : "voice"))}
+          />
+          {saveError !== null && <Text className="text-body text-warning">{saveError}</Text>}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // BP / Meal modes use ScrollView because their input surfaces (numpad
+  // + 3 field chips + range hint, or meal type + 3 large category
+  // cards) are taller than the screen on small phones.
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-row items-center justify-end px-4 py-3">
         <ActiveProfileBadge />
       </View>
+      {modeChooser}
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}>
-        {/* Mode chooser — three full-width Buttons (the existing
-            primary Button component is battle-tested across the app). */}
-        <View className="flex-row gap-2">
-          <View className="flex-1">
-            <Button
-              label={t("log.modeGlucose")}
-              variant={mode === "glucose" ? "primary" : "ghost"}
-              onPress={() => switchMode("glucose")}
-            />
-          </View>
-          <View className="flex-1">
-            <Button
-              label={t("log.modeBp")}
-              variant={mode === "bp" ? "primary" : "ghost"}
-              onPress={() => switchMode("bp")}
-            />
-          </View>
-          <View className="flex-1">
-            <Button
-              label={t("log.modeMeal")}
-              variant={mode === "meal" ? "primary" : "ghost"}
-              onPress={() => switchMode("meal")}
-            />
-          </View>
-        </View>
-
-        {mode === "glucose" ? (
-          <View className="gap-6">
-            {inputMethod === "voice" ? (
-              <VoiceInput onParsed={handleVoice} onFail={() => setInputMethod("numpad")} />
-            ) : (
-              <NumpadInput onSubmit={handleNumpad} />
-            )}
-            <Button
-              label={inputMethod === "voice" ? t("logging.useNumpad") : t("logging.useVoice")}
-              variant="ghost"
-              onPress={() => setInputMethod((m) => (m === "voice" ? "numpad" : "voice"))}
-            />
-          </View>
-        ) : mode === "bp" ? (
+        {mode === "bp" ? (
           <BPInput onSubmit={handleBPSubmit} />
         ) : (
           <MealQuickLog onSave={(p) => void saveMeal(p)} saving={saving} />
