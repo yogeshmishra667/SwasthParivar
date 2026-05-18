@@ -7,3 +7,10 @@ pnpm-lock.yaml
 *.min.js
 **/prisma/migrations/**
 .claude/worktrees/**
+
+# Firebase credential files — gitignored, never format
+**/google-services.json
+**/GoogleService-Info.plist
+
+# Scratch notes
+phase*.md
