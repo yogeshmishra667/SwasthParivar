@@ -9,6 +9,7 @@ expo-env.d.ts
 # secret but treated as such to keep them out of public history. Each
 # dev/CI fetches from Firebase Console or pulls via EAS secrets.
 google-services.json
+Google Services.json
 GoogleService-Info.plist
 
 # Local env (Expo only loads .env from the Expo project dir).

@@ -1,4 +1,10 @@
-import auth, { type FirebaseAuthTypes } from "@react-native-firebase/auth";
+import {
+  type FirebaseAuthTypes,
+  getAuth,
+  getIdToken,
+  signInWithPhoneNumber,
+  signOut,
+} from "@react-native-firebase/auth";
 
 /**
  * Firebase Phone Auth wrapper. Used ONLY when the server returns
@@ -24,7 +30,7 @@ export const startFirebasePhoneAuth = async (phoneE164: string): Promise<void> =
   // - auth/invalid-phone-number   (bad format — should be caught client-side)
   // - auth/too-many-requests      (Firebase rate limit per number)
   // - auth/missing-client-identifier (Firebase project missing iOS/Android config)
-  pending = await auth().signInWithPhoneNumber(phoneE164);
+  pending = await signInWithPhoneNumber(getAuth(), phoneE164);
 };
 
 /**
@@ -39,11 +45,11 @@ export const confirmFirebaseOtp = async (otp: string): Promise<string> => {
     throw new Error("No pending Firebase verification — restart the login flow.");
   }
   await pending.confirm(otp);
-  const current = auth().currentUser;
+  const current = getAuth().currentUser;
   if (!current) {
     throw new Error("Firebase sign-in succeeded but no current user is set.");
   }
-  const idToken = await current.getIdToken(/* forceRefresh */ true);
+  const idToken = await getIdToken(current, /* forceRefresh */ true);
   pending = null;
   return idToken;
 };
@@ -60,8 +66,9 @@ export const cancelPendingFirebaseAuth = (): void => {
  */
 export const signOutFirebase = async (): Promise<void> => {
   try {
-    if (auth().currentUser) {
-      await auth().signOut();
+    const instance = getAuth();
+    if (instance.currentUser) {
+      await signOut(instance);
     }
   } catch {
     // Best-effort cleanup — never block app-level logout on this.
