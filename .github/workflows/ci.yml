@@ -35,6 +35,47 @@ env:
 
 jobs:
   # ──────────────────────────────────────────────────────────
+  # Path-change detector. Outputs flags consumed by jobs that are
+  # expensive AND have a narrow blast radius — they only need to run
+  # when the files they actually exercise changed.
+  #
+  # Currently consumed by:
+  #   - purity       → packages/domain-logic/**
+  #   - image-smoke  → apps/server/**, Dockerfile, lockfile
+  #
+  # Every OTHER job still runs unconditionally — these two are the only
+  # ones whose skip is provably safe (a mobile-only PR can't break the
+  # Docker image; a docs-only PR can't violate domain-logic purity).
+  #
+  # On push events (no diff base) the outputs default to "true" so main
+  # always re-runs everything. Only PR diffs short-circuit.
+  # ──────────────────────────────────────────────────────────
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      domain_logic: ${{ steps.filter.outputs.domain_logic }}
+      server_image: ${{ steps.filter.outputs.server_image }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            domain_logic:
+              - 'packages/domain-logic/**'
+              - 'scripts/check-domain-purity.mjs'
+              - '.github/workflows/ci.yml'
+            server_image:
+              - 'apps/server/**'
+              - 'packages/**'
+              - 'apps/server/Dockerfile'
+              - 'docker-compose*.yml'
+              - 'pnpm-lock.yaml'
+              - '.github/workflows/ci.yml'
+
+  # ──────────────────────────────────────────────────────────
   # Fast feedback: typecheck across the workspace.
   # Same command pre-push runs locally.
   # ──────────────────────────────────────────────────────────
@@ -117,6 +158,14 @@ jobs:
     name: Domain-logic purity
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    needs: changes
+    # Only run when packages/domain-logic/** (or the checker itself)
+    # actually changed. Pull requests that don't touch domain code can't
+    # introduce a purity violation, so the job has nothing to test.
+    # Required-check note: this job is conditional, so if you ever add it
+    # to branch-protection required checks, use the alwaysJob() / dummy
+    # success pattern — a SKIPPED check is treated as a pass by GitHub.
+    if: needs.changes.outputs.domain_logic == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v6
@@ -378,6 +427,12 @@ jobs:
     name: Server image build + smoke
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: changes
+    # Only build + smoke-test the Docker image when files that could
+    # change it actually changed (server code, any workspace package
+    # bundled into the image, Dockerfile, compose, lockfile, or this
+    # workflow). Mobile-only and docs-only PRs cannot affect the image.
+    if: needs.changes.outputs.server_image == 'true'
     steps:
       - uses: actions/checkout@v4
 
