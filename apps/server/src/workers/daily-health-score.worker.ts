@@ -13,7 +13,7 @@ export type { DailyHealthScoreJob } from "./daily-health-score.processor.js";
 // 06:00 IST = 00:30 UTC (IST = UTC+5:30). The number is the patient's
 // morning, not midnight, so they wake up to a fresh dashboard.
 const REPEAT_PATTERN = "30 0 * * *"; // 00:30 UTC daily
-const REPEAT_KEY = "health-score:daily";
+const REPEAT_KEY = "health-score-daily";
 
 const dailyHealthScoreQueue = createQueue<DailyHealthScoreJob>(QUEUE_NAMES.DAILY_HEALTH_SCORE);
 

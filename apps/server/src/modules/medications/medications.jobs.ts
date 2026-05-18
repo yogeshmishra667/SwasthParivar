@@ -7,7 +7,11 @@ const medQueue: Queue<MedReminderJob> = createQueue<MedReminderJob>(QUEUE_NAMES.
 
 const HHMM_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
 
-const repeatKey = (scheduleId: string, slot: string): string => `med:${scheduleId}:${slot}`;
+// BullMQ 5.x forbids ":" in custom jobIds (it's the Redis key delimiter).
+// Use "-" as the separator instead. The repeat key uses the same value
+// so removeRepeatableByKey() still finds it.
+const repeatKey = (scheduleId: string, slot: string): string =>
+  `med-${scheduleId}-${slot.replace(":", "-")}`;
 
 export const scheduleMedReminders = async (
   scheduleId: string,

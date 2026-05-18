@@ -20,7 +20,7 @@ interface TickJob {
 const triggerQueue = createQueue<TickJob>(QUEUE_NAMES.TRIGGER_NOTIFICATION);
 
 const REPEAT_PATTERN = "*/15 * * * *";
-const REPEAT_KEY = "notification:trigger:tick";
+const REPEAT_KEY = "notification-trigger-tick";
 
 export const bootstrapNotificationCron = async (): Promise<void> => {
   await triggerQueue.add(
