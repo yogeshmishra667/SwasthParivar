@@ -8,7 +8,15 @@
 # running container.
 
 # --- stage 1: workspace dependencies (pnpm + Prisma) ------------------
-FROM node:22.18.0-bookworm-slim AS deps
+#
+# Base image is pinned by SHA digest, not just tag — tags are mutable and
+# can be silently retargeted (supply-chain attack surface). The digest
+# below points at `node:22.18.0-bookworm-slim` as published on Docker Hub
+# at the time of last bump.
+#
+# To bump: pull the new tag locally, run `docker inspect --format='{{index .RepoDigests 0}}' node:22.18.0-bookworm-slim`,
+# then replace the @sha256:... portion. Update both stages (deps + runtime).
+FROM node:22.18.0-bookworm-slim@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e AS deps
 WORKDIR /repo
 
 ENV PNPM_HOME=/pnpm \
@@ -58,7 +66,7 @@ RUN pnpm --filter @swasth/shared-types run build \
  && pnpm --filter @swasth/server run build
 
 # --- stage 3: runtime (slim, non-root) -------------------------------
-FROM node:22.18.0-bookworm-slim AS runtime
+FROM node:22.18.0-bookworm-slim@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e AS runtime
 WORKDIR /app
 
 # CI / build script should pass `--build-arg GIT_SHA=$(git rev-parse HEAD)`.
