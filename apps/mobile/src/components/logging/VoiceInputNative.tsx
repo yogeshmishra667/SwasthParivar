@@ -208,6 +208,11 @@ const VoiceInputNative = ({ onParsed, onFail }: Props): JSX.Element => {
         <Icon name={recording ? "stop" : "mic"} size={48} color="#FFFFFF" />
       </Pressable>
       <Text className="text-important text-center px-4">{status}</Text>
+      {(statusKey === "tap" || statusKey === "listen") && (
+        <Text className="text-center px-4 text-gray-500" style={{ fontSize: 13 }}>
+          Boliye: &quot;sugar 120&quot; ya &quot;meri sugar ek sau bees hai&quot;
+        </Text>
+      )}
     </View>
   );
 };

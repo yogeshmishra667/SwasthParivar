@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
 import { useAuthStore } from "@/stores/auth.store";
-import { cancelPendingFirebaseAuth, confirmFirebaseOtp } from "@/services/firebase-auth";
+import { confirmFirebaseOtp } from "@/services/firebase-auth";
 import type { OtpProvider } from "@/services/auth-config";
 import { logError } from "@/services/analytics";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
@@ -86,13 +86,12 @@ export default function VerifyScreen(): JSX.Element {
     }
   };
 
-  // If the user backs out of verify (hardware back, header back), drop
-  // any pending Firebase confirmation so the next attempt starts clean.
-  useEffect(() => {
-    return () => {
-      if (otpProvider === "firebase") cancelPendingFirebaseAuth();
-    };
-  }, [otpProvider]);
+  // Note: we intentionally do NOT cancel pending Firebase confirmation
+  // on unmount. Effect cleanups can fire during dev-mode double-mounts
+  // (Strict Mode, fast refresh, route transitions) and would wipe the
+  // ConfirmationResult that login.tsx just set — making confirmation
+  // impossible. The next startFirebasePhoneAuth call overwrites the
+  // singleton anyway, so a stale value is harmless.
 
   // Auto-submit as soon as the user fills 6 digits (paste, autofill, or
   // the last keypress). The submittedRef guard prevents double-fires.

@@ -19,7 +19,7 @@ interface GraceResetJob {
 }
 
 const REPEAT_PATTERN = "30 21 * * 0"; // Sunday 21:30 UTC = Monday 03:00 IST
-const REPEAT_KEY = "streak:grace:weekly-reset";
+const REPEAT_KEY = "streak-grace-weekly-reset";
 
 const graceQueue = createQueue<GraceResetJob>(QUEUE_NAMES.GRACE_RESET);
 
