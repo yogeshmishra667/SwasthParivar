@@ -21,6 +21,7 @@
     "clean": "rm -rf dist coverage *.tsbuildinfo"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.96.0",
     "@prisma/adapter-pg": "^7.7.0",
     "@prisma/client": "^7.7.0",
     "@sentry/node": "^10.53.1",
