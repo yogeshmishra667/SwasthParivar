@@ -113,7 +113,13 @@ Home screen: profile avatars at top (like Netflix). Tap to switch. Each profile:
 
 **Anti-Fatigue:** Max 2 push/day (med reminders excluded). 3 ignores → 1/day. 5 → every-other-day. 7 → stop. Opens from push → reset fatigue to 0.
 
-**OTP Delivery:** WhatsApp Business API primary (~₹0.05/msg). 15s no delivery → SMS fallback (MSG91).
+**OTP Delivery:** Gated by `auth.otp.provider` flag (Redis-backed, default `"log"`). Three modes:
+
+- `"firebase"` — `@react-native-firebase/auth` on mobile sends SMS; server verifies ID token via `firebase-admin` at `POST /auth/verify-firebase`. Use this while WhatsApp/MSG91 are blocked on Meta business verification + DLT registration.
+- `"whatsapp"` — WhatsApp Business API primary (~₹0.05/msg). Send-side failure → MSG91 SMS fallback. Switch to this once `WHATSAPP_OTP_TEMPLATE_NAME` + `MSG91_OTP_TEMPLATE_ID` are populated and the WABA is verified.
+- `"log"` — OTP only appears in server logs; dev bypass `000000` works in `verifyOtp`. Safe default for fresh boots.
+
+Mobile reads `GET /auth/config` on the login screen to pick the flow. Flip the flag via `PUT /admin/flags/auth.otp.provider` or `redis-cli SET flag:auth.otp.provider '"firebase"'` (see `docs/HOWTO.md` "Switch OTP provider").
 
 **Action (<3 taps, ENFORCE):** Voice: 2 taps. Numpad: 3 taps. Any flow > 4 → redesign. NO typing. Voice or tap only. 48dp touch targets.
 

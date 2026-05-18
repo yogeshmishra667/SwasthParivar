@@ -33,10 +33,20 @@ const envSchema = z.object({
 
   WHATSAPP_BUSINESS_API_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+  WHATSAPP_OTP_TEMPLATE_NAME: z.string().optional(),
+  WHATSAPP_OTP_TEMPLATE_LANGUAGE: z.string().default("en"),
   MSG91_API_KEY: z.string().optional(),
   MSG91_SENDER_ID: z.string().optional(),
+  MSG91_OTP_TEMPLATE_ID: z.string().optional(),
 
   EXPO_ACCESS_TOKEN: z.string().optional(),
+
+  // Firebase Admin service account credentials as a JSON string (single
+  // env var — easier to inject via secret managers than 3+ separate
+  // fields). When unset, the OTP provider flag MUST stay on "log" or
+  // "whatsapp"; flipping to "firebase" without this will reject all
+  // verify-firebase requests at startup of the helper.
+  FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
 
   // Bearer secret guarding /admin routes (currently just the flag service
   // admin endpoints). Optional in dev/test; promoted to required for

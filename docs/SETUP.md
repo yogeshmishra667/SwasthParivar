@@ -257,6 +257,91 @@ PostHog → Alerts can fire to email or Slack when any of these breach.
 
 ---
 
+## Firebase Phone Auth setup walkthrough
+
+Use this when the OTP provider flag is flipped to `firebase` (the
+default for solo-dev launches — see `docs/HOWTO.md` "Switch OTP
+provider"). The same Firebase project doubles as our FCM source for
+production push notifications, so completing this section unblocks both.
+
+### Step 1 — Create the Firebase project
+
+1. https://console.firebase.google.com → **Add project** → name it
+   `swasth-parivar` (or anything; matters only for the console UI).
+2. Disable Google Analytics for Firebase (we already have PostHog).
+3. Inside the project: **Build → Authentication → Get started →
+   Sign-in method → Phone → Enable.**
+
+### Step 2 — Register the Android + iOS apps
+
+1. Project settings → **Your apps** → Android icon.
+   - Package name: `com.swasthparivar.app` (must match
+     `apps/mobile/app.json` `android.package`).
+   - Download `google-services.json` → drop it at
+     `apps/mobile/google-services.json` (gitignored).
+2. Project settings → **Your apps** → iOS icon.
+   - Bundle ID: `com.swasthparivar.app`.
+   - Download `GoogleService-Info.plist` → drop at
+     `apps/mobile/GoogleService-Info.plist` (gitignored).
+
+### Step 3 — Server: paste the service account JSON
+
+1. Project settings → **Service accounts → Generate new private key.**
+2. Open the downloaded JSON, minify it (`jq -c . key.json`), set:
+   ```
+   apps/server/.env
+   FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"...",...}
+   ```
+3. Restart the server. Boot is silent if the JSON is good; on first
+   `/auth/verify-firebase` call you'll see
+   `firebase-admin initialised { projectId: '...' }` in the logs.
+
+### Step 4 — Whitelist your own number for testing
+
+1. Authentication → **Settings → Phone numbers for testing**.
+2. Add `+919876543210` (your number) plus a fixed OTP like `123456`.
+3. With the testing entry present, Firebase does NOT send a real SMS —
+   it accepts the fixed OTP. No DLT or business verification involved.
+
+### Step 5 — Build the mobile dev client
+
+Once the config files are in place the JS bundle in Expo Go will not
+work (`@react-native-firebase/auth` requires native modules). Use a
+dev build:
+
+```bash
+cd apps/mobile
+npx expo prebuild --clean
+npx expo run:android      # or run:ios
+```
+
+### Step 6 — Flip the flag, log in
+
+```bash
+# Server-side (or via /admin/flags from HOWTO.md):
+redis-cli SET flag:auth.otp.provider '"firebase"'
+```
+
+On the phone: open the app → enter your whitelisted number → type the
+fixed test OTP → server verifies the Firebase ID token, mints our JWT
+pair, dashboard loads. The 30-second flag cache on the server means
+the new value takes effect within ~30s; restart for instant.
+
+### Step 7 — Upload FCM credentials to EAS (one-time)
+
+```bash
+cd apps/mobile
+eas credentials
+# → Android → Production → Push Notifications: FCM V1
+# → upload the service-account JSON from step 3
+```
+
+Now production builds deliver pushes via your FCM project, not Expo's
+shared pool. The push code itself doesn't change — `sendExpoPush` keeps
+working.
+
+---
+
 ## How to verify the setup is complete
 
 Run this from the deploy host (or your laptop with the prod env vars set):

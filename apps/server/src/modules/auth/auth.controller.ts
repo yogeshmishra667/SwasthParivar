@@ -2,6 +2,11 @@ import type { Request, Response } from "express";
 import { ok } from "../../shared/http.js";
 import * as service from "./auth.service.js";
 
+export const getConfig = async (_req: Request, res: Response): Promise<void> => {
+  const result = await service.getAuthConfig();
+  ok(res, result);
+};
+
 export const postSendOtp = async (req: Request, res: Response): Promise<void> => {
   const { phone } = req.body as { phone: string };
   const result = await service.sendOtp(phone);
@@ -11,6 +16,12 @@ export const postSendOtp = async (req: Request, res: Response): Promise<void> =>
 export const postVerifyOtp = async (req: Request, res: Response): Promise<void> => {
   const { phone, otp } = req.body as { phone: string; otp: string };
   const result = await service.verifyOtp(phone, otp);
+  ok(res, result);
+};
+
+export const postVerifyFirebase = async (req: Request, res: Response): Promise<void> => {
+  const { idToken } = req.body as { idToken: string };
+  const result = await service.verifyFirebaseToken(idToken);
   ok(res, result);
 };
 

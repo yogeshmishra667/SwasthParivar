@@ -17,6 +17,9 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
 import { useAuthStore } from "@/stores/auth.store";
+import { cancelPendingFirebaseAuth, confirmFirebaseOtp } from "@/services/firebase-auth";
+import type { OtpProvider } from "@/services/auth-config";
+import { logError } from "@/services/analytics";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 
 interface VerifyResponse {
@@ -32,7 +35,13 @@ interface VerifyResponse {
 export default function VerifyScreen(): JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
-  const { phone } = useLocalSearchParams<{ phone: string }>();
+  const { phone, provider } = useLocalSearchParams<{ phone: string; provider?: string }>();
+  // login.tsx passes the provider as a router param so we don't refetch
+  // it here. If it's missing (deep-link or stale nav), default to the
+  // legacy "log" path — that's the safest fallback because it routes
+  // through verify-otp which honours the 000000 dev bypass.
+  const otpProvider: OtpProvider =
+    provider === "firebase" || provider === "whatsapp" ? provider : "log";
   const setTokens = useAuthStore((s) => s.setTokens);
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
@@ -48,20 +57,42 @@ export default function VerifyScreen(): JSX.Element {
     setLoading(true);
     Keyboard.dismiss();
     try {
-      const res = await api.post<VerifyResponse, { phone: string; otp: string }>(
-        "/auth/verify-otp",
-        { phone: `+91${phone ?? ""}`, otp: otpToSend },
-      );
-      await setTokens(res.data.accessToken, res.data.refreshToken, res.data.userId);
+      let envelope: VerifyResponse;
+
+      if (otpProvider === "firebase") {
+        // Mobile-side OTP confirmation via @react-native-firebase/auth.
+        // The resulting ID token is what the server actually trusts —
+        // it carries the verified phone_number claim Firebase signed.
+        const idToken = await confirmFirebaseOtp(otpToSend);
+        envelope = await api.post<VerifyResponse, { idToken: string }>("/auth/verify-firebase", {
+          idToken,
+        });
+      } else {
+        envelope = await api.post<VerifyResponse, { phone: string; otp: string }>(
+          "/auth/verify-otp",
+          { phone: `+91${phone ?? ""}`, otp: otpToSend },
+        );
+      }
+
+      await setTokens(envelope.data.accessToken, envelope.data.refreshToken, envelope.data.userId);
       // Let index.tsx resolve the correct destination based on onboardingComplete + step
       router.replace("/");
-    } catch {
+    } catch (err) {
       submittedRef.current = false;
+      logError("verify.submit", err);
       Alert.alert("OTP galat hai");
     } finally {
       setLoading(false);
     }
   };
+
+  // If the user backs out of verify (hardware back, header back), drop
+  // any pending Firebase confirmation so the next attempt starts clean.
+  useEffect(() => {
+    return () => {
+      if (otpProvider === "firebase") cancelPendingFirebaseAuth();
+    };
+  }, [otpProvider]);
 
   // Auto-submit as soon as the user fills 6 digits (paste, autofill, or
   // the last keypress). The submittedRef guard prevents double-fires.
