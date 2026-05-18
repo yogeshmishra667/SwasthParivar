@@ -1,0 +1,39 @@
+Proprietary License — All Rights Reserved
+
+Copyright (c) 2026 Yogesh Mishra
+
+This source code is made publicly visible for transparency, security
+review, and educational reference. It is NOT open-source software.
+
+The following actions are NOT permitted without prior written permission
+from the copyright holder:
+
+  1. Using this code, in whole or in part, in any product, service,
+     or derivative work — commercial or non-commercial.
+  2. Distributing, sublicensing, sublimating, mirroring, or republishing
+     this code or any modification of it.
+  3. Removing or altering this notice or any other copyright,
+     attribution, or trademark notices contained within the source.
+  4. Training, fine-tuning, or otherwise incorporating this code or its
+     embeddings into machine-learning models intended for code
+     generation, completion, or rewriting.
+
+The following actions are permitted:
+
+  1. Reading the source code.
+  2. Cloning the repository for the purpose of local inspection and
+     security review.
+  3. Filing issues or pull requests via the public GitHub repository;
+     any contributions submitted are licensed back to the copyright
+     holder under the same terms as this notice, with the contributor
+     retaining no separate rights.
+
+To request a use license — including for commercial integration,
+research, or redistribution — contact: yogeshmishra667@gmail.com.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES,
+OR OTHER LIABILITY ARISING FROM, OUT OF, OR IN CONNECTION WITH THE
+SOFTWARE OR ITS USE.
