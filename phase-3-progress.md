@@ -6,6 +6,108 @@
 
 ---
 
+## 2026-05-19 — Week 9 chat module: service + routes + jobs + integration tests
+
+**PRs merged to main:**
+- [#59](https://github.com/yogeshmishra667/SwasthParivar/pull/59) — foundation (schema, domain logic, idempotency helper, Claude wrapper) → squashed onto main as `d319c50`. 18/18 CI checks pass.
+- [#63](https://github.com/yogeshmishra667/SwasthParivar/pull/63) — chat module (service, routes, BullMQ queue, integration tests) → squashed onto main as `3bdf739`. 18/18 CI checks pass.
+
+**Aborted / superseded along the way:**
+- #61 — stacked on the foundation branch; merging it folded chunk 3c into the foundation branch (`2c54c1b`) instead of main because GitHub didn't auto-retarget the base.
+- #62 — first attempt to recover chunk 3c onto main from the foundation branch directly; landed in CONFLICTING state because the unsquashed history duplicated content already on main via #59's squash. Closed without merge.
+
+**Resolution that worked:** new branch `phase3/chat/module-to-main` cherry-picks the 4 chunk-3c commits onto a fresh head off main → clean diff → CI green → squash-merge as #63.
+
+**Lesson for the Phase 3 retro (CC.7 follow-up):** when stacking PR B on PR A's branch, immediately after A merges via squash, **either rebase B onto main** or **retarget B's base to main in the GitHub UI** before clicking merge. Otherwise B's merge happens against the obsolete unsquashed history and you end up cherry-picking or rebasing later.
+
+**Gates:** all 11 preflight gates green pre-push on every commit. GitHub Actions CI green on both merged PRs (18 checks each: typecheck, lint, format, prisma format, schema↔migration parity, squawk SQL, domain-logic purity, vitest unit + integration, CodeQL, Trivy, eslint-plugin-security, GitGuardian, Danger, dependency audit, dependency review, image build + smoke, secret scan).
+
+### Commit history on the merged branch (`phase3/chat/module-to-main`, cherry-picked)
+
+```
+c6e2aa9 test(chat): integration tests for the /api/v1/chat surface
+3d8ea5a feat(chat): add CHAT_SAFETY_REVIEW BullMQ queue + worker
+3567231 feat(chat): mount /api/v1/chat routes + HTTP error mapping
+a05f4a3 feat(chat): chat service + types + validation + intent classifier
+```
+
+Each commit on this branch is a cherry-pick of the equivalent on the original `phase3/chat/module-and-integration` branch (`14eba02`, `bd7615a`, `4310abd`, `94153ab` respectively). Content is identical — only the parent SHAs and author dates differ.
+
+### Commit 1 — `feat(chat): chat service + types + validation + intent classifier` (`a05f4a3`)
+
+Implements **A.4** core orchestration + **A.7** test factories.
+
+- `apps/server/src/modules/chat/chat.service.ts` — the 12-step orchestrator. Idempotency (via `checkIdempotent`) → flag gate (`ai_chat_enabled`) → Redis daily rate counter (free tier, `CHAT_DAILY_FREE_LIMIT=3`) → emergency check (critical_warn feedback within 30 min) → cold-start router → cost-tier router → patient context builder (SHA-256-truncated anonymizedId, coarsened age band, filtered conditions, recent readings; raw User row cannot escape past the type system) → Claude wrapper (`ai_chat_tier3_enabled` gates Sonnet so spend-cap auto-flip degrades to cached without breaking the surface) → Post-Response Safety Filter (replace + flag) → persist via `createMany`. User-turn `clientUuid` is derived via SHA-256(`user:${clientUuid}`) reshaped as a v4 UUID so the unique index never collides with the assistant row.
+- `apps/server/src/modules/chat/chat.types.ts` + `chat.validation.ts` — `SendMessageInput`/`Result` shared with mobile; Zod schemas for `POST /message`, `POST /messages/:id/flag`, `GET /sessions` (max 2000 chars per turn bounds Claude prompts).
+- `packages/domain-logic/src/chat-intent-classifier/` — pure keyword classifier across English / Hinglish / Devanagari. `medication_question` priority pre-empts everything else to keep dose questions off Tier 3. Default `open_ended` for unclassified input. **21 tests, locked at 100%** in `vitest.config.ts`.
+- `packages/test-factories/src/chat-{session,message}.factory.ts` — `makeChatSession`, `makeChatMessage`, `makeFlaggedChatMessage` per **A.7**.
+
+### Commit 2 — `feat(chat): mount /api/v1/chat routes + HTTP error mapping` (`3567231`)
+
+Implements **A.3** + **CC.8** error-handler.
+
+- `apps/server/src/modules/chat/chat.controller.ts` — four thin handlers (`postMessage`, `getSessions`, `getSessionMessages`, `postFlagMessage`). UUID path param narrowing; `req.id` narrowed without `Object.toString` risk.
+- `apps/server/src/modules/chat/chat.routes.ts` — `Router` under `/api/v1/chat` with `requireAuth` + `validateBody`/`validateQuery`. `ai_chat_enabled` checked inside the service (not at the route) so `/sessions` reads survive when the send endpoint is killed.
+- `apps/server/src/app.ts` — mount `chatRouter` at `/api/v1/chat`.
+- `apps/server/src/shared/middleware/error-handler.ts` — map new chat error codes to HTTP: `CHAT_DISABLED` / `CIRCUIT_OPEN` / `SPEND_CAP_REACHED` → 503, `CHAT_UPSTREAM_TIMEOUT` → 504, `CHAT_SAFETY_REJECTED` → 400.
+
+### Commit 3 — `feat(chat): add CHAT_SAFETY_REVIEW BullMQ queue + worker` (`3d8ea5a`)
+
+Implements **A.5**.
+
+- `apps/server/src/shared/queue.ts` — register `QUEUE_NAMES.CHAT_SAFETY_REVIEW`. Inherits the default retry policy (3 attempts, exp 5s, 1h success / 24h failure retention).
+- `apps/server/src/workers/chat-safety-review.{processor,worker}.ts` — split per the critical-bypass pattern (**CC.8** audit-reuse table). The processor is idempotent: re-running on the same `messageId` is a no-op. The ChatMessage row is already persisted with `flagged=true` in the request path — the worker exists to keep PostHog + Sentry I/O off the patient response.
+- `apps/server/src/modules/chat/chat.jobs.ts` — `enqueueChatSafetyReview` helper. Deterministic `jobId` (`safety-review-${messageId}`) so an in-flight retry doesn't create duplicate audit rows. Failures are logged + swallowed.
+- `apps/server/src/shared/analytics/posthog.ts` — new event `ai_chat_safety_filter_rejected`.
+- `apps/server/src/workers/index.ts` — register `chatSafetyReviewWorker` in the boot registry.
+
+### Commit 4 — `test(chat): integration tests for the /api/v1/chat surface` (`c6e2aa9`)
+
+Implements **A.8**.
+
+- 10 Testcontainers-backed cases covering: flag gate (503 CHAT_DISABLED), idempotent replay, stale version (409 READING_STALE_VERSION), rate limit (429 CHAT_RATE_LIMITED), emergency skip, Tier 1 medication redirect, **safety filter rejection round-trip** (mocked Claude emits dosage directive → row persisted with `flagged=true` + `safetyViolations[]`), happy path Tier 3, user flag endpoint, session listing.
+- `@anthropic-ai/sdk` mocked at module level — wrapper never reaches the real API.
+- `beforeEach` ordering lesson: flushdb → `__resetFlagCache` → `setFlag`. Wrong order wipes the per-test flag (caught while iterating — 9/10 tests went red until the order was fixed).
+- 10/10 pass in ~7.4s on Postgres + Redis Testcontainers.
+
+### Phase 3 CC.7 traceability — applied
+
+- ✅ **CC.7 #5** branch naming: `phase3/chat/module-and-integration`.
+- ✅ **CC.7 #3** scoped Conventional Commits: every commit uses `feat(chat)` or `test(chat)`.
+- ✅ **CC.7 #1** folder isolation: all server code under `apps/server/src/modules/chat/` + dedicated workers + `chat.jobs.ts`. Cross-module touches limited to the **documented exceptions** called out in the PR description: `app.ts` (route mount), `shared/queue.ts` (queue name), `shared/middleware/error-handler.ts` (status mapping), `shared/analytics/posthog.ts` (event types), `workers/index.ts` (worker registry).
+- ✅ **CC.7 #11** in-code marker header on `apps/server/src/modules/chat/chat.routes.ts`, `chat.service.ts`, `chat-safety-review.processor.ts`, `chat.types.ts`.
+- ⏳ **CC.7 #4** PR labels + **#6** CODEOWNERS + **#7** git tag + **#9** issue template + **#10** PR template — deferred until team-name placeholders (`@phase3-chat-team` etc.) are filled. `phase3-chat-v1` tag will be applied after the safety-reviewer agent review lands.
+
+### What's NOT in this branch (Phase 3 Feature A follow-ups)
+
+- Mobile work — Section **M.1** in full (ChatScreen, MessageBubble, AIDisclaimerBanner, EmergencyChatGuard, OfflineChatBanner, ChatFlagDialog, ChatFlagDialog). Server-first sequencing per phase3.md preamble.
+- `CHAT_RETENTION_SWEEP` cron — Feature A.10 (90-day archive + 1-year hard delete) deferred to a chat retention follow-up PR.
+- `.github/labeler.yml`, `.github/CODEOWNERS`, `.github/ISSUE_TEMPLATE/phase3-bug.md`, PR template extensions, dangerfile.ts — separate `chore(phase3)` PR once team names are fixed.
+
+### Coverage after this session
+
+| Metric | Domain-logic aggregate |
+|---|---|
+| Statements | 96.10% → unchanged (chat-intent-classifier 100%) |
+| Branches | 91.48% → unchanged |
+| Functions | 96.89% → 96.94% (4 new functions all covered) |
+| Lines | 97.49% → 97.51% |
+
+All five chat-* modules at **100%** on every metric.
+
+### Endpoint surface live on `main`
+
+```
+POST /api/v1/chat/message                       (send a turn — flag-gated)
+GET  /api/v1/chat/sessions                      (list patient's recent sessions)
+GET  /api/v1/chat/sessions/:sessionId/messages  (full thread)
+POST /api/v1/chat/messages/:messageId/flag      (🚩 button)
+```
+
+The endpoints are deployed but `ai_chat_enabled` remains **false** by default. Internal-cohort rollout per phase3.md M.7 row 1 (week 9): set `ai_chat_enabled=true` for 10 users, ramp doubling every 48h.
+
+---
+
 ## 2026-05-19 — Week 9 server foundation: schema + domain logic + Claude wrapper
 
 **Branch:** `phase3/chat/safety-and-routing-foundation` (off `main`, 4 commits, not yet merged — PR pending).
