@@ -14,6 +14,10 @@ export const QUEUE_NAMES = {
   RE_ENGAGEMENT: "re-engagement",
   GRACE_RESET: "grace-reset",
   DAILY_HEALTH_SCORE: "daily-health-score",
+  // Phase 3 — fired when filterChatResponse flags an assistant
+  // message. The processor persists into the human-audit queue and
+  // emits PostHog; nothing in the patient request path waits on it.
+  CHAT_SAFETY_REVIEW: "chat-safety-review",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

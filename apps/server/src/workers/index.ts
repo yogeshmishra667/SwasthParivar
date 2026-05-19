@@ -10,6 +10,7 @@ import {
   dailyHealthScoreWorker,
   bootstrapDailyHealthScoreCron,
 } from "./daily-health-score.worker.js";
+import { chatSafetyReviewWorker } from "./chat-safety-review.worker.js";
 import { logger } from "../shared/logger.js";
 
 const workers = [
@@ -20,6 +21,7 @@ const workers = [
   notificationTriggerWorker,
   graceResetWorker,
   dailyHealthScoreWorker,
+  chatSafetyReviewWorker,
 ];
 
 export const workerNames = [
@@ -30,6 +32,7 @@ export const workerNames = [
   "notification-trigger",
   "grace-reset",
   "daily-health-score",
+  "chat-safety-review",
 ];
 
 export const startWorkers = (): void => {
