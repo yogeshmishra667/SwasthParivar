@@ -59,6 +59,7 @@ import {
   type ClaudeResponse,
   type PatientContext,
 } from "../../shared/ai/claude.js";
+import { enqueueChatSafetyReview } from "./chat.jobs.js";
 import type { SendMessageInput, SendMessageResult } from "./chat.types.js";
 
 // ─────────────────────────────────────────────────────────────────────
@@ -271,7 +272,7 @@ export const sendMessage = async (input: SendMessageInput): Promise<SendMessageR
     );
   }
 
-  return await persistAndReturn(
+  const persisted = await persistAndReturn(
     input,
     user.id,
     language,
@@ -288,6 +289,18 @@ export const sendMessage = async (input: SendMessageInput): Promise<SendMessageR
     },
     sessionId,
   );
+
+  // Audit-trail async enqueue. Failure inside the helper is logged
+  // and swallowed — patient response is already returned.
+  if (!filtered.safe) {
+    await enqueueChatSafetyReview({
+      messageId: persisted.messageId,
+      userId: user.id,
+      requestId: input.requestId,
+    });
+  }
+
+  return persisted;
 };
 
 // ─────────────────────────────────────────────────────────────────────
