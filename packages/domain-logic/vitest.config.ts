@@ -65,6 +65,10 @@ export default defineConfig({
         // Phase 3 — cold-start day-bucket router. Day boundary bugs
         // here mean wrong stage messaging to early users.
         "src/chat-cold-start/**": { 100: true },
+        // Phase 3 — intent classifier. Keyword routing into the cost
+        // router. Bugs here send `medication_question` to Tier 3 (the
+        // exact safety failure phase3.md A.4 step 6 guards against).
+        "src/chat-intent-classifier/**": { 100: true },
 
         // Ratchet floors at CURRENT measured values (2026-05-14 baseline).
         // Raise these as tests close the gap to CLAUDE.md targets.
