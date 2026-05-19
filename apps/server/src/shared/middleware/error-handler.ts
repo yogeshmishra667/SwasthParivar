@@ -32,6 +32,19 @@ const statusFor = (code: ErrorCode): number => {
     case "CHAT_RATE_LIMITED":
     case "RATE_LIMITED":
       return 429;
+    // Phase 3 chat. Kill-switch / circuit-breaker / spend-cap all
+    // map to 503 (transient operator signal — retry later). Upstream
+    // timeout is 504 (gateway timeout). Safety-rejected stays 400
+    // because the caller's prompt is the proximate cause and a
+    // reworded retry is the right fix.
+    case "CHAT_DISABLED":
+    case "CHAT_CIRCUIT_OPEN":
+    case "CHAT_SPEND_CAP_REACHED":
+      return 503;
+    case "CHAT_UPSTREAM_TIMEOUT":
+      return 504;
+    case "CHAT_SAFETY_REJECTED":
+      return 400;
     case "REPORT_GENERATING":
       return 202;
     case "INSUFFICIENT_DATA":

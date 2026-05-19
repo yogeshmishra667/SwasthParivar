@@ -77,6 +77,15 @@ export interface EventPropsMap {
     spend_usd: number;
     cap_usd: number;
   };
+  // Fired by the CHAT_SAFETY_REVIEW worker after persisting the
+  // human-audit row. Drives the safety-review dashboard +
+  // weekly-flag-rate alarm.
+  ai_chat_safety_filter_rejected: {
+    message_id: string;
+    violations: string[];
+    cost_tier: string;
+    flag_reason: string;
+  };
 }
 
 export type EventName = keyof EventPropsMap;
