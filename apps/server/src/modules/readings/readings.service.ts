@@ -10,6 +10,7 @@ import { prisma } from "../../shared/database.js";
 import { logger } from "../../shared/logger.js";
 import { createQueue, QUEUE_NAMES } from "../../shared/queue.js";
 import { capture as captureAnalyticsEvent } from "../../shared/analytics/posthog.js";
+import { checkIdempotent } from "../../shared/idempotency.js";
 
 const criticalQueue = createQueue<{
   readingId: string;
@@ -119,20 +120,17 @@ export const createGlucoseReading = async (
   const clockDeltaMs = Math.abs(serverNow.getTime() - measuredAtDate.getTime());
   const isAnomalousClock = clockDeltaMs > SERVER_TIME_FALLBACK_THRESHOLD_HOURS * MS_PER_HOUR;
 
-  const existing = await prisma.glucoseReading.findFirst({
-    where: { clientUuid: input.clientUuid },
-  });
-
-  if (existing) {
-    if (input.version < existing.version) {
-      throw new DomainError("READING_STALE_VERSION", "incoming version not newer than stored");
-    }
-    if (input.version === existing.version) {
-      // Idempotent replay — same {clientUuid, version} we already stored.
-      // Return the prior result without re-running side effects.
-      return await buildReplayResult(existing, input.userId);
-    }
+  const idem = await checkIdempotent(prisma.glucoseReading, input.clientUuid, input.version);
+  if (idem.kind === "stale") {
+    throw new DomainError("READING_STALE_VERSION", "incoming version not newer than stored");
   }
+  if (idem.kind === "replay") {
+    // Idempotent replay — same {clientUuid, version} we already stored.
+    // Return the prior result without re-running side effects.
+    return await buildReplayResult(idem.existing, input.userId);
+  }
+  // `update` carries the existing row; `insert` leaves it null.
+  const existing = idem.kind === "update" ? idem.existing : null;
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId } });
 

@@ -56,6 +56,27 @@ export interface EventPropsMap {
     suppressed: boolean;
     suppress_reason: string | null;
   };
+  // Phase 3 chat — emitted by the Claude wrapper after every upstream
+  // call. `tier` distinguishes haiku-cached from sonnet-cold; cost
+  // dashboards pivot on it.
+  ai_chat_response_generated: {
+    tier: "cached" | "sonnet";
+    model: string;
+    tokens_input: number;
+    tokens_output: number;
+    cache_read_input_tokens: number;
+    cache_creation_input_tokens: number;
+    response_latency_ms: number;
+    estimated_cost_usd: number;
+  };
+  ai_chat_circuit_opened: {
+    failures_in_window: number;
+    window_seconds: number;
+  };
+  ai_chat_spend_cap_reached: {
+    spend_usd: number;
+    cap_usd: number;
+  };
 }
 
 export type EventName = keyof EventPropsMap;

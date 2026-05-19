@@ -50,6 +50,21 @@ export default defineConfig({
 
         // Safety-critical: locked at CLAUDE.md target. Never lower.
         "src/critical-bypass/**": { 100: true },
+        // Phase 3 — AI Chat Post-Response Safety Filter. Per phase3.md
+        // A.9, locked at 100% branches like critical-bypass: a
+        // regression here lets unsafe content reach a patient.
+        "src/chat-safety-filter/**": { 100: true },
+        // Phase 3 — chat cost router. Pure decision function; tests
+        // pin every branch of the priority chain. Locked at 100% per
+        // phase3.md A.9.
+        "src/chat-cost-router/**": { 100: true },
+        // Phase 3 — Tier 1 template lookup table. 100% reachable; a
+        // regression here usually means a new (intent, condition,
+        // language) combo was added without copy.
+        "src/chat-template-responses/**": { 100: true },
+        // Phase 3 — cold-start day-bucket router. Day boundary bugs
+        // here mean wrong stage messaging to early users.
+        "src/chat-cold-start/**": { 100: true },
 
         // Ratchet floors at CURRENT measured values (2026-05-14 baseline).
         // Raise these as tests close the gap to CLAUDE.md targets.

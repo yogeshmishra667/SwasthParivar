@@ -25,6 +25,24 @@ const envSchema = z.object({
   OTP_SECRET: z.string().min(32),
 
   CLAUDE_API_KEY: z.string().optional(),
+  // Phase 3 chat — model IDs are env-driven so a model retirement
+  // doesn't require a redeploy. Defaults match phase3.md A.6 / the
+  // model catalogue current at 2026-05-19. Reverify against
+  // https://platform.claude.com/docs/en/about-claude/models/overview
+  // before bumping in production.
+  CLAUDE_MODEL_HAIKU: z.string().default("claude-haiku-4-5"),
+  CLAUDE_MODEL_SONNET: z.string().default("claude-sonnet-4-6"),
+  // Per-user daily chat cap (free tier). Premium ignores this in the
+  // service layer. Hard ceiling enforced at the controller.
+  CHAT_DAILY_FREE_LIMIT: z.coerce.number().int().positive().default(3),
+  // Hard per-request timeout on the Claude wrapper. Anything longer is
+  // a runaway and gets aborted; the chat service falls back to Tier 1
+  // template. Tuned against p95 sonnet latency + headroom.
+  CHAT_HARD_TIMEOUT_MS: z.coerce.number().int().positive().default(12_000),
+  // Org-wide spend cap per UTC day. When estimated cumulative spend
+  // exceeds this, the wrapper auto-flips ai_chat_tier3_enabled=false
+  // (Tier 1/2 still flow) and pages on-call via Sentry. CC.11 §6.
+  CLAUDE_DAILY_SPEND_CAP_USD: z.coerce.number().positive().default(50),
 
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY: z.string().optional(),

@@ -126,6 +126,21 @@ enum FamilyAlertSensitivity {
   high
 }
 
+enum ChatRole {
+  user
+  assistant
+  system
+}
+
+// Cost tier the chat router actually used to produce the assistant
+// response. Tracked per message so cost dashboards and per-tier hit
+// rates can be derived without recomputing routing on read.
+enum ChatCostTier {
+  template
+  cached
+  sonnet
+}
+
 // ─────────────────────────────────────────────────────────────
 // Users & Household (Phase 1)
 // ─────────────────────────────────────────────────────────────
@@ -173,6 +188,8 @@ model User {
   // arrive in Phase 3.
   patientFamilyLinks  FamilyLink[]         @relation("PatientLinks")
   guardianFamilyLinks FamilyLink[]         @relation("GuardianLinks")
+  chatSessions        ChatSession[]
+  chatMessages        ChatMessage[]
 
   @@index([householdId])
   @@map("users")
@@ -515,4 +532,67 @@ model NotificationState {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_states")
+}
+
+// ─────────────────────────────────────────────────────────────
+// AI Chat (Phase 3 — Feature A)
+//
+// Patient-facing Claude chat. Idempotent on `clientUuid` from mobile so
+// retries during a network blip never produce duplicate rows.
+// Retention: archived after 90 days, hard-deleted after 1 year via the
+// CHAT_RETENTION_SWEEP cron (DPDP compliance, CC.11 §5 in phase3.md).
+// ─────────────────────────────────────────────────────────────
+
+model ChatSession {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  startedAt  DateTime  @default(now()) @map("started_at")
+  endedAt    DateTime? @map("ended_at")
+  language   Language
+  archivedAt DateTime? @map("archived_at")
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([userId, startedAt(sort: Desc)])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id                 String       @id @default(uuid()) @db.Uuid
+  // Mobile-generated idempotency key. Unique so a retry with the same
+  // clientUuid replays the persisted response instead of calling Claude
+  // again. Distinct from server `id` so the server controls ordering.
+  clientUuid         String       @unique @map("client_uuid") @db.Uuid
+  version            Int          @default(1)
+  sessionId          String       @map("session_id") @db.Uuid
+  userId             String       @map("user_id") @db.Uuid
+  role               ChatRole
+  content            String       @db.Text
+  language           Language
+  // Snapshot of which patient readings the assistant cited, so the
+  // mobile bubble can link back to them without a join at render time.
+  referencedReadings Json?        @map("referenced_readings")
+  tokensInput        Int          @default(0) @map("tokens_input")
+  tokensOutput       Int          @default(0) @map("tokens_output")
+  costTier           ChatCostTier @map("cost_tier")
+  responseLatencyMs  Int?         @map("response_latency_ms")
+  flagged            Boolean      @default(false)
+  // safety_filter_rejected | user_flagged | other — kept as free-form
+  // text so we can introduce new audit categories without a migration.
+  flagReason         String?      @map("flag_reason")
+  safetyViolations   Json?        @map("safety_violations")
+  createdAt          DateTime     @default(now()) @map("created_at")
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([sessionId, createdAt])
+  // Surfacing safety-flagged messages for the human audit queue. Partial
+  // index would be ideal but Prisma doesn't model them; covered by
+  // index on (flagged, createdAt) since the safety queue filter starts
+  // with flagged=true.
+  @@index([flagged, createdAt])
+  @@map("chat_messages")
 }
