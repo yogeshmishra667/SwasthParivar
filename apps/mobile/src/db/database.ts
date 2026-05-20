@@ -2,10 +2,13 @@ import type { Database } from "@nozbe/watermelondb";
 import type * as WatermelonModule from "@nozbe/watermelondb";
 import type SQLiteAdapterCtor from "@nozbe/watermelondb/adapters/sqlite";
 import type * as SchemaModule from "./schema";
+import type * as MigrationsModule from "./migrations";
 import type * as GlucoseReadingModule from "./models/GlucoseReading";
 import type * as MedicationScheduleModule from "./models/MedicationSchedule";
 import type * as MedicationLogModule from "./models/MedicationLog";
 import type * as UserStreakModule from "./models/UserStreak";
+import type * as ChatMessageModule from "./models/ChatMessage";
+import type * as ChatPendingSendModule from "./models/ChatPendingSend";
 import { logError } from "@/services/analytics";
 
 /**
@@ -46,16 +49,23 @@ export const getDatabase = (): Database | null => {
       }
     ).default;
     const { dbSchema } = require("./schema") as typeof SchemaModule;
+    const { dbMigrations } = require("./migrations") as typeof MigrationsModule;
     const { GlucoseReadingModel } =
       require("./models/GlucoseReading") as typeof GlucoseReadingModule;
     const { MedicationScheduleModel } =
       require("./models/MedicationSchedule") as typeof MedicationScheduleModule;
     const { MedicationLogModel } = require("./models/MedicationLog") as typeof MedicationLogModule;
     const { UserStreakModel } = require("./models/UserStreak") as typeof UserStreakModule;
+    const { ChatMessageModel } = require("./models/ChatMessage") as typeof ChatMessageModule;
+    const { ChatPendingSendModel } =
+      require("./models/ChatPendingSend") as typeof ChatPendingSendModule;
     /* eslint-enable @typescript-eslint/no-require-imports */
 
     const adapter = new SQLiteAdapter({
       schema: dbSchema,
+      // Migrations MUST be passed — without them a schema version bump
+      // resets the database (data loss). See ./migrations.ts.
+      migrations: dbMigrations,
       jsi: true,
       dbName: "swasthparivar",
       onSetUpError: (err: unknown) => logError("watermelondb.setup", err),
@@ -68,6 +78,8 @@ export const getDatabase = (): Database | null => {
         MedicationScheduleModel,
         MedicationLogModel,
         UserStreakModel,
+        ChatMessageModel,
+        ChatPendingSendModel,
       ],
     });
     return cached;

@@ -6,6 +6,22 @@
 
 ---
 
+## 2026-05-20 — Feature A: chat WatermelonDB offline layer (Section M.1)
+
+**Branch:** `phase3/chat/offline-db` (off `main` at `c124260`, PR pending). Second Feature A tail item.
+
+**What landed.** The M.1 WatermelonDB offline layer — a local message cache + an offline send queue.
+
+- **Schema v1→v2** (`db/schema.ts`, `db/migrations.ts`) — adds `chat_messages` (read-only message cache) + `chat_pending_sends` (offline send queue). The `schemaMigrations` is two `createTable` steps, purely additive — **reviewed by the `db-reviewer` agent, confirmed data-loss-safe**: the existing `glucose_readings` / `medication_*` / `user_streaks` tables are untouched. `migrations` is wired into the SQLite adapter — without it a schema version bump resets the local DB.
+- `db/models/ChatMessage.ts`, `ChatPendingSend.ts` — model classes.
+- `services/chat-offline.ts` — `loadCachedMessages`, `cacheSessionMessages`, `enqueuePendingSend`, `drainPendingChatSends`. Every function no-ops when the local DB is unavailable (Expo Go on Android).
+- `app/chat/[sessionId].tsx` wired — the thread loads the cache first (instant, offline-capable), then refreshes from the server and re-caches; a send that fails transiently (network dropped mid-request) is queued via `enqueuePendingSend`; the queue drains on mount and on reconnect. The drain replays with the original `clientUuid`, so it is idempotent against the failed attempt.
+
+**db-reviewer findings applied:** documented in the model files that `chat_messages` deliberately has no WatermelonDB `created_at` (callers must order by `server_created_at`), and that a queued send may carry no `session_id` (the server mints one on `POST /chat/message`).
+
+**Gates:** mobile typecheck, lint (`max-warnings=0`), prettier — all clean.
+
+**Feature A tail remaining:** RNTL test harness + the 13 M.1 cases.
 ## 2026-05-20 — Feature A: Tier 2 exact-match response cache
 
 **Branch:** `phase3/chat/tier2-cache` (off `main` at `c124260`, PR pending). First of the Feature A tail items, after the three Phase 3 PRs (#66/#67/#68) merged.
