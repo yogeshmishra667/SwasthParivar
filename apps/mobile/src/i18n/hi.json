@@ -255,6 +255,7 @@
     "revokeConfirm": "Access hatayein? Yeh wapas restore kar sakte hain.",
     "noPatients": "Koi patient connect nahi hai.",
     "noGuardians": "Koi guardian connect nahi hai.",
+    "noInvites": "Koi pending invite nahi hai.",
     "viewDashboard": "Dashboard dekhein",
     "pendingFromYou": "Aapne invite kiya — wait kar rahe hain",
     "pendingToYou": "{{name}} ne aapko invite kiya hai",

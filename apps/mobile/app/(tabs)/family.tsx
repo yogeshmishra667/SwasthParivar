@@ -1,11 +1,15 @@
-// Phase 2 — Family tab. Two sections on one screen:
+// Phase 2 — Family tab. Three sections on one screen:
 //   1. As a *patient*: invite a guardian by phone.
-//   2. As a *guardian*: list of accepted patients with a tap-through
+//   2. As a *guardian*: pending invites addressed to me — accept/decline.
+//   3. As a *guardian*: list of accepted patients with a tap-through
 //      to their read-only dashboard view.
 //
 // We don't try to detect role at boot — both surfaces always render
 // because shared-phone households commonly have one device acting in
 // both roles (Papa logs his sugar AND monitors Maa's BP).
+//
+// The pending-invites section is the in-app discovery path: a guardian
+// finds invites here without depending on push notification delivery.
 
 import { useCallback, useEffect, useState } from "react";
 import { View, Text, ScrollView, RefreshControl, Pressable, Alert } from "react-native";
@@ -17,19 +21,31 @@ import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { InviteGuardianForm } from "@/components/family/InviteGuardianForm";
-import { listPatientsForGuardian, revokeLink, type PatientLinkSummary } from "@/services/family";
+import {
+  listPatientsForGuardian,
+  listPendingInvites,
+  respondToInvite,
+  revokeLink,
+  type PatientLinkSummary,
+  type PendingInviteSummary,
+} from "@/services/family";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 
 export default function FamilyScreen(): JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
   const [patients, setPatients] = useState<readonly PatientLinkSummary[]>([]);
+  const [invites, setInvites] = useState<readonly PendingInviteSummary[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
-    const list = await listPatientsForGuardian("accepted");
+    const [list, pending] = await Promise.all([
+      listPatientsForGuardian("accepted"),
+      listPendingInvites(),
+    ]);
     setPatients(list);
+    setInvites(pending);
     setLoaded(true);
   }, []);
 
@@ -41,6 +57,17 @@ export default function FamilyScreen(): JSX.Element {
     setRefreshing(true);
     await load();
     setRefreshing(false);
+  };
+
+  const handleRespond = (invite: PendingInviteSummary, decision: "accept" | "decline"): void => {
+    void (async () => {
+      const updated = await respondToInvite(invite.linkId, decision);
+      if (!updated) return;
+      // Drop the invite from the pending list; an accepted invite then
+      // appears under "My patients" on the next refresh.
+      setInvites((prev) => prev.filter((i) => i.linkId !== invite.linkId));
+      if (decision === "accept") await load();
+    })();
   };
 
   const handleRevoke = (link: PatientLinkSummary): void => {
@@ -79,6 +106,27 @@ export default function FamilyScreen(): JSX.Element {
         {/* Patient → Guardian: invite form. */}
         <InviteGuardianForm onSent={() => void load()} />
 
+        {/* Guardian: invites addressed to me — accept or decline. */}
+        <View>
+          <Text className="mb-2 text-important font-semibold">{t("family.tabInvites")}</Text>
+          {loaded && invites.length === 0 ? (
+            <Card>
+              <Text className="text-body text-neutral">{t("family.noInvites")}</Text>
+            </Card>
+          ) : (
+            <View className="gap-2">
+              {invites.map((inv) => (
+                <InviteRow
+                  key={inv.linkId}
+                  invite={inv}
+                  onAccept={() => handleRespond(inv, "accept")}
+                  onDecline={() => handleRespond(inv, "decline")}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+
         {/* Guardian → Patient: read-only view list. */}
         <View>
           <Text className="mb-2 text-important font-semibold">{t("family.tabPatients")}</Text>
@@ -108,6 +156,53 @@ export default function FamilyScreen(): JSX.Element {
     </SafeAreaView>
   );
 }
+
+interface InviteRowProps {
+  invite: PendingInviteSummary;
+  onAccept: () => void;
+  onDecline: () => void;
+}
+
+const InviteRow = ({ invite, onAccept, onDecline }: InviteRowProps): JSX.Element => {
+  const { t } = useTranslation();
+  return (
+    <Card>
+      <View className="flex-row items-center gap-3">
+        <View className="h-12 w-12 items-center justify-center rounded-full bg-blue-100">
+          <Icon name="person-add" size={24} color="#2563EB" />
+        </View>
+        <View className="flex-1">
+          <Text className="text-important font-semibold">
+            {t("family.pendingToYou", { name: invite.patient.name })}
+          </Text>
+          {invite.relationship !== null && (
+            <Text className="text-body text-neutral">{invite.relationship}</Text>
+          )}
+        </View>
+      </View>
+      <View className="mt-3 flex-row gap-2">
+        <Pressable
+          onPress={onAccept}
+          accessibilityRole="button"
+          accessibilityLabel={t("family.accept")}
+          style={{ minHeight: TOUCH_TARGET_MIN }}
+          className="flex-1 items-center justify-center rounded-2xl bg-primary px-4"
+        >
+          <Text className="text-important font-semibold text-white">{t("family.accept")}</Text>
+        </Pressable>
+        <Pressable
+          onPress={onDecline}
+          accessibilityRole="button"
+          accessibilityLabel={t("family.decline")}
+          style={{ minHeight: TOUCH_TARGET_MIN }}
+          className="flex-1 items-center justify-center rounded-2xl border border-gray-300 px-4"
+        >
+          <Text className="text-important font-semibold text-gray-900">{t("family.decline")}</Text>
+        </Pressable>
+      </View>
+    </Card>
+  );
+};
 
 interface PatientRowProps {
   link: PatientLinkSummary;
