@@ -25,6 +25,8 @@
   "newChat": "Start a new chat",
   "justNow": "just now",
   "loadError": "Chat failed to load. Please try again.",
+  "unavailable": "AI chat is unavailable right now. Please try again later.",
+  "settingsEntry": "Ask the AI assistant",
   "flagDialog": {
     "title": "Flag this message",
     "subtitle": "What went wrong?",

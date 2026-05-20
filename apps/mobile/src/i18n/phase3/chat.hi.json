@@ -25,6 +25,8 @@
   "newChat": "Nayi baat shuru karein",
   "justNow": "abhi",
   "loadError": "Chat load nahi hua. Phir try karein.",
+  "unavailable": "AI chat abhi available nahi hai. Thodi der baad try karein.",
+  "settingsEntry": "AI se sawaal poochein",
   "flagDialog": {
     "title": "Is message ko flag karein",
     "subtitle": "Kya galat laga?",

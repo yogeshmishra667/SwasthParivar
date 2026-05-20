@@ -6,6 +6,31 @@
 
 ---
 
+## 2026-05-20 — Feature A: mobile chat UI screens + routing (Section M.1, sub-slice 4)
+
+**Branch:** `phase3/chat/mobile-ui` (continues from sub-slice 3, no PR yet).
+
+**What landed.** The M.1 chat screens, wired to the `chat.ts` service and Expo Router — the chat surface is now reachable and functional end-to-end (online).
+
+- `app/chat/_layout.tsx` — Stack for the chat route group.
+- `app/chat/index.tsx` — `ChatListScreen`: lists recent sessions (`listChatSessions`); a row opens its thread, "new chat" opens an empty thread.
+- `app/chat/[sessionId].tsx` — `ChatThreadScreen`: composes every M.1 component. Loads history via `listSessionMessages`; `deliver()` sends a turn (optimistic user bubble → `sendChatMessage` → assistant bubble) and maps error codes to copy (rate-limit → input swaps to the rate-limit state; disabled/circuit → "unavailable"; timeout → retry copy). Flag tap → `ChatFlagDialog` → `flagChatMessage`. `EmergencyChatGuard` wraps the screen (`criticalBypassActive` wired but `false` for now — the server already enforces emergency-skip; client critical-state detection is a follow-up).
+- `app/_layout.tsx` — `chat` route registered in the root Stack.
+- `app/(tabs)/settings.tsx` — an "Ask the AI assistant" entry point (the app has no "More" tab that M.1 assumed; Settings is the natural, lowest-touch entry).
+
+**Online-only.** Reads/sends go straight to the server via `chat.ts`. The WatermelonDB message cache + `chat_pending_sends` offline queue are a later sub-slice; `OfflineChatBanner` + offline-disabled send already make the limitation explicit (M.1: chat is online-only).
+
+**Gates:** mobile typecheck, lint (`max-warnings=0`), prettier — all clean.
+
+**What's NOT done (final M.1 items):**
+
+- WatermelonDB `chat_messages` / `chat_pending_sends` offline cache + send queue.
+- `VoiceButton` ↔ expo-speech-recognition STT wiring.
+- Mobile RNTL test infra + the 13 M.1 RNTL cases.
+- A `mobile-ux-reviewer` agent pass on the new screens (48dp / font / contrast audit).
+
+---
+
 ## 2026-05-20 — Feature A: mobile chat UI stateful components (Section M.1, sub-slice 3)
 
 **Branch:** `phase3/chat/mobile-ui` (continues from sub-slice 2, no PR yet).
