@@ -6,6 +6,35 @@
 
 ---
 
+## 2026-05-20 — Feature A: mobile chat UI leaf components (Section M.1, sub-slice 2)
+
+**Branch:** `phase3/chat/mobile-ui` (continues from sub-slice 1, no PR yet).
+
+**What landed.** The seven leaf presentational components of the M.1 chat surface, in `src/components/chat/`:
+
+- `FlagButton` — 🚩 report button, 48dp, `flag`/`flag-outline` Ionicon, filled red when flagged.
+- `CostTierBadge` — diagnostic tier label; `visible` defaults to `__DEV__` so patients never see it.
+- `AIDisclaimerBanner` — "AI hai — doctor nahi", dismissable; dark text on light amber for WCAG-AA contrast.
+- `TypingIndicator` — "AI soch raha hai…"; after a 12s timeout swaps to a retry prompt (retry resends via the idempotent `clientUuid`).
+- `OfflineChatBanner` — full-width banner; chat is online-only.
+- `EmergencyChatGuard` — intercepts the whole surface when a critical-bypass is active, redirecting to the critical-alert screen (mirrors the server emergency-skip).
+- `MessageBubble` — user (right/brand) vs assistant (left/gray); assistant bubbles always carry the flag button + tier badge; optional long-press for copy/edit.
+
+All follow the existing component conventions: NativeWind theme classes, `min-h-touch`/`min-w-touch` 48dp targets, `accessibilityRole`/`accessibilityLabel`, i18n via `t("chat.…")`.
+
+**Icons.** Used Ionicons `flag`/`flag-outline` via the existing `<Icon>` wrapper instead of the 4 custom SVGs phase3.md listed — Ionicons covers the flag states and chat bubbles need no icon, which removes the SVG-asset sub-task.
+
+**Gates:** mobile typecheck, lint (`max-warnings=0`), prettier — all clean.
+
+**What's NOT in this slice:**
+
+- Stateful integration components: `MessageList`, `ChatInputBar` + `VoiceButton`/`SendButton`, `ChatFlagDialog` modal.
+- Screens (`ChatList`, `ChatThread`) + Expo Router wiring + `More → Chat` entry.
+- WatermelonDB `chat_messages` / `chat_pending_sends`.
+- Mobile RNTL test infra + the 13 M.1 RNTL cases — deferred together (standing up RN + vitest is its own task; no mobile test config exists today).
+
+---
+
 ## 2026-05-20 — Feature A: mobile chat UI foundation (Section M.1, sub-slice 1)
 
 **Branch:** `phase3/chat/mobile-ui` (off `main` at `6f2ee29`, PR pending). First sub-slice of the M.1 mobile chat surface — the UI-decision-free foundation (copy, service, types). No screens/components yet.
