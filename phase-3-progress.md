@@ -6,6 +6,27 @@
 
 ---
 
+## 2026-05-20 — Feature B: cross-condition + meal-correlation detectors (Week 10, B.1)
+
+**Branch:** `phase3/detectors/cross-condition` → PR #74. Both Feature B pure detectors. Feature B is pure-domain-logic-led: no schema change, no new queue.
+
+**What landed.**
+
+- `detectors/stats-helpers.ts` (new) — `welchTTest` (variance-unequal two-sample t-test) + `variance`, and the numerical stack behind the p-value: `incompleteBeta` (regularized incomplete beta via the Lentz continued fraction), `studentTTwoTailedP`, a Lanczos `logGamma`. `linearRegressionR2` from B.1 #3 already exists as `linearRegression().rSquared` in `stats.ts` — not duplicated.
+- `detectors/cross-condition.ts` (new) — `detectCrossCondition`: groups glucose by UTC day, classifies each day high/normal BP (systolic ≥ 140), runs Welch's t-test on per-day mean glucose across the two groups. Returns `null` unless ALL hold: ≥30-day paired span, ≥10 paired days per group, p < 0.05, an upward delta ≥ 10 mg/dL, confidence ≥ 0.70. Severity info/warn/critical by glucose lift.
+- `detectors/correlation-meal.ts` (new) — `detectMealCategoryCorrelation`: links a meal category (light/normal/heavy_fried) to glucose, computed **separately per reading type** so a category's fasting readings are only ever compared to the fasting baseline (CLAUDE.md "never mix types"). Festive-tagged readings excluded; configurable `windowDays` / `minInstances`. **Design call:** written as a new file, not a rewrite of the Phase 2 `meal-correlation.ts` — that detector is left intact; the service layer (B.2) picks which runs.
+- `detectors/types.ts` — added `TypedBPReading` and an optional `context` on `TypedReading`.
+
+**Tests:** `stats-helpers.test.ts` (18), `cross-condition.test.ts` (9 — every sparsity/span/significance/confidence/direction gate + each severity), `correlation-meal.test.ts` (9 — the never-mix-types regression, span guard, min-instances floor, festive exclusion, multi-category pick, each severity, custom config). **391 domain-logic tests pass.**
+
+**Coverage (B.6 — 95%+ on both detectors):** `cross-condition.ts` 98.5/96.9/100/100, `correlation-meal.ts` 98.6/96.9/100/100. `stats-helpers.ts` 94/82/100/100 (lower branch floor — the incomplete-beta's defensive TINY/max-iter guards, unreachable on real inputs). Per-file ratchets pinned in `vitest.config.ts`.
+
+**Gates:** domain-logic typecheck, lint (`max-warnings=0`), prettier, purity (49 files), 391 tests — all clean.
+
+**Feature B remaining:** service wiring into `insights.service.ts` (flag-gated per detector — `cross_condition_detector_enabled` / `correlation_detector_enabled`); test factories; B.8 mobile verification (reuses the Phase 2 `InsightCard`, no new screens).
+
+---
+
 ## 2026-05-20 — Feature A: chat WatermelonDB offline layer (Section M.1)
 
 **Branch:** `phase3/chat/offline-db` (off `main` at `c124260`, PR pending). Second Feature A tail item.
