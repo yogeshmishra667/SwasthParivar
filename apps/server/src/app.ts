@@ -7,6 +7,7 @@ import { logger } from "./shared/logger.js";
 import { requestIdMiddleware } from "./shared/middleware/request-id.js";
 import { errorHandler } from "./shared/middleware/error-handler.js";
 import { defaultRateLimit } from "./shared/middleware/rate-limit.js";
+import { maintenanceMode } from "./shared/middleware/maintenance-mode.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { readingsRouter } from "./modules/readings/readings.routes.js";
 import { mealsRouter } from "./modules/meals/meals.routes.js";
@@ -21,6 +22,7 @@ import { usersRouter } from "./modules/users/users.routes.js";
 import { householdRouter } from "./modules/household/household.routes.js";
 import { familyRouter } from "./modules/family/family.routes.js";
 import { chatRouter } from "./modules/chat/chat.routes.js";
+import { configRouter } from "./modules/config/config.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { adminRouter } from "./modules/admin/admin.routes.js";
 
@@ -81,6 +83,11 @@ export const buildApp = (): Express => {
 
   app.use(healthRouter);
 
+  // CC.12.7 #1 — global maintenance kill switch. Mounted after the
+  // health probes and before the feature routers; exempts /health and
+  // /admin so ops can monitor and lift maintenance mode.
+  app.use(maintenanceMode);
+
   app.use("/api/v1/auth", authRouter);
   app.use("/api/v1/readings", readingsRouter);
   app.use("/api/v1/meals", mealsRouter);
@@ -95,6 +102,7 @@ export const buildApp = (): Express => {
   app.use("/api/v1/household", householdRouter);
   app.use("/api/v1/family", familyRouter);
   app.use("/api/v1/chat", chatRouter);
+  app.use("/api/v1/config", configRouter);
   app.use("/admin", adminRouter);
 
   app.use(errorHandler);

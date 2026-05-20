@@ -50,4 +50,5 @@ export type ErrorCode =
   | "REPORT_GENERATING"
   | "VALIDATION_ERROR"
   | "RATE_LIMITED"
+  | "MAINTENANCE_MODE"
   | "INTERNAL_ERROR";

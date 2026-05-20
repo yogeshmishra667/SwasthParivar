@@ -40,6 +40,7 @@ const statusFor = (code: ErrorCode): number => {
     case "CHAT_DISABLED":
     case "CHAT_CIRCUIT_OPEN":
     case "CHAT_SPEND_CAP_REACHED":
+    case "MAINTENANCE_MODE": // CC.12.7 #1 — global maintenance window, retry later
       return 503;
     case "CHAT_UPSTREAM_TIMEOUT":
       return 504;

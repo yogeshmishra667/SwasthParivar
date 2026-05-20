@@ -145,6 +145,68 @@ All follow the existing component conventions: NativeWind theme classes, `min-h-
 - WatermelonDB: `chat_messages` + `chat_pending_sends` tables (offline send queue).
 - Mobile RNTL test infra (no mobile vitest config today) + the 13 M.1 RNTL cases.
 - 4 chat SVG icons.
+## 2026-05-20 — Feature A: chat retention sweep (`CHAT_RETENTION_SWEEP` cron, CC.11 §5)
+
+**Branch:** `phase3/chat/retention-sweep` (off `main` at `6f2ee29`, PR pending). First slice of the remaining Feature A work after CC.12 (CC.12 itself is in flight as PR #66 on branch `phase3/feature-rollout`).
+
+**What landed.** The weekly DPDP retention cron for AI-chat content — the A.10 / CC.11 §5 follow-up deferred from the Week 9 chat module PR (#63).
+
+- `QUEUE_NAMES.CHAT_RETENTION_SWEEP` added to `shared/queue.ts`.
+- `workers/chat-retention-sweep.processor.ts` — `processChatRetentionSweep`: archives `ChatSession` rows older than 90 days (`archivedAt` set → drops off `listSessions`, which filters `archivedAt: null`), hard-deletes rows older than 1 year (`onDelete: Cascade` removes their `ChatMessage` rows). Age measured from `startedAt`. Retention periods are inline constants — compliance values, no env drift.
+- `workers/chat-retention-sweep.worker.ts` — weekly repeatable BullMQ cron, Sunday 20:00 UTC (staggered off the 21:30 UTC grace-reset).
+- Registered in `workers/index.ts` (worker list + `workerNames` + `bootstrapChatRetentionSweepCron`).
+
+**Kill switch.** The sweep is destructive (hard-delete), so it is gated behind `chat_retention_sweep_enabled` and **ships OFF** — the cron is scheduled but the processor no-ops until ops deliberately enables it. Flipping it off pauses all deletion within 30s without a redeploy. Plain boolean `getFlag` (a global cron, not per-user — the CC.12 `isFeatureEnabled` gate does not apply).
+
+**Right-to-be-forgotten** is already covered by the schema's `onDelete: Cascade` (ChatSession → User, ChatMessage → ChatSession) — a User delete cascades to chat rows. No code change needed.
+
+**Tests.** `tests/integration/chat-retention-sweep.test.ts` — 4 Testcontainers-backed cases: flag-off no-op, archive 90d+ (recent untouched), hard-delete 1y+ with message cascade, already-archived session not re-stamped.
+
+**Gates:** typecheck (5 workspaces), lint (`max-warnings=0`), prettier — all clean; integration 4/4.
+
+**What's NOT in this slice (remaining Feature A):**
+
+- Tier 2 semantic cache — `chat.service.ts` still hardcodes `historyMatch: false` into the cost router; a real prior-Q&A cache lookup is unbuilt.
+- Section M.1 — mobile chat UI (ChatScreen, MessageBubble, EmergencyChatGuard, CostTierBadge, OfflineChatBanner + RNTL tests).
+
+---
+
+## 2026-05-20 — CC.12 Feature Rollout & Targeting — full implementation
+
+**Branch:** `phase3/feature-rollout` (off `main` at `6f2ee29`, in flight — PR pending). The CC.12 docs spec already merged to `main` as `6f2ee29` (#65); this branch carries the implementation. (The CC.12 work was briefly staged uncommitted on `main` before being moved onto this correctly-named `phase3/…` branch per CC.7 #5 — nothing committed to `main`.)
+
+**What landed.** The full CC.12 system — resolver, gate helper, chat retrofit, config endpoint, flag-change observability, maintenance-mode middleware, and the mobile flag store:
+
+- **CC.12.2 — pure resolver.** `packages/domain-logic/src/feature-rollout/rollout.ts` — `evaluateRollout(config, user)`. Handles all four CC.12.1 value shapes (global boolean / `cohort` / `percentage` / `cohort_or_percentage`). Fail-closed: anything that isn't a boolean or a recognised rollout object → `false`. Zero-IO, no node builtins. **18 tests, locked at 100%** on every metric in `vitest.config.ts` (`src/feature-rollout/**: { 100: true }`).
+- **CC.12.3 — server gate helper.** `apps/server/src/shared/rollout.ts` — `isFeatureEnabled(featureKey, userId)` reads the flag via `getFlag` (fail-safe default `false`), computes a stable 0–99 bucket via `node:crypto` SHA-256 of `featureKey:userId`, delegates to `evaluateRollout`. `computeBucket` exported + unit-tested (determinism, 0–99 range, feature-keyed independence, even spread over 10k users).
+- **chat retrofit.** `chat.service.ts` swaps both ad-hoc `getFlag<boolean>` reads (`ai_chat_enabled`, `ai_chat_tier3_enabled`) for `isFeatureEnabled`. `auth.otp.provider` left untouched — it's a string config flag, not a rollout flag (CC.12.0).
+- **CC.12.4 — mobile feature-config endpoint.** New `apps/server/src/modules/config/` module (`types`/`service`/`controller`/`routes`). `GET /api/v1/config/features` (authed) → `{ features: { ai_chat: bool } }` resolved for the calling user. Mounted at `/api/v1/config` in `app.ts`.
+- **CC.12.6 — flag-change observability.** `setFlag` now emits a PostHog `feature_flag_changed{key, rollout_kind, by}` event (new entry in `posthog.ts` `EventPropsMap`) and a Sentry breadcrumb. `rollout_kind` is derived from the new value via a `classifyRolloutKind` helper (`boolean`/`cohort`/`percentage`/`cohort_or_percentage`/`other`). Telemetry failure is caught + logged — it can never break the flag write. The Redis audit log remains system-of-record.
+- **CC.12.7 #1 — maintenance-mode middleware.** `apps/server/src/shared/middleware/maintenance-mode.ts` — global `503 MAINTENANCE_MODE` driven by the `maintenance_mode` boolean flag, mounted in `app.ts` after the health probes and before the feature routers. Exempts `/health*` (orchestrator probes) and `/admin*` (so ops can lift maintenance via the flag API). New `MAINTENANCE_MODE` `ErrorCode` mapped to 503 in `error-handler.ts`. Prerequisite for the Week 12 SOS migration (CC.12.8).
+- **CC.12.7 #2 — mobile flag store.** `apps/mobile/src/stores/feature-flags.store.ts` — `useFeatureFlags` Zustand store + `useFeatureEnabled(feature)` reactive selector. `refresh()` fetches `GET /config/features` with the 60s in-memory cache pattern from `auth-config.ts`. Fail-safe: a network failure keeps the last known map; an unresolved feature reads `false` (matches the server default).
+
+**Signature deviation from the spec.** CC.12.2 wrote `evaluateRollout(config, userBucket)`. Implemented as `evaluateRollout(config, user)` where `user = { id, bucket }` — cohort allowlist resolution needs the `userId`, and the resolver owns the whole decision per CC.12.3 ("delegates the decision to evaluateRollout"). Both fields are pure values; the module stays zero-IO. The spec's `userBucket` was shorthand.
+
+**FEATURE_REGISTRY scope.** `config.service.ts` resolves only `ai_chat` today — chat is the only built feature opting into CC.12. `silent_guardian` / `sos` rows are added when Features C/D land (per "no preemptive flag keys"). The CC.12.4 example listed all three illustratively; surfacing an unbuilt feature even as `false` would mislead mobile navigation gating. The mobile `FeatureName` union mirrors this.
+
+**Backward compatibility verified (CC.12.0).** The 10 existing chat integration tests + 6 admin-flags tests pass unchanged — `evaluateRollout(true/false, …)` returns booleans untouched, and the new `setFlag` telemetry is a no-op without `POSTHOG_API_KEY`/Sentry DSN. No existing test, endpoint, or behaviour changed.
+
+**Gates (all green pre-push):**
+
+- typecheck — 5 workspaces clean.
+- lint — `max-warnings=0` clean.
+- prettier `format:check` — clean (the one pre-existing `apps/mobile/expo-env.d.ts` warning is unrelated to this work).
+- domain-logic purity — 46 files scanned, pass.
+- domain-logic `test:coverage` — 355 tests pass, per-file ratchets hold, `feature-rollout` at 100%.
+- server unit — `rollout.test.ts` 4/4 + `idempotency.test.ts` 6/6.
+- integration — `config.test.ts` 7/7, `maintenance-mode.test.ts` 4/4 (off→through, on→503, `/health` + `/admin` exemptions), `admin-flags.test.ts` 6/6 (setFlag telemetry path), `chat.test.ts` 10/10 (retrofit regression check).
+
+**What's NOT done (CC.12 follow-ups):**
+
+- **CC.12.7 #2 — mobile navigation wiring.** The store + selector are built and typecheck/lint clean, but *consuming* them to gate navigation + screen registration lands with the Feature A mobile slice (Section M.1). The store also has no unit test — mobile vitest/RNTL infra is not set up yet; it gets stood up with the Feature A mobile work.
+- **CC.12.7 #3** — per-`NODE_ENV` flag-key namespacing.
+- **CC.12.7 #4** — read-only flag dashboard / checked-in `scripts/flags.sh`.
+- **CC.12.7 #5** — staging environment (infra, out of code scope).
 
 ---
 

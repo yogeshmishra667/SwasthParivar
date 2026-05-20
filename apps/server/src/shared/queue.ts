@@ -18,6 +18,9 @@ export const QUEUE_NAMES = {
   // message. The processor persists into the human-audit queue and
   // emits PostHog; nothing in the patient request path waits on it.
   CHAT_SAFETY_REVIEW: "chat-safety-review",
+  // Phase 3 — weekly cron. Archives chat sessions at 90 days and
+  // hard-deletes them at 1 year (CC.11 §5 — DPDP retention).
+  CHAT_RETENTION_SWEEP: "chat-retention-sweep",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
