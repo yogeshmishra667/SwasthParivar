@@ -19,8 +19,10 @@
 // (cheap consistency without distributed locks).
 
 import type { Redis } from "ioredis";
+import * as Sentry from "@sentry/node";
 import { redis } from "../redis.js";
 import { logger } from "../logger.js";
+import { capture } from "../analytics/posthog.js";
 
 const CACHE_TTL_MS = 30_000;
 const AUDIT_RETENTION = 100;
@@ -55,6 +57,41 @@ const ensureSubscriber = (): void => {
 };
 
 const isExpired = (entry: CacheEntry): boolean => Date.now() - entry.fetchedAt > CACHE_TTL_MS;
+
+// CC.12.6 — classify a flag value so flag-change telemetry can pivot on
+// rollout kind. Mirrors the shapes the CC.12 `evaluateRollout` resolver
+// accepts; a non-rollout config value (e.g. the `auth.otp.provider`
+// string) classifies as `other`.
+type RolloutKind = "boolean" | "cohort" | "percentage" | "cohort_or_percentage" | "other";
+
+const classifyRolloutKind = (value: FlagValue): RolloutKind => {
+  if (typeof value === "boolean") return "boolean";
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const rollout = value.rollout;
+    if (rollout === "cohort" || rollout === "percentage" || rollout === "cohort_or_percentage") {
+      return rollout;
+    }
+  }
+  return "other";
+};
+
+// CC.12.6 — a rollout/rollback is an operational event; surface it on
+// PostHog + Sentry next to the feature's own metrics. Telemetry failure
+// must never break the flag write itself.
+const emitFlagChangeTelemetry = (key: string, value: FlagValue, by: string): void => {
+  const rolloutKind = classifyRolloutKind(value);
+  try {
+    capture("feature_flag_changed", by, { key, rollout_kind: rolloutKind, by });
+    Sentry.addBreadcrumb({
+      category: "feature_flag",
+      message: `flag ${key} changed`,
+      level: "info",
+      data: { key, rollout_kind: rolloutKind, by },
+    });
+  } catch (err) {
+    logger.warn({ err, key }, "flag-change telemetry emit failed");
+  }
+};
 
 const parse = (raw: string | null): FlagValue | null => {
   if (raw === null) return null;
@@ -125,6 +162,7 @@ export const setFlag = async (
 
   cache.delete(key);
   logger.info({ key, by, prev, next: value }, "flag updated");
+  emitFlagChangeTelemetry(key, value, by);
   return prev;
 };
 
