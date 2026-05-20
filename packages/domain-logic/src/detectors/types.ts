@@ -15,6 +15,12 @@ export interface TypedReading {
   valueMgDl: number;
   readingType: "fasting" | "pre_meal" | "post_meal" | "random" | "bedtime";
   measuredAt: string;
+  /**
+   * Optional reading context. `festive` readings are excluded by the
+   * meal-category correlation detector (a Diwali sweet is not a
+   * dietary pattern). Absent → treated as `normal`.
+   */
+  context?: "normal" | "festive";
 }
 
 /**

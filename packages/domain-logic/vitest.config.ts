@@ -88,6 +88,14 @@ export default defineConfig({
           branches: 96,
           statements: 98,
         },
+        // Phase 3 Feature B — meal-category correlation detector
+        // (phase3.md B.6, 95%+). Pinned at measured values.
+        "src/detectors/correlation-meal.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 96,
+          statements: 98,
+        },
         // Welch's t-test helpers. The branch floor is below the others:
         // the incomplete-beta continued fraction has defensive TINY/
         // max-iteration guards that normal inputs never trigger.

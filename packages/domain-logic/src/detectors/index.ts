@@ -6,3 +6,4 @@ export * from "./trend.js";
 export * from "./meal-correlation.js";
 export * from "./anomaly.js";
 export * from "./cross-condition.js";
+export * from "./correlation-meal.js";
