@@ -39,6 +39,24 @@ describe("classifyIntent — medication_question priority", () => {
       "medication_question",
     );
   });
+
+  it("Hinglish: 'is X ok for me' phrasing (mere liye metformin thik hai)", () => {
+    expect(classifyIntent({ message: "Mere liye metformin thik hai?", ...mixed })).toBe(
+      "medication_question",
+    );
+  });
+
+  it("English: 'is X ok' phrasing without an explicit verb", () => {
+    expect(classifyIntent({ message: "Is this statin ok for me?", ...en })).toBe(
+      "medication_question",
+    );
+  });
+
+  it("Devanagari: 'is the dose right' phrasing (खुराक सही है)", () => {
+    expect(classifyIntent({ message: "मेरी खुराक सही है क्या", ...hi })).toBe(
+      "medication_question",
+    );
+  });
 });
 
 describe("classifyIntent — data_explainer", () => {

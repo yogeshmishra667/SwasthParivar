@@ -49,12 +49,15 @@ const BANKS: readonly IntentBank[] = [
     patterns: [
       // English: explicit ask about a medication
       /\b(?:should|can|may|how|when|do)\b.{0,40}\b(?:medicine|medication|drug|tablet|pill|capsule|metformin|insulin|aspirin|statin|dose|dosage)\b/i,
-      /\b(?:medicine|medication|drug|tablet|pill|capsule|metformin|insulin|aspirin|statin|dose|dosage)\b.{0,30}\b(?:safe|side\s+effect|take|skip|miss|stop|start)\b/i,
-      // Hinglish: "dawai", "khurak", "matra" with question intent
-      /\b(?:dawai|dawayi|dava|davai|goli|insulin|metformin|khurak|matra|dose)\b.{0,40}\b(?:kya|kab|kaise|le|leni|bandh|band|shuru|chod|miss)\b/i,
+      /\b(?:medicine|medication|drug|tablet|pill|capsule|metformin|insulin|aspirin|statin|dose|dosage)\b.{0,30}\b(?:safe|side\s+effect|take|skip|miss|stop|start|ok|okay|fine|right)\b/i,
+      // Hinglish: "dawai", "khurak", "matra" with question intent.
+      // `thik|theek|sahi` catches the common "X mere liye thik hai?"
+      // ("is X ok for me?") phrasing — a med noun is still required, so
+      // over-triggering only ever routes to the safe template redirect.
+      /\b(?:dawai|dawayi|dava|davai|goli|insulin|metformin|khurak|matra|dose)\b.{0,40}\b(?:kya|kab|kaise|le|leni|bandh|band|shuru|chod|miss|thik|theek|theik|sahi)\b/i,
       /\b(?:kya|kab|kaise)\s+.{0,20}\b(?:dawai|dawayi|dava|davai|goli|insulin|metformin|dose|khurak)\b/i,
       // Devanagari
-      /(?:दवा|दवाई|गोली|खुराक|डोज़|डोज|मात्रा).{0,30}(?:क्या|कब|कैसे|लेनी|छोड़|बंद|शुरू)/u,
+      /(?:दवा|दवाई|गोली|खुराक|डोज़|डोज|मात्रा).{0,30}(?:क्या|कब|कैसे|लेनी|छोड़|बंद|शुरू|ठीक|सही)/u,
     ],
   },
   // ── data_explainer ──────────────────────────────────────────

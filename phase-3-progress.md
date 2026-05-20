@@ -6,6 +6,38 @@
 
 ---
 
+## 2026-05-20 — Feature A audit + safety hardening (PR #73)
+
+**Branch:** `phase3/chat/safety-hardening` (off `main` at `98a0709`).
+
+With Feature A (AI Chat) fully merged (#66–#70), ran a three-lens audit before moving to Feature B.
+
+**Audit (three review agents):**
+
+- `build-validator` — full local CI on `main`: typecheck, lint, prettier, domain-purity, 358 domain + 22 server tests, build — all **PASS**. Integration tests need Docker (verified CI-side). Minor: `@vitest/coverage-v8` 4.1.4 vs `vitest` 4.1.6 version skew.
+- `db-reviewer` — the WatermelonDB v1→v2 migration (#70) is correctly additive and wired into the SQLite adapter — **no glucose-data-loss risk**; the server chat Prisma migration is additive, non-locking, fully indexed. Minor: document the chat-tables revert SQL in `docs/runbooks/rollback.md`.
+- `safety-reviewer` — core safety chain **VERIFIED**: the Tier 2 cache (#69) only stores already-filtered answers and is keyed per-`userId` (no filter bypass, no cross-patient leak); emergency-skip holds; `medication_question` → template; the filter fails closed; circuit-breaker / spend-cap / timeout correct. Three hardening gaps found → fixed below.
+
+**Hardening fixes (this PR):**
+
+- `chat.service.loadHistory` now filters `flagged: false` — a safety-rejected turn can never be replayed into a later Claude prompt (defense-in-depth; stored content is already the redacted string).
+- `CLAUDE_MODEL_HAIKU` / `CLAUDE_MODEL_SONNET` validated against a `VETTED_CLAUDE_MODELS` allowlist — an operator can no longer point patient-facing chat at an arbitrary, unvetted model.
+- The intent classifier now catches the "is X ok/fine/right for me" medication phrasing (English / Hinglish / Devanagari) so it routes to the template redirect instead of falling through to Claude; 3 new classifier tests (`chat-intent-classifier` still locked at 100%).
+
+**Gates:** domain-logic 358 tests, server typecheck, lint (`max-warnings=0`), prettier — all clean.
+
+**Feature A is audit-clean.** Next: Feature B — Cross-Condition + Correlation detectors (Week 10).
+
+---
+
+## 2026-05-20 — Feature A: mobile error capture + jest-expo RNTL harness (PR #71)
+
+**Branch:** `phase3/mobile/error-capture` (off `main`, PR #71 — separate from #73).
+
+- **Error capture** — `analytics.ts logError` now enriches the `error_caught` PostHog event for axios errors with `errorCode` / `request` (METHOD+URL) / `httpStatus` / `serverCode`; the dev `console.warn` prints the same object. A bare "Network Error" (e.g. from a stale dev-server IP) is now diagnosable.
+- **RNTL harness** — the mobile app had `@testing-library/react-native` installed but no test config and zero tests. Stood up `jest-expo` (Expo SDK 54 / React 19 / RN 0.81, jest 29); upgraded RNTL 12.8 → 13.3 (React 19); pinned `react-test-renderer` to 19.1.0. Added `jest.config.js` + `jest.setup.ts` (react-i18next / vector-icons / expo-speech-recognition / expo-haptics mocks); `__tests__` wired into `tsconfig` + the lint glob (+ `@types/jest`) so test files are typechecked and linted. **21 tests across 7 suites** for the M.1 chat components — all green.
+
+**Gates:** mobile typecheck, lint, prettier, jest 21/21 — all clean.
 ## 2026-05-20 — Feature B: cross-condition + meal-correlation detectors (Week 10, B.1)
 
 **Branch:** `phase3/detectors/cross-condition` → PR #74. Both Feature B pure detectors. Feature B is pure-domain-logic-led: no schema change, no new queue.

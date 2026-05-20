@@ -3,6 +3,13 @@ import { z } from "zod";
 
 loadEnv();
 
+// Vetted Claude models — the chat model env overrides must pick from
+// this allowlist so an operator cannot point patient-facing chat at an
+// arbitrary, unvetted, or less-safety-aligned model. Bumping a model is
+// therefore a deliberate, reviewed code change here (re-verify against
+// the model catalogue first — see the CLAUDE_MODEL_* note below).
+const VETTED_CLAUDE_MODELS = ["claude-haiku-4-5", "claude-sonnet-4-6"] as const;
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
@@ -30,8 +37,8 @@ const envSchema = z.object({
   // model catalogue current at 2026-05-19. Reverify against
   // https://platform.claude.com/docs/en/about-claude/models/overview
   // before bumping in production.
-  CLAUDE_MODEL_HAIKU: z.string().default("claude-haiku-4-5"),
-  CLAUDE_MODEL_SONNET: z.string().default("claude-sonnet-4-6"),
+  CLAUDE_MODEL_HAIKU: z.enum(VETTED_CLAUDE_MODELS).default("claude-haiku-4-5"),
+  CLAUDE_MODEL_SONNET: z.enum(VETTED_CLAUDE_MODELS).default("claude-sonnet-4-6"),
   // Per-user daily chat cap (free tier). Premium ignores this in the
   // service layer. Hard ceiling enforced at the controller.
   CHAT_DAILY_FREE_LIMIT: z.coerce.number().int().positive().default(3),
