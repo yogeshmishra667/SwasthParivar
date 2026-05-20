@@ -69,6 +69,11 @@ export default defineConfig({
         // router. Bugs here send `medication_question` to Tier 3 (the
         // exact safety failure phase3.md A.4 step 6 guards against).
         "src/chat-intent-classifier/**": { 100: true },
+        // Phase 3 — CC.12 feature-rollout resolver. Pure decision
+        // function; a regression could turn a feature ON for patients
+        // outside the intended cohort. Locked at 100% per phase3.md
+        // CC.12.2.
+        "src/feature-rollout/**": { 100: true },
 
         // Ratchet floors at CURRENT measured values (2026-05-14 baseline).
         // Raise these as tests close the gap to CLAUDE.md targets.
