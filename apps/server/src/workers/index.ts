@@ -11,6 +11,10 @@ import {
   bootstrapDailyHealthScoreCron,
 } from "./daily-health-score.worker.js";
 import { chatSafetyReviewWorker } from "./chat-safety-review.worker.js";
+import {
+  chatRetentionSweepWorker,
+  bootstrapChatRetentionSweepCron,
+} from "./chat-retention-sweep.worker.js";
 import { logger } from "../shared/logger.js";
 
 const workers = [
@@ -22,6 +26,7 @@ const workers = [
   graceResetWorker,
   dailyHealthScoreWorker,
   chatSafetyReviewWorker,
+  chatRetentionSweepWorker,
 ];
 
 export const workerNames = [
@@ -33,6 +38,7 @@ export const workerNames = [
   "grace-reset",
   "daily-health-score",
   "chat-safety-review",
+  "chat-retention-sweep",
 ];
 
 export const startWorkers = (): void => {
@@ -44,6 +50,9 @@ export const startWorkers = (): void => {
   );
   bootstrapDailyHealthScoreCron().catch((err) =>
     logger.error({ err }, "failed to bootstrap daily-health-score cron"),
+  );
+  bootstrapChatRetentionSweepCron().catch((err) =>
+    logger.error({ err }, "failed to bootstrap chat-retention-sweep cron"),
   );
   logger.info({ count: workers.length }, "workers started");
 };

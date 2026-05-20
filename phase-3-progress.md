@@ -6,6 +6,32 @@
 
 ---
 
+## 2026-05-20 — Feature A: chat retention sweep (`CHAT_RETENTION_SWEEP` cron, CC.11 §5)
+
+**Branch:** `phase3/chat/retention-sweep` (off `main` at `6f2ee29`, PR pending). First slice of the remaining Feature A work after CC.12 (CC.12 itself is in flight as PR #66 on branch `phase3/feature-rollout`).
+
+**What landed.** The weekly DPDP retention cron for AI-chat content — the A.10 / CC.11 §5 follow-up deferred from the Week 9 chat module PR (#63).
+
+- `QUEUE_NAMES.CHAT_RETENTION_SWEEP` added to `shared/queue.ts`.
+- `workers/chat-retention-sweep.processor.ts` — `processChatRetentionSweep`: archives `ChatSession` rows older than 90 days (`archivedAt` set → drops off `listSessions`, which filters `archivedAt: null`), hard-deletes rows older than 1 year (`onDelete: Cascade` removes their `ChatMessage` rows). Age measured from `startedAt`. Retention periods are inline constants — compliance values, no env drift.
+- `workers/chat-retention-sweep.worker.ts` — weekly repeatable BullMQ cron, Sunday 20:00 UTC (staggered off the 21:30 UTC grace-reset).
+- Registered in `workers/index.ts` (worker list + `workerNames` + `bootstrapChatRetentionSweepCron`).
+
+**Kill switch.** The sweep is destructive (hard-delete), so it is gated behind `chat_retention_sweep_enabled` and **ships OFF** — the cron is scheduled but the processor no-ops until ops deliberately enables it. Flipping it off pauses all deletion within 30s without a redeploy. Plain boolean `getFlag` (a global cron, not per-user — the CC.12 `isFeatureEnabled` gate does not apply).
+
+**Right-to-be-forgotten** is already covered by the schema's `onDelete: Cascade` (ChatSession → User, ChatMessage → ChatSession) — a User delete cascades to chat rows. No code change needed.
+
+**Tests.** `tests/integration/chat-retention-sweep.test.ts` — 4 Testcontainers-backed cases: flag-off no-op, archive 90d+ (recent untouched), hard-delete 1y+ with message cascade, already-archived session not re-stamped.
+
+**Gates:** typecheck (5 workspaces), lint (`max-warnings=0`), prettier — all clean; integration 4/4.
+
+**What's NOT in this slice (remaining Feature A):**
+
+- Tier 2 semantic cache — `chat.service.ts` still hardcodes `historyMatch: false` into the cost router; a real prior-Q&A cache lookup is unbuilt.
+- Section M.1 — mobile chat UI (ChatScreen, MessageBubble, EmergencyChatGuard, CostTierBadge, OfflineChatBanner + RNTL tests).
+
+---
+
 ## 2026-05-19 — Plan addition: CC.12 Feature Rollout & Targeting System
 
 **Type:** plan-only (no code). New section `CC.12 — Feature Rollout & Targeting System` added to `phase3.md` between `CC.11` and `Section M`.
