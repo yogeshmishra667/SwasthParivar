@@ -6,6 +6,145 @@
 
 ---
 
+## 2026-05-20 — Feature A: chat voice input (STT) wiring (Section M.1)
+
+**Branch:** `phase3/chat/mobile-ui` (continues from the UX-fixes commit, no PR yet).
+
+Connected `VoiceButton` to speech-to-text — the `[+]` mic in the chat input bar now works.
+
+- `VoiceButton.tsx` rewritten — props are now `{ onTranscribe, disabled }`. Lazy-loads the native implementation behind the same Expo Go guard as `components/logging/VoiceInput.tsx` (the expo-speech-recognition native module crashes the bundle under Expo Go on Android); falls back to an inert mic when voice is unavailable, still loading, or the input is disabled.
+- `VoiceButtonNative.tsx` (new) — drives `expo-speech-recognition`: toggles recording, 5s silence timeout, unmount cleanup. On the `end` event it hands the **raw transcript** to `onTranscribe` — chat wants the spoken text verbatim, so (unlike `VoiceInputNative`) there is no glucose parsing. Recognition locale is `hi-IN` / `en-IN` from the preferences store.
+- `ChatInputBar` — a finished transcript is appended to the current draft text.
+
+**Gates:** mobile typecheck, lint (`max-warnings=0`), prettier — all clean.
+
+**Remaining M.1 (dedicated sub-slices):** WatermelonDB offline layer (`chat_messages` + `chat_pending_sends` — needs a schema migration; data-loss risk if done wrong) and the RNTL test harness + 13 M.1 cases (no mobile vitest config exists; needs a real test run to verify). Both deliberately left for focused, verifiable work.
+
+---
+
+## 2026-05-20 — Feature A: mobile chat UI — mobile-ux-reviewer fixes (Section M.1)
+
+**Branch:** `phase3/chat/mobile-ui` (continues from sub-slice 4, no PR yet).
+
+Ran the `mobile-ux-reviewer` agent over the 12 chat components + 2 screens and applied its findings:
+
+- **SendButton** now fires `hapticSave()` on tap — sending a turn is a consequential tap (design-system haptic rule).
+- **EmergencyChatGuard** resolve button gained `min-w-touch` (was `min-h-touch` only — 48dp width was not guaranteed).
+- **OfflineChatBanner** switched `bg-neutral` → `bg-gray-700` for a safe ~9:1 white-on-dark contrast (the `bg-neutral` 4.6:1 was borderline and not guaranteed under high-contrast mode).
+- Both screen **back buttons** now use a dedicated `chat.back` label instead of the flag-dialog `cancel` string (screen readers were announcing "Cancel" on the back arrow).
+- Documented two known follow-ups in code: `criticalBypassActive` is hardcoded `false` (no global critical-bypass store exists on mobile — the **server** still enforces emergency-skip in `chat.service`, so the guard is defense-in-depth); and `MessageBubble`'s long-press copy/edit needs a visible tap affordance before it is wired (long-press is banned for essential actions).
+
+Reviewer verified: 48dp targets, font tiers, AIDisclaimerBanner contrast (~11:1 AAA), accessibility roles/labels, the 12s typing timeout, and the ActiveProfileBadge headers all pass.
+
+**Gates:** mobile typecheck, lint, prettier — all clean.
+
+**Remaining M.1 (deliberately scoped as dedicated sub-slices):**
+
+- **WatermelonDB** `chat_messages` + `chat_pending_sends` — needs a schema `version` bump (1→2) **with a proper `schemaMigrations` file**; done wrong, an existing install loses its glucose-reading data. Must be written and verified carefully, not rushed.
+- **STT wiring** — `VoiceButton` → expo-speech-recognition (raw transcript), reusing the `VoiceInputNative` lazy-load/Expo Go guard pattern.
+- **RNTL test infra** — no mobile vitest/RNTL config exists; standing up React Native + vitest needs an actual test run to verify, then the 13 M.1 cases.
+
+---
+
+## 2026-05-20 — Feature A: mobile chat UI screens + routing (Section M.1, sub-slice 4)
+
+**Branch:** `phase3/chat/mobile-ui` (continues from sub-slice 3, no PR yet).
+
+**What landed.** The M.1 chat screens, wired to the `chat.ts` service and Expo Router — the chat surface is now reachable and functional end-to-end (online).
+
+- `app/chat/_layout.tsx` — Stack for the chat route group.
+- `app/chat/index.tsx` — `ChatListScreen`: lists recent sessions (`listChatSessions`); a row opens its thread, "new chat" opens an empty thread.
+- `app/chat/[sessionId].tsx` — `ChatThreadScreen`: composes every M.1 component. Loads history via `listSessionMessages`; `deliver()` sends a turn (optimistic user bubble → `sendChatMessage` → assistant bubble) and maps error codes to copy (rate-limit → input swaps to the rate-limit state; disabled/circuit → "unavailable"; timeout → retry copy). Flag tap → `ChatFlagDialog` → `flagChatMessage`. `EmergencyChatGuard` wraps the screen (`criticalBypassActive` wired but `false` for now — the server already enforces emergency-skip; client critical-state detection is a follow-up).
+- `app/_layout.tsx` — `chat` route registered in the root Stack.
+- `app/(tabs)/settings.tsx` — an "Ask the AI assistant" entry point (the app has no "More" tab that M.1 assumed; Settings is the natural, lowest-touch entry).
+
+**Online-only.** Reads/sends go straight to the server via `chat.ts`. The WatermelonDB message cache + `chat_pending_sends` offline queue are a later sub-slice; `OfflineChatBanner` + offline-disabled send already make the limitation explicit (M.1: chat is online-only).
+
+**Gates:** mobile typecheck, lint (`max-warnings=0`), prettier — all clean.
+
+**What's NOT done (final M.1 items):**
+
+- WatermelonDB `chat_messages` / `chat_pending_sends` offline cache + send queue.
+- `VoiceButton` ↔ expo-speech-recognition STT wiring.
+- Mobile RNTL test infra + the 13 M.1 RNTL cases.
+- A `mobile-ux-reviewer` agent pass on the new screens (48dp / font / contrast audit).
+
+---
+
+## 2026-05-20 — Feature A: mobile chat UI stateful components (Section M.1, sub-slice 3)
+
+**Branch:** `phase3/chat/mobile-ui` (continues from sub-slice 2, no PR yet).
+
+**What landed.** The five interactive components of the M.1 chat surface, in `src/components/chat/`:
+
+- `SendButton` — 48dp; `ActivityIndicator` while a send is in flight, disabled when the draft is empty.
+- `VoiceButton` — the `[+]` mic control. Presentational for now; the expo-speech-recognition STT wiring connects in the screen sub-slice, reusing the lazy-load + Expo Go guard pattern from `components/logging/VoiceInputNative.tsx`.
+- `ChatInputBar` — owns the draft text; renders voice + multiline input + send. `dailyRemaining <= 0` swaps the whole input for the Hindi rate-limit copy; offline disables send and shows the offline hint.
+- `MessageList` — `FlatList` of `MessageBubble` with `TypingIndicator` pinned as the footer; scroll near the top fires `onReachTop` for lazy history loading. Maps `ChatMessageDto` → bubble props (derives `flaggedByUser` from `flagReason`).
+- `ChatFlagDialog` — bottom-sheet `Modal`: reason radio list (medical_advice / wrong_info / disrespectful / other) + optional free-text note; submit gated on a reason being chosen.
+
+**Gates:** mobile typecheck, lint (`max-warnings=0`), prettier — all clean. (`exactOptionalPropertyTypes`: `MessageList` omits `tier` for user bubbles rather than passing `undefined`.)
+
+**What's NOT in this slice (final M.1 sub-slice):**
+
+- Screens — `ChatList`, `ChatThread` + Expo Router wiring (`app/chat.tsx`) + a navigation entry point.
+- WatermelonDB `chat_messages` / `chat_pending_sends` + the offline send queue.
+- VoiceButton ↔ expo-speech-recognition STT wiring.
+- Mobile RNTL test infra + the 13 M.1 RNTL cases.
+
+---
+
+## 2026-05-20 — Feature A: mobile chat UI leaf components (Section M.1, sub-slice 2)
+
+**Branch:** `phase3/chat/mobile-ui` (continues from sub-slice 1, no PR yet).
+
+**What landed.** The seven leaf presentational components of the M.1 chat surface, in `src/components/chat/`:
+
+- `FlagButton` — 🚩 report button, 48dp, `flag`/`flag-outline` Ionicon, filled red when flagged.
+- `CostTierBadge` — diagnostic tier label; `visible` defaults to `__DEV__` so patients never see it.
+- `AIDisclaimerBanner` — "AI hai — doctor nahi", dismissable; dark text on light amber for WCAG-AA contrast.
+- `TypingIndicator` — "AI soch raha hai…"; after a 12s timeout swaps to a retry prompt (retry resends via the idempotent `clientUuid`).
+- `OfflineChatBanner` — full-width banner; chat is online-only.
+- `EmergencyChatGuard` — intercepts the whole surface when a critical-bypass is active, redirecting to the critical-alert screen (mirrors the server emergency-skip).
+- `MessageBubble` — user (right/brand) vs assistant (left/gray); assistant bubbles always carry the flag button + tier badge; optional long-press for copy/edit.
+
+All follow the existing component conventions: NativeWind theme classes, `min-h-touch`/`min-w-touch` 48dp targets, `accessibilityRole`/`accessibilityLabel`, i18n via `t("chat.…")`.
+
+**Icons.** Used Ionicons `flag`/`flag-outline` via the existing `<Icon>` wrapper instead of the 4 custom SVGs phase3.md listed — Ionicons covers the flag states and chat bubbles need no icon, which removes the SVG-asset sub-task.
+
+**Gates:** mobile typecheck, lint (`max-warnings=0`), prettier — all clean.
+
+**What's NOT in this slice:**
+
+- Stateful integration components: `MessageList`, `ChatInputBar` + `VoiceButton`/`SendButton`, `ChatFlagDialog` modal.
+- Screens (`ChatList`, `ChatThread`) + Expo Router wiring + `More → Chat` entry.
+- WatermelonDB `chat_messages` / `chat_pending_sends`.
+- Mobile RNTL test infra + the 13 M.1 RNTL cases — deferred together (standing up RN + vitest is its own task; no mobile test config exists today).
+
+---
+
+## 2026-05-20 — Feature A: mobile chat UI foundation (Section M.1, sub-slice 1)
+
+**Branch:** `phase3/chat/mobile-ui` (off `main` at `6f2ee29`, PR pending). First sub-slice of the M.1 mobile chat surface — the UI-decision-free foundation (copy, service, types). No screens/components yet.
+
+**What landed.**
+
+- `src/i18n/phase3/chat.{hi,en}.json` — chat copy per M.1: disclaimer, empty-state + 4 suggestion chips, rate-limit, safety-rejected, offline, emergency-skip, flag-confirm, typing-timeout, flag-dialog labels, tier badges. Hinglish-Latin script to match the existing `hi.json` (the app's "Hindi" is Latin-script Hinglish, not Devanagari — M.1's own copy samples confirm this).
+- `src/i18n/config.ts` — merges the phase3 chat files under a `chat` namespace key; components read `t("chat.…")`.
+- `src/services/chat.ts` — wraps the four `/chat` endpoints. Reads (`listChatSessions`, `listSessionMessages`) fail soft and return empty, like `insights.ts`. `sendChatMessage` returns a discriminated `ChatSendOutcome` (`{ok:true,result}` / `{ok:false,code}`) so the screen can show the right copy for rate-limit / kill-switch / safety-rejection / stale-version without a throw.
+- `src/components/chat/types.ts` — `MessageBubbleProps`, `ChatInputBarProps`, `EmergencyChatGuardProps` verbatim from the M.1 component-tree spec.
+
+**Structural note.** phase3.md's Files index assumed `apps/mobile/src/screens/chat/…`, but the app uses **Expo Router file-based routing** (`app/`) with components in `src/components/<feature>/` — there is no `src/screens/`. The chat UI follows the real layout: route file in `app/`, components in `src/components/chat/`.
+
+**Gates:** mobile typecheck, lint (`max-warnings=0`), prettier — all clean. (No tests yet — mobile vitest/RNTL infra is stood up with the component sub-slice.)
+
+**What's NOT in this slice (remaining M.1 sub-slices):**
+
+- Components: `MessageBubble` + `FlagButton`, `CostTierBadge`, `AIDisclaimerBanner`, `TypingIndicator`, `MessageList`, `ChatInputBar` + `VoiceButton`/`SendButton`, `EmergencyChatGuard`, `OfflineChatBanner`.
+- Screens: `ChatList`, `ChatThread`, `ChatFlagDialog` (modal) + Expo Router wiring + a `More → Chat` entry point.
+- WatermelonDB: `chat_messages` + `chat_pending_sends` tables (offline send queue).
+- Mobile RNTL test infra (no mobile vitest config today) + the 13 M.1 RNTL cases.
+- 4 chat SVG icons.
 ## 2026-05-20 — Feature A: chat retention sweep (`CHAT_RETENTION_SWEEP` cron, CC.11 §5)
 
 **Branch:** `phase3/chat/retention-sweep` (off `main` at `6f2ee29`, PR pending). First slice of the remaining Feature A work after CC.12 (CC.12 itself is in flight as PR #66 on branch `phase3/feature-rollout`).

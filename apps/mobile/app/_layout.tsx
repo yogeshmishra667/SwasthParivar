@@ -68,6 +68,7 @@ export default function RootLayout(): JSX.Element | null {
               <Stack.Screen name="(auth)" />
               <Stack.Screen name="(onboarding)" />
               <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="chat" />
               <Stack.Screen name="patient/[id]" options={{ headerShown: true }} />
               <Stack.Screen name="sos" options={{ presentation: "fullScreenModal" }} />
             </Stack>
