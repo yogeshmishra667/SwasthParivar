@@ -6,6 +6,29 @@
 
 ---
 
+## 2026-05-20 — Feature A: mobile chat UI stateful components (Section M.1, sub-slice 3)
+
+**Branch:** `phase3/chat/mobile-ui` (continues from sub-slice 2, no PR yet).
+
+**What landed.** The five interactive components of the M.1 chat surface, in `src/components/chat/`:
+
+- `SendButton` — 48dp; `ActivityIndicator` while a send is in flight, disabled when the draft is empty.
+- `VoiceButton` — the `[+]` mic control. Presentational for now; the expo-speech-recognition STT wiring connects in the screen sub-slice, reusing the lazy-load + Expo Go guard pattern from `components/logging/VoiceInputNative.tsx`.
+- `ChatInputBar` — owns the draft text; renders voice + multiline input + send. `dailyRemaining <= 0` swaps the whole input for the Hindi rate-limit copy; offline disables send and shows the offline hint.
+- `MessageList` — `FlatList` of `MessageBubble` with `TypingIndicator` pinned as the footer; scroll near the top fires `onReachTop` for lazy history loading. Maps `ChatMessageDto` → bubble props (derives `flaggedByUser` from `flagReason`).
+- `ChatFlagDialog` — bottom-sheet `Modal`: reason radio list (medical_advice / wrong_info / disrespectful / other) + optional free-text note; submit gated on a reason being chosen.
+
+**Gates:** mobile typecheck, lint (`max-warnings=0`), prettier — all clean. (`exactOptionalPropertyTypes`: `MessageList` omits `tier` for user bubbles rather than passing `undefined`.)
+
+**What's NOT in this slice (final M.1 sub-slice):**
+
+- Screens — `ChatList`, `ChatThread` + Expo Router wiring (`app/chat.tsx`) + a navigation entry point.
+- WatermelonDB `chat_messages` / `chat_pending_sends` + the offline send queue.
+- VoiceButton ↔ expo-speech-recognition STT wiring.
+- Mobile RNTL test infra + the 13 M.1 RNTL cases.
+
+---
+
 ## 2026-05-20 — Feature A: mobile chat UI leaf components (Section M.1, sub-slice 2)
 
 **Branch:** `phase3/chat/mobile-ui` (continues from sub-slice 1, no PR yet).
