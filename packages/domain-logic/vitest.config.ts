@@ -80,6 +80,31 @@ export default defineConfig({
         "src/detectors/spike.ts": { lines: 100, functions: 100, branches: 95, statements: 100 },
         "src/detectors/stats.ts": { lines: 100, functions: 100, branches: 80, statements: 98 },
         "src/detectors/trend.ts": { lines: 95, functions: 95, branches: 85, statements: 95 },
+        // Phase 3 Feature B — cross-condition detector (phase3.md B.6,
+        // 95%+). Pinned at measured values.
+        "src/detectors/cross-condition.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 96,
+          statements: 98,
+        },
+        // Phase 3 Feature B — meal-category correlation detector
+        // (phase3.md B.6, 95%+). Pinned at measured values.
+        "src/detectors/correlation-meal.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 96,
+          statements: 98,
+        },
+        // Welch's t-test helpers. The branch floor is below the others:
+        // the incomplete-beta continued fraction has defensive TINY/
+        // max-iteration guards that normal inputs never trigger.
+        "src/detectors/stats-helpers.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 82,
+          statements: 94,
+        },
         "src/voice-parser/parser.ts": {
           // Ratchet raised 2026-05-14 after the voice-flow soft audit:
           // added word-boundary matching + intent-gating + 11 new test

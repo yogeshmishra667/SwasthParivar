@@ -15,6 +15,25 @@ export interface TypedReading {
   valueMgDl: number;
   readingType: "fasting" | "pre_meal" | "post_meal" | "random" | "bedtime";
   measuredAt: string;
+  /**
+   * Optional reading context. `festive` readings are excluded by the
+   * meal-category correlation detector (a Diwali sweet is not a
+   * dietary pattern). Absent → treated as `normal`.
+   */
+  context?: "normal" | "festive";
+}
+
+/**
+ * Minimum BP-reading shape the cross-condition detector needs. Mirrors
+ * the server `BPReading` Prisma model minus DB-internal fields. The
+ * caller maps Prisma rows to this shape at the service boundary so the
+ * detector stays pure.
+ */
+export interface TypedBPReading {
+  id: string;
+  systolic: number;
+  diastolic: number;
+  measuredAt: string;
 }
 
 /**
