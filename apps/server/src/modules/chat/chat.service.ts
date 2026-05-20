@@ -71,6 +71,8 @@ import type { SendMessageInput, SendMessageResult } from "./chat.types.js";
 const CRITICAL_BYPASS_WINDOW_MIN = 30;
 const RECENT_GLUCOSE_LIMIT = 10;
 const CONVERSATION_HISTORY_TURNS = 6;
+// Tier 2 exact-match response cache (phase3.md A.2 "cached" cost tier).
+const CHAT_CACHE_TTL_SEC = 24 * 60 * 60;
 const STATIC_SYSTEM_PROMPT = [
   "You are SwasthParivar — a Hindi-first health companion for Indian patients managing chronic conditions (diabetes, hypertension).",
   "Speak warmly. Use simple Hindi or Hinglish unless the patient writes in English. Keep replies under 4 sentences.",
@@ -199,6 +201,23 @@ export const sendMessage = async (input: SendMessageInput): Promise<SendMessageR
     );
   }
 
+  // Tier 2 — exact-match response cache. An identical repeat (same
+  // normalised text + intent, same patient) returns the prior
+  // safety-filtered answer with no Claude call. Exact-match means the
+  // cached answer is as safe for this turn as when it was first
+  // filtered — there is no semantic-drift risk.
+  const cacheKey = buildChatCacheKey(user.id, intent, input.message);
+  const cachedContent = await redis.get(cacheKey);
+  if (cachedContent !== null) {
+    return await persistAndReturn(
+      input,
+      user.id,
+      language,
+      { content: cachedContent, tier: "cached", tokensInput: 0, tokensOutput: 0 },
+      { flagged: false, safetyViolations: [], emergencySkipped: false },
+    );
+  }
+
   // Tier 2/3 — Claude. Gate Tier 3 separately so cost runaway can flip
   // sonnet off while keeping cached haiku flowing (per phase3.md A.10).
   let resolvedTier: ChatCostTier = tier;
@@ -274,6 +293,12 @@ export const sendMessage = async (input: SendMessageInput): Promise<SendMessageR
     );
   }
 
+  // Cache the safety-filtered answer so an identical repeat skips Claude.
+  // A rejected (unsafe) response is never cached.
+  if (filtered.safe) {
+    await redis.set(cacheKey, filtered.redactedContent, "EX", CHAT_CACHE_TTL_SEC);
+  }
+
   const persisted = await persistAndReturn(
     input,
     user.id,
@@ -343,6 +368,15 @@ const incrementDailyRateCounter = async (userId: string): Promise<number> => {
   const count = await redis.incr(key);
   if (count === 1) await redis.expire(key, 60 * 60 * 36);
   return count;
+};
+
+// Tier 2 cache key — per env, per user, per intent, with the normalised
+// question SHA-256-hashed. NODE_ENV-namespaced so a shared Redis can't
+// cross-contaminate environments.
+const buildChatCacheKey = (userId: string, intent: string, message: string): string => {
+  const normalised = message.trim().toLowerCase().replace(/\s+/g, " ");
+  const hash = createHash("sha256").update(normalised).digest("hex").slice(0, 32);
+  return `chat:cache:${env.NODE_ENV}:${userId}:${intent}:${hash}`;
 };
 
 const detectActiveEmergency = async (userId: string): Promise<boolean> => {
