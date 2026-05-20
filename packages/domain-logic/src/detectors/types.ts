@@ -18,6 +18,19 @@ export interface TypedReading {
 }
 
 /**
+ * Minimum BP-reading shape the cross-condition detector needs. Mirrors
+ * the server `BPReading` Prisma model minus DB-internal fields. The
+ * caller maps Prisma rows to this shape at the service boundary so the
+ * detector stays pure.
+ */
+export interface TypedBPReading {
+  id: string;
+  systolic: number;
+  diastolic: number;
+  measuredAt: string;
+}
+
+/**
  * Meal log shape the meal-correlation detector consumes. Mirrors the
  * server `MealLog` Prisma model minus DB-internal fields. Kept here so
  * the detector stays pure — caller maps Prisma rows to this shape at
