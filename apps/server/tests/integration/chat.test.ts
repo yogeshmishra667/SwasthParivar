@@ -325,6 +325,43 @@ describe("POST /api/v1/chat/message — happy path Tier 3", () => {
   });
 });
 
+describe("POST /api/v1/chat/message — Tier 2 cache", () => {
+  it("serves an identical repeat from cache with no second Claude call", async () => {
+    const claudeModule = await import("../../src/shared/ai/claude.js");
+    const mock = vi.mocked(claudeModule.generateResponse);
+    mock.mockClear();
+
+    const message = "Tell me about my sugar today.";
+    const first = await post({ client_uuid: randomUUID(), version: 1, message });
+    expect(first.status).toBe(201);
+    expect(mock.mock.calls.length).toBe(1);
+
+    // Same question (different clientUuid → not an idempotent replay).
+    const second = await post({ client_uuid: randomUUID(), version: 1, message });
+    expect(second.status).toBe(201);
+    expect(second.body.data.tier).toBe("cached");
+    expect(second.body.data.content).toBe(first.body.data.content);
+    // The cache served it — Claude was not called a second time.
+    expect(mock.mock.calls.length).toBe(1);
+  });
+
+  it("does not cache a safety-rejected response", async () => {
+    const claudeModule = await import("../../src/shared/ai/claude.js");
+    const mock = vi.mocked(claudeModule.generateResponse);
+    mock.mockClear();
+
+    claudeOverride.content = "Increase your metformin dose to 1000mg.";
+    const message = "Tell me about my sugar trend.";
+    const first = await post({ client_uuid: randomUUID(), version: 1, message });
+    expect(first.body.data.flagged).toBe(true);
+
+    // A rejected answer must not be cached — the repeat still calls Claude.
+    const second = await post({ client_uuid: randomUUID(), version: 1, message });
+    expect(second.status).toBe(201);
+    expect(mock.mock.calls.length).toBe(2);
+  });
+});
+
 describe("POST /api/v1/chat/messages/:id/flag", () => {
   it("marks the message as user-flagged", async () => {
     const send = await post({
