@@ -191,6 +191,37 @@ describe("POST /api/v1/family/invite", () => {
   });
 });
 
+describe("GET /api/v1/family/invites", () => {
+  it("guardian sees the pending invite addressed to them", async () => {
+    const res = await request(app)
+      .get("/api/v1/family/invites")
+      .set("Authorization", `Bearer ${guardianToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.invites).toHaveLength(1);
+    const invite = res.body.data.invites[0];
+    expect(invite.patient.id).toBe(patientId);
+    expect(invite.patient.name).toBe("Ramesh");
+    expect(invite.relationship).toBe("son");
+    expect(invite.linkId).toBeTruthy();
+  });
+
+  it("patient sees no invites — they sent it, did not receive one", async () => {
+    const res = await request(app)
+      .get("/api/v1/family/invites")
+      .set("Authorization", `Bearer ${patientToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.invites).toEqual([]);
+  });
+
+  it("outsider with no link sees an empty list", async () => {
+    const res = await request(app)
+      .get("/api/v1/family/invites")
+      .set("Authorization", `Bearer ${outsiderToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.invites).toEqual([]);
+  });
+});
+
 describe("dashboard access before accept", () => {
   it("guardian cannot read the patient dashboard while invite is pending", async () => {
     const res = await request(app)

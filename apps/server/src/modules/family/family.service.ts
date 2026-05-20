@@ -172,6 +172,33 @@ export const updatePrivacy = async (input: UpdatePrivacyInput): Promise<FamilyLi
 };
 
 // ─────────────────────────────────────────────────────────────
+// Listing (guardian — pending invites they have not yet seen)
+// ─────────────────────────────────────────────────────────────
+
+export interface PendingInviteSummary {
+  linkId: string;
+  relationship: string | null;
+  createdAt: Date;
+  patient: { id: string; name: string };
+}
+
+export const listPendingInvitesForGuardian = async (
+  guardianId: string,
+): Promise<PendingInviteSummary[]> => {
+  const rows = await prisma.familyLink.findMany({
+    where: { guardianId, status: "pending" },
+    orderBy: { createdAt: "desc" },
+    include: { patient: { select: { id: true, name: true } } },
+  });
+  return rows.map((r) => ({
+    linkId: r.id,
+    relationship: r.relationship,
+    createdAt: r.createdAt,
+    patient: { id: r.patient.id, name: r.patient.name },
+  }));
+};
+
+// ─────────────────────────────────────────────────────────────
 // Listing (guardian — patients I am connected to)
 // ─────────────────────────────────────────────────────────────
 

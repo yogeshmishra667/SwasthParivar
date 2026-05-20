@@ -14,16 +14,20 @@
 import type { Job } from "bullmq";
 import {
   detectAnomaly,
+  detectCrossCondition,
+  detectMealCategoryCorrelation,
   detectMealCorrelation,
   detectSpike,
   detectTrend,
   type DetectorResult,
   type MealEntry,
+  type TypedBPReading,
   type TypedReading,
 } from "@swasth/domain-logic";
 import type { GlucoseReadingType, Prisma } from "@prisma/client";
 
 import { prisma } from "../shared/database.js";
+import { getFlag } from "../shared/flags/index.js";
 import { logger } from "../shared/logger.js";
 
 // 35 days covers anomaly's 21-day requirement plus buffer. Meals only
@@ -47,12 +51,29 @@ const toTyped = (
     valueMgDl: number;
     readingType: GlucoseReadingType;
     measuredAt: Date;
+    context: string | null;
   }[],
 ): TypedReading[] =>
   rows.map((r) => ({
     id: r.id,
     valueMgDl: r.valueMgDl,
     readingType: r.readingType,
+    measuredAt: r.measuredAt.toISOString(),
+    ...(r.context === "festive" ? { context: "festive" as const } : {}),
+  }));
+
+const toTypedBP = (
+  rows: readonly {
+    id: string;
+    systolic: number;
+    diastolic: number;
+    measuredAt: Date;
+  }[],
+): TypedBPReading[] =>
+  rows.map((r) => ({
+    id: r.id,
+    systolic: r.systolic,
+    diastolic: r.diastolic,
     measuredAt: r.measuredAt.toISOString(),
   }));
 
@@ -92,10 +113,15 @@ export const processAnalyzeReading = async (job: Job<AnalyzeReadingJob>): Promis
   const readingCutoff = new Date(now.getTime() - READING_HISTORY_DAYS * dayMs);
   const mealCutoff = new Date(now.getTime() - MEAL_HISTORY_DAYS * dayMs);
 
-  const [readings, meals] = await Promise.all([
+  const [crossCondEnabled, correlationEnabled] = await Promise.all([
+    getFlag<boolean>("cross_condition_detector_enabled", false),
+    getFlag<boolean>("correlation_detector_enabled", false),
+  ]);
+
+  const [readings, meals, bpReadings] = await Promise.all([
     prisma.glucoseReading.findMany({
       where: { userId, measuredAt: { gte: readingCutoff } },
-      select: { id: true, valueMgDl: true, readingType: true, measuredAt: true },
+      select: { id: true, valueMgDl: true, readingType: true, measuredAt: true, context: true },
       orderBy: { measuredAt: "asc" },
     }),
     prisma.mealLog.findMany({
@@ -103,14 +129,22 @@ export const processAnalyzeReading = async (job: Job<AnalyzeReadingJob>): Promis
       select: { id: true, mealCategory: true, loggedAt: true },
       orderBy: { loggedAt: "asc" },
     }),
+    crossCondEnabled
+      ? prisma.bPReading.findMany({
+          where: { userId, measuredAt: { gte: readingCutoff } },
+          select: { id: true, systolic: true, diastolic: true, measuredAt: true },
+          orderBy: { measuredAt: "asc" },
+        })
+      : Promise.resolve([]),
   ]);
 
   const typedReadings = toTyped(readings);
   const mealEntries = toMealEntries(meals);
+  const typedBP = toTypedBP(bpReadings);
 
-  // All four detectors are synchronous pure functions. Promise.resolve
-  // keeps the contract symmetric in case a future detector goes async
-  // (e.g. a Claude-assisted cross-condition one).
+  // All detectors are synchronous pure functions. Promise.resolve keeps
+  // the contract symmetric. The two Phase 3 detectors run only when
+  // their kill-switch flag is enabled.
   const detectorRuns = await Promise.all([
     Promise.resolve(
       detectSpike({
@@ -143,6 +177,24 @@ export const processAnalyzeReading = async (job: Job<AnalyzeReadingJob>): Promis
         now,
       }),
     ),
+    crossCondEnabled
+      ? Promise.resolve(
+          detectCrossCondition({
+            glucoseReadings: typedReadings,
+            bpReadings: typedBP,
+            now,
+          }),
+        )
+      : Promise.resolve(null),
+    correlationEnabled
+      ? Promise.resolve(
+          detectMealCategoryCorrelation({
+            glucoseReadings: typedReadings,
+            mealLogs: mealEntries,
+            now,
+          }),
+        )
+      : Promise.resolve(null),
   ]);
 
   const results = detectorRuns.filter((r): r is DetectorResult => r !== null);

@@ -255,6 +255,7 @@
     "revokeConfirm": "Revoke access? This can be restored later.",
     "noPatients": "No patients connected yet.",
     "noGuardians": "No guardians connected yet.",
+    "noInvites": "No pending invites.",
     "viewDashboard": "View dashboard",
     "pendingFromYou": "You invited them — waiting",
     "pendingToYou": "{{name}} invited you",
