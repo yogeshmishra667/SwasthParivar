@@ -6,6 +6,18 @@
 
 ---
 
+## 2026-05-19 — Plan addition: CC.12 Feature Rollout & Targeting System
+
+**Type:** plan-only (no code). New section `CC.12 — Feature Rollout & Targeting System` added to `phase3.md` between `CC.11` and `Section M`.
+
+**Why:** the current flag service is global-boolean only — a feature is on for everyone or no one. CC.12 specifies a backward-compatible **targeting layer** (cohort allowlist + deterministic percentage bucket + global) so a Phase 3 feature can go live for a limited cohort first and roll back per-user without a redeploy. Specifies: the targeting flag-value shapes (CC.12.1), a pure `evaluateRollout` resolver (CC.12.2, 100%-coverage domain module), the `isFeatureEnabled` server helper (CC.12.3), a `GET /api/v1/config/features` mobile endpoint (CC.12.4), the rollback playbook (CC.12.5), flag-change observability (CC.12.6), gap list incl. maintenance-mode middleware (CC.12.7), and sequencing (CC.12.8 — lands when AI Chat hits its 10-user cohort).
+
+**Backward-compat guarantee recorded in CC.12.0:** purely additive. `getFlag`/`setFlag`/`/admin/flags` unchanged; plain boolean flags keep meaning global on/off; the three live flags untouched until each deliberately opts in.
+
+**Implementation:** deferred per the approved plan — superseded the earlier ad-hoc `ai_chat_cohort` flag idea. `Files index` updated with the four future CC.12 file paths.
+
+---
+
 ## 2026-05-19 — Week 9 chat module: service + routes + jobs + integration tests
 
 **PRs merged to main:**

@@ -971,6 +971,70 @@ These don't belong to any single feature but matter at integration time:
 
 ---
 
+## CC.12 — Feature Rollout & Targeting System
+
+**Why this exists.** "Merged to `main`" must never mean "live for every patient." Phase 3 ships four features that can harm a patient if wrong (chat, Silent Guardian, SOS) — each must be enable-able independently, testable on a small cohort first, and roll-back-able in seconds without a redeploy. The flag service already gives us the on/off kill switch. CC.12 adds the **targeting layer** so a feature can go live for _some_ users before _all_.
+
+**What already exists (do not rebuild).** `apps/server/src/shared/flags/` — Redis-backed flags, 30s in-process cache, pub/sub invalidation, 100-entry audit log, admin API (`GET/PUT /admin/flags/:key`, `GET /admin/flags/:key/audit`) behind `adminAuth` bearer token. Deploy is already manual — a flag-off feature stays dark after deploy. CC.12 **extends** this; it does not replace it.
+
+**The gap.** Every flag today is a global boolean. No cohort, no percentage, no per-user resolution. Each feature reads `getFlag<boolean>` ad hoc (`chat.service.ts`, `auth.service.ts`).
+
+### CC.12.0 — Backward compatibility (non-negotiable)
+
+CC.12 is purely additive. The `getFlag` / `setFlag` / `/admin/flags` surface does not change. A plain boolean flag value keeps meaning global on/off — `evaluateRollout` treats `true`/`false` as the global case and returns it unchanged. The three flags live today (`auth.otp.provider`, `ai_chat_enabled`, `ai_chat_tier3_enabled`) keep working untouched; each feature migrates from `getFlag<boolean>` to `isFeatureEnabled` only when it _deliberately_ opts in. `auth.otp.provider` is a string _config_ flag, not a rollout flag — CC.12 never applies to it. No existing test, endpoint, or behaviour changes on the day CC.12 lands.
+
+### CC.12.1 — Targeting model (flag value shapes)
+
+A rollout flag's value is one of — and the resolver accepts all of them, so existing boolean flags keep working unchanged:
+
+| Value shape                                                       | Meaning                                                                                                                                                  |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `true` / `false`                                                  | Global on/off. Back-compatible — every flag today.                                                                                                       |
+| `{ "rollout": "cohort", "userIds": ["…"] }`                       | Explicit allowlist. The "10 users only" case.                                                                                                            |
+| `{ "rollout": "percentage", "percent": 5 }`                       | Deterministic hash bucket — `bucket(featureKey,userId) < percent`. Stable per user: ramping `percent` up never flips an already-in user out.              |
+| `{ "rollout": "cohort_or_percentage", "userIds": ["…"], "percent": 5 }` | Union — internal cohort always in, plus a % of everyone else.                                                                                      |
+
+### CC.12.2 — Pure resolver (`packages/domain-logic/src/feature-rollout/`)
+
+`evaluateRollout(config, userBucket): boolean` — pure, zero-IO, **100% branch coverage** (locked in `vitest.config.ts`). The 0–99 `userBucket` is passed _in_ (time-as-parameter discipline) — the caller computes it; the domain-logic module imports no node builtins. New domain module beside `chat-*` etc.
+
+### CC.12.3 — Server gate helper (`apps/server/src/shared/rollout.ts`)
+
+`isFeatureEnabled(featureKey, userId): Promise<boolean>` — reads the flag via `getFlag`, computes the stable bucket via `node:crypto` SHA-256 of `featureKey + userId`, delegates the decision to `evaluateRollout`. Every feature service swaps its ad-hoc `getFlag<boolean>` for this one call. Fail-safe: Redis down → `getFlag` returns the default → feature stays OFF.
+
+### CC.12.4 — Mobile feature-config endpoint
+
+`GET /api/v1/config/features` (authed) → `{ features: { ai_chat: bool, silent_guardian: bool, sos: bool, … } }` **resolved for the calling user**. Mobile caches it with the 60s pattern already in `apps/mobile/src/services/auth-config.ts`, and gates navigation + screen registration so a patient never sees UI for a feature that is off for them. Server and mobile gate from the _same_ resolved answer — no drift.
+
+### CC.12.5 — Rollback / kill-switch playbook
+
+| Action                       | Call                                                                       | Propagation     |
+| ----------------------------- | -------------------------------------------------------------------------- | --------------- |
+| Kill a feature for everyone   | `PUT /admin/flags/<key> {"value": false}`                                  | ≤ 30s (pub/sub) |
+| Drop one user from a cohort   | `PUT` the flag with that `userId` removed                                  | ≤ 30s           |
+| Roll a percentage back        | lower `percent` — stable hash removes highest buckets only, deterministically | ≤ 30s        |
+| Audit who changed what        | `GET /admin/flags/<key>/audit`                                             | immediate       |
+
+Medical-safety carve-out unchanged: critical-bypass thresholds, the bypass chain, the 30-min cooldown, and the 3 AM streak boundary are **hardcoded and never flagged** (CLAUDE.md). CC.12 cannot target them.
+
+### CC.12.6 — Observability on flag changes
+
+`setFlag` emits a PostHog event `feature_flag_changed{key, rollout_kind, by}` and a Sentry breadcrumb, so a rollout/rollback shows up on the same dashboards as the feature's own metrics. The audit log (already 100 entries) remains the system-of-record.
+
+### CC.12.7 — Gaps worth closing ("to make the app great")
+
+1. **Maintenance-mode middleware** — a global `503` flag. Already called for in CC.8 + `docs/SETUP.md` P3; **prerequisite for the SOS migration**. Build with CC.12.
+2. **Mobile remote-config store** — a `useFeatureFlags()` Zustand store, the client side of CC.12.4. No general flag concept on mobile today.
+3. **Per-environment flag isolation** — if staging and prod ever share a Redis, flags collide. Namespace keys per `NODE_ENV` (the circuit-breaker keys already do this — `ai_circuit:…:${NODE_ENV}`).
+4. **Read-only flag dashboard** — flags are curl-only today; a minimal admin read view (or a checked-in `scripts/flags.sh`) cuts ops error during a live ramp.
+5. **Staging environment** — flags gate _runtime_; a staging env gates _pre-prod validation_. Out of code scope — infra note for the ops decision.
+
+### CC.12.8 — Implementation sequencing
+
+CC.12 is **not** a blocker for the Week 9-12 feature work — those already ship behind global boolean flags. CC.12 lands as a dedicated `chore(phase3)` slice **once a feature first needs a cohort** — i.e. when AI Chat goes to its 10-user internal cohort (Section M.7 row 1). At that point: ship CC.12.2 + CC.12.3 first (resolver + helper), retrofit `chat.service.ts` to `isFeatureEnabled`, then CC.12.4 with the chat mobile UI. CC.12.7 #1 (maintenance mode) is pulled earlier — before the SOS migration in Week 12.
+
+---
+
 ## Section M — Mobile (full UI design)
 
 > Replaces the 5-bullet stubs in A.11 / B.8 / C.11 / D.11. Server-first sequencing still applies: every screen below ships behind the same kill-switch flag the server uses; nothing renders until the flag is enabled for the cohort.
@@ -1552,6 +1616,13 @@ Use `.claude/skills/figma:figma-implement-design` once frames are finalised — 
 - `apps/server/src/workers/sos-escalation.{processor,worker}.ts`
 - `apps/server/tests/integration/{chat,insights-cross-condition,silent-guardian,sos}.test.ts`
 - `apps/server/prisma/migrations/{20260518_chat_messages,20260525_silent_guardian,20260601_sos_events}/migration.sql`
+
+**Created (future — CC.12 Feature Rollout & Targeting System):**
+
+- `apps/server/src/shared/rollout.ts` — `isFeatureEnabled` gate helper
+- `packages/domain-logic/src/feature-rollout/` — pure `evaluateRollout` resolver
+- `apps/server/src/modules/config/` — `GET /api/v1/config/features` mobile endpoint
+- `apps/server/src/shared/middleware/maintenance-mode.ts` — global 503 flag (CC.12.7 #1)
 
 **Created (domain-logic):**
 
