@@ -6,6 +6,30 @@
 
 ---
 
+## 2026-05-20 — Feature A: mobile chat UI — mobile-ux-reviewer fixes (Section M.1)
+
+**Branch:** `phase3/chat/mobile-ui` (continues from sub-slice 4, no PR yet).
+
+Ran the `mobile-ux-reviewer` agent over the 12 chat components + 2 screens and applied its findings:
+
+- **SendButton** now fires `hapticSave()` on tap — sending a turn is a consequential tap (design-system haptic rule).
+- **EmergencyChatGuard** resolve button gained `min-w-touch` (was `min-h-touch` only — 48dp width was not guaranteed).
+- **OfflineChatBanner** switched `bg-neutral` → `bg-gray-700` for a safe ~9:1 white-on-dark contrast (the `bg-neutral` 4.6:1 was borderline and not guaranteed under high-contrast mode).
+- Both screen **back buttons** now use a dedicated `chat.back` label instead of the flag-dialog `cancel` string (screen readers were announcing "Cancel" on the back arrow).
+- Documented two known follow-ups in code: `criticalBypassActive` is hardcoded `false` (no global critical-bypass store exists on mobile — the **server** still enforces emergency-skip in `chat.service`, so the guard is defense-in-depth); and `MessageBubble`'s long-press copy/edit needs a visible tap affordance before it is wired (long-press is banned for essential actions).
+
+Reviewer verified: 48dp targets, font tiers, AIDisclaimerBanner contrast (~11:1 AAA), accessibility roles/labels, the 12s typing timeout, and the ActiveProfileBadge headers all pass.
+
+**Gates:** mobile typecheck, lint, prettier — all clean.
+
+**Remaining M.1 (deliberately scoped as dedicated sub-slices):**
+
+- **WatermelonDB** `chat_messages` + `chat_pending_sends` — needs a schema `version` bump (1→2) **with a proper `schemaMigrations` file**; done wrong, an existing install loses its glucose-reading data. Must be written and verified carefully, not rushed.
+- **STT wiring** — `VoiceButton` → expo-speech-recognition (raw transcript), reusing the `VoiceInputNative` lazy-load/Expo Go guard pattern.
+- **RNTL test infra** — no mobile vitest/RNTL config exists; standing up React Native + vitest needs an actual test run to verify, then the 13 M.1 cases.
+
+---
+
 ## 2026-05-20 — Feature A: mobile chat UI screens + routing (Section M.1, sub-slice 4)
 
 **Branch:** `phase3/chat/mobile-ui` (continues from sub-slice 3, no PR yet).
