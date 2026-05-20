@@ -22,6 +22,21 @@
 **Gates:** mobile typecheck, lint (`max-warnings=0`), prettier — all clean.
 
 **Feature A tail remaining:** RNTL test harness + the 13 M.1 cases.
+## 2026-05-20 — Feature A: Tier 2 exact-match response cache
+
+**Branch:** `phase3/chat/tier2-cache` (off `main` at `c124260`, PR pending). First of the Feature A tail items, after the three Phase 3 PRs (#66/#67/#68) merged.
+
+**What landed.** Implemented the Tier 2 "cached" cost tier in `chat.service.ts` — previously `historyMatch` was hardcoded `false` and no response cache existed (only a placeholder comment).
+
+- After Tier-1 routing and before the Claude call, `sendMessage` checks a per-user exact-match cache. Key: `chat:cache:${NODE_ENV}:${userId}:${intent}:${sha256(normalised question)}`; normalisation is lowercase + trim + whitespace-collapse. A hit returns the stored answer directly with tier `cached` and **no Claude call**.
+- After a successful Claude turn the safety-filtered answer is written to the cache (`EX` 24h). A safety-**rejected** answer is never cached.
+- Exact-match (same normalised text + same intent, same patient) was chosen over a semantic/vector cache deliberately: the question is identical, so the cached answer is exactly as safe as when first filtered — no semantic-drift risk, and no embeddings/vector-store infra. A semantic cache remains a possible future upgrade.
+
+**Tests.** `chat.test.ts` +2 cases (12/12): an identical repeat is served from cache with no second Claude call (asserted via the mock call count); a safety-rejected answer is not cached (the repeat still calls Claude).
+
+**Gates:** server typecheck (5 workspaces), lint (`max-warnings=0`), prettier — clean; chat integration 12/12.
+
+**Feature A tail remaining:** WatermelonDB offline layer (`chat_messages` + `chat_pending_sends`, via the `db-reviewer` agent); RNTL test harness + the 13 M.1 cases.
 
 ---
 
