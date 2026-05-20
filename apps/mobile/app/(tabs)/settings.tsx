@@ -66,12 +66,6 @@ export default function SettingsScreen(): JSX.Element {
         onPress={() => setLargeText(!largeText)}
       />
 
-      <Button
-        label={t("chat.settingsEntry")}
-        variant="ghost"
-        onPress={() => router.push("/chat")}
-      />
-
       <View className="mt-2 gap-2">
         <Text className="text-important font-semibold">
           {t("settings.householdSection", { defaultValue: "Family on this device" })}

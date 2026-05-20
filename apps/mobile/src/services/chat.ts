@@ -35,6 +35,9 @@ export interface ChatSessionDto {
   startedAt: string;
   endedAt: string | null;
   language: "hi" | "en";
+  // First user turn — shown as the session-list row preview. Null when
+  // the session has no user message yet (server-minted, none sent).
+  preview: string | null;
 }
 
 export interface ChatMessageDto {

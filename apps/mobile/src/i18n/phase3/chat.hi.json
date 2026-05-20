@@ -25,9 +25,15 @@
   "sessionsTitle": "Purani baatein",
   "newChat": "Nayi baat shuru karein",
   "justNow": "abhi",
+  "date": {
+    "minutesAgo": "{{count}} min pehle",
+    "hoursAgo": "{{count}} ghante pehle",
+    "yesterday": "Kal",
+    "daysAgo": "{{count}} din pehle"
+  },
   "loadError": "Chat load nahi hua. Phir try karein.",
   "unavailable": "AI chat abhi available nahi hai. Thodi der baad try karein.",
-  "settingsEntry": "AI se sawaal poochein",
+  "dashboardEntry": "AI se sawaal poochein",
   "flagDialog": {
     "title": "Is message ko flag karein",
     "subtitle": "Kya galat laga?",
