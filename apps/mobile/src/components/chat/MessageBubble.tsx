@@ -1,7 +1,11 @@
 // Phase 3 — AI Chat: message bubble (phase3.md M.1).
 // User messages sit right (brand bg); assistant messages sit left
 // (gray bg) and always carry a 🚩 flag button + a cost-tier badge.
-// Optional long-press surfaces copy / edit-and-resend.
+//
+// `onLongPress` (copy / edit-and-resend) is a power-user shortcut only.
+// The design system bans long-press for ESSENTIAL actions — so before
+// this is wired, copy/edit must also be reachable via a visible tap
+// target (e.g. a "⋯" affordance on the bubble row).
 
 import { View, Text, Pressable } from "react-native";
 import { useTranslation } from "react-i18next";

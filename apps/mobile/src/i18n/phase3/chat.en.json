@@ -19,6 +19,7 @@
   "typingTimeout": "AI is taking a while — please try again",
   "inputPlaceholder": "Type here…",
   "send": "Send",
+  "back": "Back",
   "voice": "Ask by voice",
   "retry": "Try again",
   "sessionsTitle": "Past conversations",

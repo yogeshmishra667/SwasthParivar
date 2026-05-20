@@ -28,7 +28,7 @@ export const EmergencyChatGuard = ({
         onPress={onResolveCritical}
         accessibilityRole="button"
         accessibilityLabel={t("chat.emergencyResolve")}
-        className="min-h-touch items-center justify-center rounded-2xl bg-critical px-6 active:opacity-80"
+        className="min-h-touch min-w-touch items-center justify-center rounded-2xl bg-critical px-6 active:opacity-80"
       >
         <Text className="text-important font-semibold text-white">
           {t("chat.emergencyResolve")}

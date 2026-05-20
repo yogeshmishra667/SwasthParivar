@@ -4,6 +4,7 @@
 
 import { Pressable, Text, ActivityIndicator } from "react-native";
 import { useTranslation } from "react-i18next";
+import { hapticSave } from "@/utils/haptics";
 
 interface SendButtonProps {
   onPress: () => void;
@@ -18,9 +19,15 @@ export const SendButton = ({
 }: SendButtonProps): JSX.Element => {
   const { t } = useTranslation();
   const isDisabled = loading || disabled;
+  // Sending a turn is a consequential tap — haptic per the design-system
+  // rule, fired before the async send begins.
+  const handlePress = (): void => {
+    hapticSave();
+    onPress();
+  };
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       disabled={isDisabled}
       accessibilityRole="button"
       accessibilityLabel={t("chat.send")}

@@ -41,7 +41,7 @@ export default function ChatListScreen(): JSX.Element {
           <Pressable
             onPress={() => router.back()}
             accessibilityRole="button"
-            accessibilityLabel={t("chat.flagDialog.cancel")}
+            accessibilityLabel={t("chat.back")}
             className="min-h-touch min-w-touch items-center justify-center"
             hitSlop={8}
           >

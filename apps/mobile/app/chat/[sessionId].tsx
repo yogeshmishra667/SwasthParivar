@@ -149,13 +149,17 @@ export default function ChatThreadScreen(): JSX.Element {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
+      {/* criticalBypassActive is false until a global critical-bypass
+          state store exists on mobile (follow-up). This guard is
+          defense-in-depth — the server already enforces emergency-skip
+          in chat.service (the canned redirect is returned regardless). */}
       <EmergencyChatGuard criticalBypassActive={false} onResolveCritical={() => router.back()}>
         <View className="flex-row items-center justify-between border-b border-gray-200 px-2 py-2">
           <View className="flex-row items-center gap-1">
             <Pressable
               onPress={() => router.back()}
               accessibilityRole="button"
-              accessibilityLabel={t("chat.flagDialog.cancel")}
+              accessibilityLabel={t("chat.back")}
               className="min-h-touch min-w-touch items-center justify-center"
               hitSlop={8}
             >
