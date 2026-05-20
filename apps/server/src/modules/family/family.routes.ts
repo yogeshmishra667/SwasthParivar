@@ -2,6 +2,7 @@
 //
 // Endpoint map (CLAUDE.md "Family & Profiles"):
 //   POST /invite                          patient invites a guardian
+//   GET  /invites                         guardian lists their pending invites
 //   POST /invites/:linkId/respond         guardian accepts | declines
 //   PUT  /links/:linkId/privacy           patient updates visibility /
 //                                         either side revokes
@@ -26,6 +27,8 @@ export const familyRouter: Router = Router();
 familyRouter.use(requireAuth);
 
 familyRouter.post("/invite", validateBody(inviteCreateSchema), controller.postInvite);
+
+familyRouter.get("/invites", controller.getInvites);
 
 familyRouter.post(
   "/invites/:linkId/respond",

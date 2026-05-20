@@ -72,6 +72,11 @@ export const putLinkPrivacy = async (req: Request, res: Response): Promise<void>
   ok(res, { link });
 };
 
+export const getInvites = async (req: Request, res: Response): Promise<void> => {
+  const invites = await service.listPendingInvitesForGuardian(req.auth!.sub);
+  ok(res, { invites });
+};
+
 export const getPatients = async (req: Request, res: Response): Promise<void> => {
   const q = req.query as { status: FamilyLinkStatus };
   const patients = await service.listPatientsForGuardian({

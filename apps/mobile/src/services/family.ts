@@ -34,6 +34,13 @@ export interface PatientLinkSummary {
   acceptedAt: string | null;
 }
 
+export interface PendingInviteSummary {
+  linkId: string;
+  relationship: string | null;
+  createdAt: string;
+  patient: { id: string; name: string };
+}
+
 export interface InviteInput {
   guardianPhone: string;
   relationship?: string;
@@ -97,6 +104,21 @@ export const revokeLink = async (linkId: string): Promise<FamilyLinkDto | null> 
   } catch (err) {
     logError("revokeLink", err);
     return null;
+  }
+};
+
+// Pending invites addressed to the caller (acting as guardian). The
+// guardian opens the Family tab and discovers invites here — this is
+// the in-app path that does not depend on push delivery.
+export const listPendingInvites = async (): Promise<PendingInviteSummary[]> => {
+  try {
+    const res = await api.get<{ success: boolean; data: { invites: PendingInviteSummary[] } }>(
+      "/family/invites",
+    );
+    return res.data.invites;
+  } catch (err) {
+    logError("listPendingInvites", err);
+    return [];
   }
 };
 
