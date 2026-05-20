@@ -6,6 +6,31 @@
 
 ---
 
+## 2026-05-20 — Feature A: mobile chat UI foundation (Section M.1, sub-slice 1)
+
+**Branch:** `phase3/chat/mobile-ui` (off `main` at `6f2ee29`, PR pending). First sub-slice of the M.1 mobile chat surface — the UI-decision-free foundation (copy, service, types). No screens/components yet.
+
+**What landed.**
+
+- `src/i18n/phase3/chat.{hi,en}.json` — chat copy per M.1: disclaimer, empty-state + 4 suggestion chips, rate-limit, safety-rejected, offline, emergency-skip, flag-confirm, typing-timeout, flag-dialog labels, tier badges. Hinglish-Latin script to match the existing `hi.json` (the app's "Hindi" is Latin-script Hinglish, not Devanagari — M.1's own copy samples confirm this).
+- `src/i18n/config.ts` — merges the phase3 chat files under a `chat` namespace key; components read `t("chat.…")`.
+- `src/services/chat.ts` — wraps the four `/chat` endpoints. Reads (`listChatSessions`, `listSessionMessages`) fail soft and return empty, like `insights.ts`. `sendChatMessage` returns a discriminated `ChatSendOutcome` (`{ok:true,result}` / `{ok:false,code}`) so the screen can show the right copy for rate-limit / kill-switch / safety-rejection / stale-version without a throw.
+- `src/components/chat/types.ts` — `MessageBubbleProps`, `ChatInputBarProps`, `EmergencyChatGuardProps` verbatim from the M.1 component-tree spec.
+
+**Structural note.** phase3.md's Files index assumed `apps/mobile/src/screens/chat/…`, but the app uses **Expo Router file-based routing** (`app/`) with components in `src/components/<feature>/` — there is no `src/screens/`. The chat UI follows the real layout: route file in `app/`, components in `src/components/chat/`.
+
+**Gates:** mobile typecheck, lint (`max-warnings=0`), prettier — all clean. (No tests yet — mobile vitest/RNTL infra is stood up with the component sub-slice.)
+
+**What's NOT in this slice (remaining M.1 sub-slices):**
+
+- Components: `MessageBubble` + `FlagButton`, `CostTierBadge`, `AIDisclaimerBanner`, `TypingIndicator`, `MessageList`, `ChatInputBar` + `VoiceButton`/`SendButton`, `EmergencyChatGuard`, `OfflineChatBanner`.
+- Screens: `ChatList`, `ChatThread`, `ChatFlagDialog` (modal) + Expo Router wiring + a `More → Chat` entry point.
+- WatermelonDB: `chat_messages` + `chat_pending_sends` tables (offline send queue).
+- Mobile RNTL test infra (no mobile vitest config today) + the 13 M.1 RNTL cases.
+- 4 chat SVG icons.
+
+---
+
 ## 2026-05-19 — Plan addition: CC.12 Feature Rollout & Targeting System
 
 **Type:** plan-only (no code). New section `CC.12 — Feature Rollout & Targeting System` added to `phase3.md` between `CC.11` and `Section M`.

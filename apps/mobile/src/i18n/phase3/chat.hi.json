@@ -1,0 +1,45 @@
+{
+  "title": "Chat",
+  "disclaimer": "AI hai — doctor nahi. Dawai ke baare mein doctor se poochein.",
+  "emptyState": "Koi sawaal hai? Sugar, BP, ya khaane ke baare mein poochein.",
+  "suggestions": {
+    "food": "Aaj kya khaun?",
+    "highSugar": "Sugar zyada kyun?",
+    "walkTime": "Walk ka time",
+    "streak": "Streak kaisi hai?"
+  },
+  "rateLimit": "Aaj 3 baar baat ho chuki — kal phir poochein 🙂",
+  "safetyRejected": "Yeh sawaal doctor se poochna best rahega.",
+  "offlineSend": "Internet aane par message bhej diya jayega.",
+  "offlineBanner": "Offline — chat ke liye internet chahiye.",
+  "emergencySkip": "Pehle critical alert handle karein. Doctor ko abhi call karein.",
+  "emergencyResolve": "Critical alert dekhein",
+  "flagConfirm": "Aapne is message ko flag kiya. Hum review karenge. Dhanyavaad 🙏",
+  "typing": "AI soch raha hai…",
+  "typingTimeout": "AI thodi der le raha hai — phir try karein",
+  "inputPlaceholder": "Type karein…",
+  "send": "Send",
+  "retry": "Phir try karein",
+  "sessionsTitle": "Purani baatein",
+  "newChat": "Nayi baat shuru karein",
+  "justNow": "abhi",
+  "loadError": "Chat load nahi hua. Phir try karein.",
+  "flagDialog": {
+    "title": "Is message ko flag karein",
+    "subtitle": "Kya galat laga?",
+    "reasons": {
+      "medical_advice": "Dawai ya ilaaj ki salah di",
+      "wrong_info": "Galat jaankari",
+      "disrespectful": "Aadar ke saath baat nahi ki",
+      "other": "Kuch aur"
+    },
+    "notePlaceholder": "Aur kuch batana hai? (optional)",
+    "submit": "Flag bhejein",
+    "cancel": "Rehne dein"
+  },
+  "tier": {
+    "template": "Tayyar jawab",
+    "cached": "Cached",
+    "sonnet": "AI"
+  }
+}

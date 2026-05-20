@@ -1,0 +1,45 @@
+{
+  "title": "Chat",
+  "disclaimer": "This is AI — not a doctor. Ask your doctor about medicines.",
+  "emptyState": "Have a question? Ask about sugar, BP, or food.",
+  "suggestions": {
+    "food": "What should I eat today?",
+    "highSugar": "Why is my sugar high?",
+    "walkTime": "When should I walk?",
+    "streak": "How is my streak?"
+  },
+  "rateLimit": "You've chatted 3 times today — ask again tomorrow 🙂",
+  "safetyRejected": "It's best to ask your doctor this question.",
+  "offlineSend": "Your message will be sent when you're back online.",
+  "offlineBanner": "Offline — chat needs an internet connection.",
+  "emergencySkip": "Handle the critical alert first. Call your doctor now.",
+  "emergencyResolve": "View critical alert",
+  "flagConfirm": "You've flagged this message. We'll review it. Thank you 🙏",
+  "typing": "AI is thinking…",
+  "typingTimeout": "AI is taking a while — please try again",
+  "inputPlaceholder": "Type here…",
+  "send": "Send",
+  "retry": "Try again",
+  "sessionsTitle": "Past conversations",
+  "newChat": "Start a new chat",
+  "justNow": "just now",
+  "loadError": "Chat failed to load. Please try again.",
+  "flagDialog": {
+    "title": "Flag this message",
+    "subtitle": "What went wrong?",
+    "reasons": {
+      "medical_advice": "Gave medication or treatment advice",
+      "wrong_info": "Incorrect information",
+      "disrespectful": "Was not respectful",
+      "other": "Something else"
+    },
+    "notePlaceholder": "Anything else to add? (optional)",
+    "submit": "Send flag",
+    "cancel": "Cancel"
+  },
+  "tier": {
+    "template": "Ready answer",
+    "cached": "Cached",
+    "sonnet": "AI"
+  }
+}
