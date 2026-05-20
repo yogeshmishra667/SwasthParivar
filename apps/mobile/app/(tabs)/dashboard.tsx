@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, ScrollView, RefreshControl } from "react-native";
+import { View, Text, ScrollView, RefreshControl, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
@@ -339,6 +339,23 @@ export default function DashboardScreen(): JSX.Element {
             card before day 14, then the estimate (or "need more
             readings" copy) once unlocked. */}
         <HbA1cCard userStageDays={userStageDays} />
+
+        {/* AI chat entry — placed below the medical cards so the
+            glucose reading stays top-of-fold. */}
+        <Pressable
+          onPress={() => router.push("/chat")}
+          accessibilityRole="button"
+          accessibilityLabel={t("chat.dashboardEntry")}
+          className="min-h-touch flex-row items-center gap-3 rounded-2xl bg-white px-4 py-3 active:opacity-80"
+        >
+          <View className="h-12 w-12 items-center justify-center rounded-full bg-blue-100">
+            <Icon name="chatbubbles-outline" size={24} color="#2563EB" />
+          </View>
+          <Text className="flex-1 text-important font-semibold text-gray-900">
+            {t("chat.dashboardEntry")}
+          </Text>
+          <Icon name="chevron-forward" size={20} color="#6B7280" />
+        </Pressable>
 
         <Button label={t("dashboard.logReading")} onPress={() => router.push("/(tabs)/log")} />
       </ScrollView>

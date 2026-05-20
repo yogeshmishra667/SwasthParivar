@@ -13,6 +13,7 @@ import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { listChatSessions, type ChatSessionDto } from "@/services/chat";
+import { relativeDate } from "@/utils/date";
 
 export default function ChatListScreen(): JSX.Element {
   const { t } = useTranslation();
@@ -76,11 +77,24 @@ export default function ChatListScreen(): JSX.Element {
             <Pressable
               onPress={() => openThread(item.id)}
               accessibilityRole="button"
-              className="mb-2 min-h-touch flex-row items-center justify-between rounded-2xl bg-white px-4 py-3 active:opacity-80"
+              className="mb-2 min-h-touch flex-row items-center gap-3 rounded-2xl bg-white px-4 py-3 active:opacity-80"
             >
-              <Text className="text-important text-gray-900">
-                {new Date(item.startedAt).toLocaleString()}
-              </Text>
+              <View className="flex-1">
+                {item.preview ? (
+                  <>
+                    <Text className="text-important text-gray-900" numberOfLines={2}>
+                      {item.preview}
+                    </Text>
+                    <Text className="mt-0.5 text-body text-neutral">
+                      {relativeDate(item.startedAt, t)}
+                    </Text>
+                  </>
+                ) : (
+                  <Text className="text-important text-gray-900">
+                    {relativeDate(item.startedAt, t)}
+                  </Text>
+                )}
+              </View>
               <Icon name="chevron-forward" size={20} color="#6B7280" />
             </Pressable>
           )}

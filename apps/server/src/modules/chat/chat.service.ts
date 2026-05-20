@@ -176,7 +176,7 @@ export const sendMessage = async (input: SendMessageInput): Promise<SendMessageR
     );
   }
 
-  const tier = pickCostTier({
+  let tier = pickCostTier({
     intent,
     userStageDays,
     readingsAvailable: recentReadings.length,
@@ -186,6 +186,12 @@ export const sendMessage = async (input: SendMessageInput): Promise<SendMessageR
     // (user, intent). Until then, `false` keeps routing honest.
     historyMatch: false,
   });
+
+  // No Claude key configured → run chat in template-only mode. Tiers 2/3
+  // would reach the Claude wrapper, which throws on a missing key and
+  // surfaces as a 500. Forcing `template` keeps every turn on the pure
+  // Tier-1 lookup table — a valid interim mode while the key is pending.
+  if (!env.CLAUDE_API_KEY) tier = "template";
 
   // Tier 1 — Tier-1 lookup table OR safety pre-empt for medication.
   if (tier === "template") {
@@ -636,11 +642,22 @@ const deriveUserTurnUuid = (clientUuid: string): string => {
 
 // Listing helpers used by the controller.
 
+// One row of the session list. `preview` is the first user turn — the
+// recognizable "what was this chat about" snippet the list screen shows
+// instead of a bare timestamp.
+export interface ChatSessionListItem {
+  id: string;
+  startedAt: Date;
+  endedAt: Date | null;
+  language: ChatSession["language"];
+  preview: string | null;
+}
+
 export const listSessions = async (params: {
   userId: string;
   limit: number;
   cursor?: string;
-}): Promise<{ data: ChatSession[]; cursor: string | null; hasMore: boolean }> => {
+}): Promise<{ data: ChatSessionListItem[]; cursor: string | null; hasMore: boolean }> => {
   const rows = await prisma.chatSession.findMany({
     where: {
       userId: params.userId,
@@ -649,9 +666,25 @@ export const listSessions = async (params: {
     },
     orderBy: { startedAt: "desc" },
     take: params.limit + 1,
+    include: {
+      // First user turn only — cheap, and it is what the patient typed
+      // (user content is never safety-filtered, so it is safe to echo).
+      messages: {
+        where: { role: "user" },
+        orderBy: { createdAt: "asc" },
+        take: 1,
+        select: { content: true },
+      },
+    },
   });
   const hasMore = rows.length > params.limit;
-  const data = rows.slice(0, params.limit);
+  const data: ChatSessionListItem[] = rows.slice(0, params.limit).map((r) => ({
+    id: r.id,
+    startedAt: r.startedAt,
+    endedAt: r.endedAt,
+    language: r.language,
+    preview: r.messages[0]?.content ?? null,
+  }));
   const cursor = hasMore && data.length > 0 ? data[data.length - 1]!.startedAt.toISOString() : null;
   return { data, cursor, hasMore };
 };

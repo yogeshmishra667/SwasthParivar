@@ -25,9 +25,15 @@
   "sessionsTitle": "Past conversations",
   "newChat": "Start a new chat",
   "justNow": "just now",
+  "date": {
+    "minutesAgo": "{{count}} min ago",
+    "hoursAgo": "{{count}} hr ago",
+    "yesterday": "Yesterday",
+    "daysAgo": "{{count}} days ago"
+  },
   "loadError": "Chat failed to load. Please try again.",
   "unavailable": "AI chat is unavailable right now. Please try again later.",
-  "settingsEntry": "Ask the AI assistant",
+  "dashboardEntry": "Ask the AI assistant",
   "flagDialog": {
     "title": "Flag this message",
     "subtitle": "What went wrong?",
