@@ -146,7 +146,7 @@ const seedCrossConditionFixture = async (): Promise<string> => {
       context: "normal",
       source: "manual",
       measuredAt: new Date(dayMs - 2 * 60 * 60 * 1000), // 2h before glucose
-      streakCreditedTo: new Date(dayMs).toISOString().slice(0, 10),
+      streakCreditedTo: new Date(new Date(dayMs).toISOString().slice(0, 10)),
       version: 1,
     });
 
@@ -161,7 +161,7 @@ const seedCrossConditionFixture = async (): Promise<string> => {
       context: "normal",
       source: "manual",
       measuredAt: new Date(dayMs),
-      streakCreditedTo: new Date(dayMs).toISOString().slice(0, 10),
+      streakCreditedTo: new Date(new Date(dayMs).toISOString().slice(0, 10)),
       version: 1,
     });
   }
@@ -217,7 +217,7 @@ describe("cross_condition_detector_enabled = ON", () => {
         context: "normal",
         source: "manual",
         measuredAt: new Date(),
-        streakCreditedTo: new Date().toISOString().slice(0, 10),
+        streakCreditedTo: new Date(new Date().toISOString().slice(0, 10)),
         version: 1,
       },
     });
