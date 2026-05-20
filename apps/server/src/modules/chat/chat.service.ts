@@ -418,8 +418,12 @@ const loadRecentReadings = async (userId: string): Promise<readonly GlucoseReadi
 const loadHistory = async (
   sessionId: string,
 ): Promise<readonly { role: "user" | "assistant"; content: string }[]> => {
+  // `flagged: false` — never replay a safety-rejected turn back into the
+  // Claude prompt. Stored content is already the redacted replacement,
+  // so this is defense-in-depth: a structural guarantee rather than
+  // relying on every persist site passing redacted content.
   const rows = await prisma.chatMessage.findMany({
-    where: { sessionId, role: { in: ["user", "assistant"] } },
+    where: { sessionId, role: { in: ["user", "assistant"] }, flagged: false },
     orderBy: { createdAt: "asc" },
     take: CONVERSATION_HISTORY_TURNS * 2,
     select: { role: true, content: true },
