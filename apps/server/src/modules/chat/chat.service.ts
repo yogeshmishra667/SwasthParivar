@@ -51,7 +51,7 @@ import { env } from "../../config/env.js";
 import { prisma } from "../../shared/database.js";
 import { redis } from "../../shared/redis.js";
 import { logger } from "../../shared/logger.js";
-import { getFlag } from "../../shared/flags/index.js";
+import { isFeatureEnabled } from "../../shared/rollout.js";
 import { checkIdempotent } from "../../shared/idempotency.js";
 import { capture as captureAnalyticsEvent } from "../../shared/analytics/posthog.js";
 import {
@@ -95,8 +95,10 @@ export const sendMessage = async (input: SendMessageInput): Promise<SendMessageR
     return buildReplayResult(idem.existing);
   }
 
-  // 2. Kill-switch flag.
-  const enabled = await getFlag<boolean>("ai_chat_enabled", false);
+  // 2. Kill-switch flag — resolved per-user via the CC.12 rollout
+  // gate. A plain boolean flag still means global on/off; a cohort or
+  // percentage flag enables chat for only the targeted users.
+  const enabled = await isFeatureEnabled("ai_chat_enabled", input.userId);
   if (!enabled) {
     throw new DomainError("CHAT_DISABLED", "AI chat is disabled — try again later.");
   }
@@ -201,7 +203,7 @@ export const sendMessage = async (input: SendMessageInput): Promise<SendMessageR
   // sonnet off while keeping cached haiku flowing (per phase3.md A.10).
   let resolvedTier: ChatCostTier = tier;
   if (tier === "sonnet") {
-    const tier3Enabled = await getFlag<boolean>("ai_chat_tier3_enabled", false);
+    const tier3Enabled = await isFeatureEnabled("ai_chat_tier3_enabled", user.id);
     if (!tier3Enabled) resolvedTier = "cached";
   }
 

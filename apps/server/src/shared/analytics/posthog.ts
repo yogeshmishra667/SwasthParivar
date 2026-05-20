@@ -86,6 +86,14 @@ export interface EventPropsMap {
     cost_tier: string;
     flag_reason: string;
   };
+  // CC.12.6 — emitted by setFlag on every flag write so a rollout or
+  // rollback lands on the same dashboards as the feature's own metrics.
+  // The Redis audit log remains the system-of-record.
+  feature_flag_changed: {
+    key: string;
+    rollout_kind: "boolean" | "cohort" | "percentage" | "cohort_or_percentage" | "other";
+    by: string;
+  };
 }
 
 export type EventName = keyof EventPropsMap;
