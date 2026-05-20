@@ -6,6 +6,22 @@
 
 ---
 
+## 2026-05-20 — Feature A: chat voice input (STT) wiring (Section M.1)
+
+**Branch:** `phase3/chat/mobile-ui` (continues from the UX-fixes commit, no PR yet).
+
+Connected `VoiceButton` to speech-to-text — the `[+]` mic in the chat input bar now works.
+
+- `VoiceButton.tsx` rewritten — props are now `{ onTranscribe, disabled }`. Lazy-loads the native implementation behind the same Expo Go guard as `components/logging/VoiceInput.tsx` (the expo-speech-recognition native module crashes the bundle under Expo Go on Android); falls back to an inert mic when voice is unavailable, still loading, or the input is disabled.
+- `VoiceButtonNative.tsx` (new) — drives `expo-speech-recognition`: toggles recording, 5s silence timeout, unmount cleanup. On the `end` event it hands the **raw transcript** to `onTranscribe` — chat wants the spoken text verbatim, so (unlike `VoiceInputNative`) there is no glucose parsing. Recognition locale is `hi-IN` / `en-IN` from the preferences store.
+- `ChatInputBar` — a finished transcript is appended to the current draft text.
+
+**Gates:** mobile typecheck, lint (`max-warnings=0`), prettier — all clean.
+
+**Remaining M.1 (dedicated sub-slices):** WatermelonDB offline layer (`chat_messages` + `chat_pending_sends` — needs a schema migration; data-loss risk if done wrong) and the RNTL test harness + 13 M.1 cases (no mobile vitest config exists; needs a real test run to verify). Both deliberately left for focused, verifiable work.
+
+---
+
 ## 2026-05-20 — Feature A: mobile chat UI — mobile-ux-reviewer fixes (Section M.1)
 
 **Branch:** `phase3/chat/mobile-ui` (continues from sub-slice 4, no PR yet).

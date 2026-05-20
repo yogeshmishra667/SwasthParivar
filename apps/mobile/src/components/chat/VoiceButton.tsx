@@ -1,35 +1,56 @@
 // Phase 3 — AI Chat: voice input button (phase3.md M.1).
 //
-// The `[+]` mic control in the input bar. This is the presentational
-// control; the speech-to-text engine wiring (expo-speech-recognition,
-// reusing the lazy-load + Expo Go guard pattern from
-// `components/logging/VoiceInputNative.tsx`) is connected by the chat
-// screen, which owns the transcript → input-text flow. `onTranscribe`
-// is the callback the STT layer invokes with a finished transcript.
+// The `[+]` mic control in the chat input bar. Reuses the Phase 1 voice
+// stack (expo-speech-recognition) but yields the RAW transcript — chat
+// wants the spoken text, not a parsed glucose number. The native
+// implementation is lazy-loaded behind the same Expo Go guard used by
+// `components/logging/VoiceInput.tsx` (the native module crashes the
+// bundle if imported under Expo Go on Android).
 
-import { Pressable } from "react-native";
+import { useEffect, useState, type ComponentType } from "react";
+import { Pressable, Platform } from "react-native";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/components/ui/Icon";
+import { isExpoGo } from "@/utils/runtime";
 
-interface VoiceButtonProps {
-  onPress: () => void;
+export interface VoiceButtonProps {
+  onTranscribe: (text: string) => void;
   disabled?: boolean;
 }
 
-export const VoiceButton = ({ onPress, disabled = false }: VoiceButtonProps): JSX.Element => {
+const voiceUnavailable = isExpoGo && Platform.OS === "android";
+
+// Rendered when voice can't run (Expo Go on Android), while the native
+// module is still loading, or when the input bar is disabled.
+const InertMic = (): JSX.Element => {
   const { t } = useTranslation();
   return (
     <Pressable
-      onPress={onPress}
-      disabled={disabled}
+      disabled
       accessibilityRole="button"
+      accessibilityState={{ disabled: true }}
       accessibilityLabel={t("chat.voice")}
-      accessibilityState={{ disabled }}
-      className={`min-h-touch min-w-touch items-center justify-center rounded-full ${
-        disabled ? "opacity-40" : "active:opacity-60"
-      }`}
+      className="min-h-touch min-w-touch items-center justify-center rounded-full opacity-40"
     >
-      <Icon name="mic" size={24} color="#2563EB" />
+      <Icon name="mic-off" size={24} color="#6B7280" />
     </Pressable>
   );
+};
+
+export const VoiceButton = ({ onTranscribe, disabled = false }: VoiceButtonProps): JSX.Element => {
+  const [Native, setNative] = useState<ComponentType<VoiceButtonProps> | null>(null);
+
+  useEffect(() => {
+    if (voiceUnavailable) return;
+    let cancelled = false;
+    void import("./VoiceButtonNative").then((mod) => {
+      if (!cancelled) setNative(() => mod.default);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (voiceUnavailable || disabled || Native === null) return <InertMic />;
+  return <Native onTranscribe={onTranscribe} disabled={disabled} />;
 };

@@ -52,9 +52,13 @@ export const ChatInputBar = ({
         <Text className="px-2 pb-1 text-body text-neutral">{t("chat.offlineSend")}</Text>
       ) : null}
       <View className="flex-row items-end gap-1">
-        {/* Voice transcript flows back into `text` once the STT engine
-            is wired by the chat screen — see VoiceButton. */}
-        <VoiceButton onPress={() => setText(text)} disabled={inputBlocked} />
+        {/* A finished voice transcript is appended to the draft text. */}
+        <VoiceButton
+          onTranscribe={(transcript) =>
+            setText((prev) => (prev.trim().length > 0 ? `${prev} ${transcript}` : transcript))
+          }
+          disabled={inputBlocked}
+        />
         <TextInput
           value={text}
           onChangeText={setText}
