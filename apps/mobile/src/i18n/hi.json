@@ -205,7 +205,53 @@
       "anomaly": "Asaadharan",
       "cross_condition": "Conditions link"
     },
-    "loadFailed": "Insights load nahi huye — pull to refresh."
+    "loadFailed": "Insights load nahi huye — pull to refresh.",
+    "direction": {
+      "increasing": "upar ja rahi hai",
+      "decreasing": "neeche aa rahi hai"
+    },
+    "readingType": {
+      "fasting": "fasting",
+      "pre_meal": "khane se pehle ki",
+      "post_meal": "khane ke baad ki",
+      "random": "random",
+      "bedtime": "sone se pehle ki"
+    },
+    "mealCategory": {
+      "light": "halka khana",
+      "normal": "normal khana",
+      "heavy_fried": "bhaari ya tala khana"
+    },
+    "messages": {
+      "insight": {
+        "spike": {
+          "mild": "Aapki $t(insights.readingType.{{readingType}}) reading {{value}} aapke aam {{baseline}} se thodi zyada hai. Chinta ki baat nahi — bas log karte rahein.",
+          "significant": "Aapki $t(insights.readingType.{{readingType}}) reading {{value}} aapke aam {{baseline}} se kaafi zyada hai. Thoda paani peeyein aur aaram karein, aur agli doctor visit mein zaroor batayein.",
+          "severe": "Aapki $t(insights.readingType.{{readingType}}) reading {{value}} aapke aam {{baseline}} se bahut zyada hai. Jaldi doctor se baat karein."
+        },
+        "trend": {
+          "slow": "Aapki $t(insights.readingType.{{readingType}}) sugar pichhle {{windowDays}} din mein dheere-dheere $t(insights.direction.{{direction}}). Log karte rahein taaki hum dhyaan rakh sakein.",
+          "notable": "Aapki $t(insights.readingType.{{readingType}}) sugar pichhle {{windowDays}} din se lagataar $t(insights.direction.{{direction}}). Is par dhyaan dein aur doctor se share karein.",
+          "rapid": "Aapki $t(insights.readingType.{{readingType}}) sugar pichhle {{windowDays}} din mein tezi se $t(insights.direction.{{direction}}). Jaldi doctor se baat karein."
+        },
+        "anomaly": {
+          "low": "Aapki $t(insights.readingType.{{readingType}}) reading {{value}} aapke aam range se kam hai. Agar kamzori ya chakkar lage to kuch meetha khayein aur aaram karein.",
+          "high": "Aapki $t(insights.readingType.{{readingType}}) reading {{value}} aapke aam range se zyada hai. Thoda paani peeyein aur doctor ko batayein.",
+          "extreme_low": "Aapki $t(insights.readingType.{{readingType}}) reading {{value}} aapke aam range se bahut neeche hai. Abhi kuch meetha khayein aur doctor se baat karein.",
+          "extreme_high": "Aapki $t(insights.readingType.{{readingType}}) reading {{value}} aapke aam range se bahut zyada hai. Paani peeyein aur jaldi doctor se baat karein."
+        },
+        "meal_correlation": {
+          "info": "Jab aap $t(insights.mealCategory.{{mealCategory}}) khaate hain, aapki sugar thodi zyada rehti hai — lagbhag {{categoryMean}}, aam se kareeb {{delta}} mg/dL upar. Bas dhyaan mein rakhein.",
+          "warn": "Jab aap $t(insights.mealCategory.{{mealCategory}}) khaate hain, aapki sugar zyada rehti hai — lagbhag {{categoryMean}}, aam se kareeb {{delta}} mg/dL upar. Thoda kam matra mein khana madad kar sakta hai.",
+          "critical": "Jab aap $t(insights.mealCategory.{{mealCategory}}) khaate hain, aapki sugar bahut zyada ho jaati hai — lagbhag {{categoryMean}}, aam se kareeb {{delta}} mg/dL upar. Apne khaane ke baare mein doctor se baat karein."
+        },
+        "cross_condition": {
+          "info": "Jis din aapka BP zyada hota hai ({{systolicThreshold}} se upar), us din sugar bhi thodi zyada rehti hai — lagbhag {{highBpMean}}, normal din {{normalBpMean}}. Dono par saath dhyaan dein.",
+          "warn": "Jis din aapka BP zyada hota hai ({{systolicThreshold}} se upar), us din sugar bhi zyada rehti hai — lagbhag {{highBpMean}}, normal din {{normalBpMean}} (kareeb {{delta}} mg/dL zyada). Yeh baat doctor ko zaroor batayein.",
+          "critical": "Jis din aapka BP zyada hota hai ({{systolicThreshold}} se upar), us din sugar bahut zyada rehti hai — lagbhag {{highBpMean}}, normal din {{normalBpMean}} (kareeb {{delta}} mg/dL zyada). BP aur sugar dono ko saath manage karne ke liye doctor se baat karein."
+        }
+      }
+    }
   },
   "summary": {
     "headline": "Aaj ka din",
