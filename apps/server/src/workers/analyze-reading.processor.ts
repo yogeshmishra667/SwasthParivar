@@ -1,8 +1,8 @@
 // ANALYZE_READING BullMQ processor — fired after every glucose insert.
-// Runs all 4 Phase-2 detectors in parallel against the user's recent
-// history, then persists every result that returned non-null. Confidence
-// below the feed floor (0.7) is still stored — analytics surface — but
-// the insights endpoint (step 3a) suppresses it from the patient feed.
+// Runs the detector suite in parallel against the user's recent history,
+// then persists every result that returned non-null. Confidence below
+// the feed floor (0.7) is still stored — analytics surface — but the
+// insights endpoint (step 3a) suppresses it from the patient feed.
 //
 // Pure-function detectors live in `@swasth/domain-logic/detectors`.
 // This processor owns:
@@ -35,6 +35,16 @@ import { logger } from "../shared/logger.js";
 const READING_HISTORY_DAYS = 35;
 const MEAL_HISTORY_DAYS = 7;
 const dayMs = 86_400_000;
+
+// Window-level detector patterns: their result is a function of the
+// recent-history window alone, not of the reading that triggered the
+// job, so they recompute an identical result on every glucose insert.
+// The processor dedupes these before persisting (see below). spike and
+// anomaly are deliberately excluded — they are keyed to the target
+// reading and a fresh occurrence is genuinely new.
+const WINDOW_PATTERNS = ["cross_condition", "meal_correlation"] as const;
+const isWindowPattern = (pattern: string): boolean =>
+  (WINDOW_PATTERNS as readonly string[]).includes(pattern);
 
 export interface AnalyzeReadingJob {
   readingId: string;
@@ -143,8 +153,11 @@ export const processAnalyzeReading = async (job: Job<AnalyzeReadingJob>): Promis
   const typedBP = toTypedBP(bpReadings);
 
   // All detectors are synchronous pure functions. Promise.resolve keeps
-  // the contract symmetric. The two Phase 3 detectors run only when
-  // their kill-switch flag is enabled.
+  // the contract symmetric. `cross_condition_detector_enabled` gates the
+  // Phase 3 cross-condition detector. `correlation_detector_enabled`
+  // SWITCHES the meal slot from the Phase 2 detector to the Phase 3
+  // per-reading-type one — both emit the `meal_correlation` pattern, so
+  // running them together would persist two duplicate insight cards.
   const detectorRuns = await Promise.all([
     Promise.resolve(
       detectSpike({
@@ -162,13 +175,21 @@ export const processAnalyzeReading = async (job: Job<AnalyzeReadingJob>): Promis
         now,
       }),
     ),
-    Promise.resolve(
-      detectMealCorrelation({
-        readings: typedReadings,
-        meals: mealEntries,
-        now,
-      }),
-    ),
+    correlationEnabled
+      ? Promise.resolve(
+          detectMealCategoryCorrelation({
+            glucoseReadings: typedReadings,
+            mealLogs: mealEntries,
+            now,
+          }),
+        )
+      : Promise.resolve(
+          detectMealCorrelation({
+            readings: typedReadings,
+            meals: mealEntries,
+            now,
+          }),
+        ),
     Promise.resolve(
       detectAnomaly({
         readings: typedReadings,
@@ -186,15 +207,6 @@ export const processAnalyzeReading = async (job: Job<AnalyzeReadingJob>): Promis
           }),
         )
       : Promise.resolve(null),
-    correlationEnabled
-      ? Promise.resolve(
-          detectMealCategoryCorrelation({
-            glucoseReadings: typedReadings,
-            mealLogs: mealEntries,
-            now,
-          }),
-        )
-      : Promise.resolve(null),
   ]);
 
   const results = detectorRuns.filter((r): r is DetectorResult => r !== null);
@@ -204,10 +216,41 @@ export const processAnalyzeReading = async (job: Job<AnalyzeReadingJob>): Promis
     return;
   }
 
-  // Bulk-insert all firing detectors. InsightEvent has no unique
-  // constraint that could race, so createMany is safe.
+  // Window-level patterns (cross_condition, meal_correlation) recompute
+  // an identical result on every glucose insert, and the job re-runs
+  // wholesale on a BullMQ retry — without a guard the feed fills with
+  // duplicate cards. Drop a window-pattern result when an unacknowledged
+  // row of the same pattern already exists from the last 24h with
+  // equal-or-higher severity; a genuine severity escalation still gets
+  // through. Target-keyed patterns (spike, anomaly) are never deduped.
+  let toInsert = results;
+  if (results.some((r) => isWindowPattern(r.patternType))) {
+    const recent = await prisma.insightEvent.findMany({
+      where: {
+        userId,
+        acknowledged: false,
+        patternType: { in: [...WINDOW_PATTERNS] },
+        createdAt: { gte: new Date(now.getTime() - dayMs) },
+      },
+      select: { patternType: true, severityScore: true },
+    });
+    toInsert = results.filter((r) => {
+      if (!isWindowPattern(r.patternType)) return true;
+      const superseded = recent.some(
+        (e) => e.patternType === r.patternType && e.severityScore >= r.severityScore,
+      );
+      return !superseded;
+    });
+  }
+
+  if (toInsert.length === 0) {
+    childLogger.debug("analyze-reading: window patterns already current — nothing persisted");
+    return;
+  }
+
+  // Bulk-insert the surviving detector results.
   await prisma.insightEvent.createMany({
-    data: results.map((r) => ({
+    data: toInsert.map((r) => ({
       userId,
       patternType: r.patternType,
       conditionsInvolved: [...r.conditionsInvolved],
@@ -223,9 +266,9 @@ export const processAnalyzeReading = async (job: Job<AnalyzeReadingJob>): Promis
 
   childLogger.info(
     {
-      detectorsFired: results.length,
-      patterns: results.map((r) => r.patternType),
-      maxSeverity: maxSeverity(results),
+      detectorsFired: toInsert.length,
+      patterns: toInsert.map((r) => r.patternType),
+      maxSeverity: maxSeverity(toInsert),
     },
     "analyze-reading: insights persisted",
   );

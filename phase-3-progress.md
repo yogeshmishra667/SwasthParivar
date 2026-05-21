@@ -6,6 +6,30 @@
 
 ---
 
+## 2026-05-21 — Feature B audit + detector hardening (PRs #77, #79)
+
+Three-lens audit of the merged Feature B work (#74 service-less detectors, #75 service wiring) before starting Feature C. Ran `build-validator`, `db-reviewer`, `safety-reviewer` over `main`.
+
+**Audit results.**
+
+- `build-validator` — all 6 gates green on `main`: typecheck (5 workspaces), lint (`max-warnings=0`), prettier, domain-logic purity, coverage (394/394, per-file ratchets hold), build. Notes: `vitest@4.1.6` vs `@vitest/coverage-v8@4.1.4` patch skew (exits 0); no `purity` npm script registered despite the CLAUDE.md pipeline naming one (the grep check still runs).
+- `db-reviewer` — two HIGH: (1) `analyze-reading.processor.ts` `createMany` had no dedup guard, so a BullMQ retry re-inserts the whole detector result set; (2) Phase 2 `detectMealCorrelation` and Phase 3 `detectMealCategoryCorrelation` both emit `patternType: "meal_correlation"`, so `correlation_detector_enabled=ON` wrote two duplicate cards. Plus MEDIUM: BP `context` dropped before the cross-condition classifier; `cross_condition.triggerReadings` carries glucose IDs only, no BP IDs.
+- `safety-reviewer` — VERIFIED clean: same-type-only comparison (cross-condition is day-grouped, type-agnostic; meal-correlation buckets per `readingType`), minimum-data guards, festive exclusion, critical-bypass chain isolation, flag gates default `false`. Flagged the `correlation-meal.ts` "no confidence floor here" comment — but per CLAUDE.md "Confidence < 70% → stored only" and the processor's documented store-then-suppress design (`listInsights` filters `confidence >= INSIGHT_CONFIDENCE_FLOOR`), persisting sub-0.70 rows is correct; `cross-condition.ts` returning `null` instead is the minor deviation, left as-is. Also surfaced two **pre-existing** critical-bypass observability gaps in `critical-alert.processor.ts` — out of Feature B scope, tracked for a separate safety PR.
+
+**PR #79 — detector hardening.** `analyze-reading.processor.ts`: `correlation_detector_enabled` now SWITCHES the meal slot Phase 2 ↔ Phase 3 instead of stacking the Phase 3 detector on top (fixes the `meal_correlation` collision). Window-level patterns (`cross_condition`, `meal_correlation`) are deduped before `createMany` — a result is dropped when an unacknowledged row of the same pattern and equal-or-higher severity exists from the last 24h; a genuine severity escalation still writes, and target-keyed `spike`/`anomaly` are never deduped. Also fixed an `insights-cross-condition.test.ts` flake (BP seeded 2h before glucose off wall-clock → crossed the UTC day boundary near midnight, unpairing it). Added the missing `correlation_detector_enabled=ON` integration coverage + dedup regression tests for both window patterns. Server typecheck / lint / prettier green; integration tests verify CI-side (Docker).
+
+**Deferred (documented in #79, not blocking):** BP `context` for cross-condition; BP IDs in `cross_condition.triggerReadings`; `trend` is also window-level but pre-existing Phase 2, left out to keep #79 scoped.
+
+**Pre-existing, separate PR:** `critical-alert.processor.ts` emits no Sentry capture on total push+SMS delivery failure; `critical_bypass_triggered` lacks the `sms_success`/`push_success` booleans CLAUDE.md requires for the `critical_bypass_sms_success_rate` developer alert.
+
+## 2026-05-21 — Feature B: insight message i18n copy (PR #77, B.8)
+
+The B.8 mobile item — `InsightCard` already resolves `insights.messages.${messageKey}` with `messageParams` interpolation, but the EN/HI dictionaries had no copy for the Phase 3 detector outputs. Added keys for every message variant: `spike` (mild/significant/severe), `trend` (slow/notable/rapid), `anomaly` (low/high/extreme_low/extreme_high), `meal_correlation` (info/warn/critical), `cross_condition` (info/warn/critical), plus the `insights.direction` / `readingType` / `mealCategory` sub-namespaces the templates nest via i18next key interpolation. Mobile-only, JSON-only; no `InsightCard` code change needed. Mobile typecheck / lint / prettier green.
+
+## 2026-05-21 — Feature A tail: chat offline-drain crash + thread UI polish (PR #78)
+
+Mobile chat fix merged alongside the Feature B work — null `sessionId` crash in the offline send-drain path, plus thread-screen visual polish and EAS project linking. Not Feature B; logged here for the cross-walk.
+
 ## 2026-05-20 — Feature A audit + safety hardening (PR #73)
 
 **Branch:** `phase3/chat/safety-hardening` (off `main` at `98a0709`).
