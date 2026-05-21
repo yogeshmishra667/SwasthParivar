@@ -191,8 +191,8 @@ export default function ChatThreadScreen(): JSX.Element {
           defense-in-depth — the server already enforces emergency-skip
           in chat.service (the canned redirect is returned regardless). */}
       <EmergencyChatGuard criticalBypassActive={false} onResolveCritical={() => router.back()}>
-        <View className="flex-row items-center justify-between border-b border-gray-200 px-2 py-2">
-          <View className="flex-row items-center gap-1">
+        <View className="flex-row items-center justify-between border-b border-gray-200 bg-white px-3 py-2.5">
+          <View className="flex-1 flex-row items-center gap-1">
             <Pressable
               onPress={() => router.back()}
               accessibilityRole="button"
@@ -216,7 +216,7 @@ export default function ChatThreadScreen(): JSX.Element {
           className="flex-1"
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View className="flex-1">
+          <View className="flex-1 bg-gray-50">
             <MessageList
               messages={messages}
               typing={typing}

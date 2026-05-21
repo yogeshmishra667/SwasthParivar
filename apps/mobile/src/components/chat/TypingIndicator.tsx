@@ -46,7 +46,10 @@ export const TypingIndicator = ({ visible, onRetry }: TypingIndicatorProps): JSX
   }
 
   return (
-    <View className="my-1 self-start rounded-2xl bg-gray-100 px-4 py-3" accessibilityRole="text">
+    <View
+      className="my-2 ml-4 self-start rounded-2xl rounded-bl-md border border-gray-200 bg-white px-4 py-3"
+      accessibilityRole="text"
+    >
       <Text className="text-body text-neutral">{t("chat.typing")}</Text>
     </View>
   );
