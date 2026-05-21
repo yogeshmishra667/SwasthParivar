@@ -74,6 +74,14 @@ export default defineConfig({
         // outside the intended cohort. Locked at 100% per phase3.md
         // CC.12.2.
         "src/feature-rollout/**": { 100: true },
+        // Phase 3 Feature C — Silent Guardian signal scoring, risk
+        // aggregation, alert dedup, alert-copy generation and
+        // multi-patient sort. A regression here means a guardian gets
+        // a wrong alert, no alert, or — for the explainer — verbatim
+        // patient content leaked into the copy. Locked at 100% per
+        // phase3.md C.9 (spec floor 95%; the functions are simple,
+        // pure and exhaustively tested, so we hold the higher bar).
+        "src/silent-guardian/**": { 100: true },
 
         // Ratchet floors at CURRENT measured values (2026-05-14 baseline).
         // Raise these as tests close the gap to CLAUDE.md targets.
