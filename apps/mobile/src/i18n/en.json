@@ -205,7 +205,53 @@
       "anomaly": "Unusual",
       "cross_condition": "Condition link"
     },
-    "loadFailed": "Could not load insights — pull to refresh."
+    "loadFailed": "Could not load insights — pull to refresh.",
+    "direction": {
+      "increasing": "going up",
+      "decreasing": "coming down"
+    },
+    "readingType": {
+      "fasting": "fasting",
+      "pre_meal": "pre-meal",
+      "post_meal": "post-meal",
+      "random": "random",
+      "bedtime": "bedtime"
+    },
+    "mealCategory": {
+      "light": "light meals",
+      "normal": "regular meals",
+      "heavy_fried": "heavy or fried food"
+    },
+    "messages": {
+      "insight": {
+        "spike": {
+          "mild": "Your $t(insights.readingType.{{readingType}}) reading {{value}} is a little above your usual {{baseline}}. Nothing to worry about — just keep logging.",
+          "significant": "Your $t(insights.readingType.{{readingType}}) reading {{value}} is noticeably above your usual {{baseline}}. Drink some water and rest, and mention it to your doctor at your next visit.",
+          "severe": "Your $t(insights.readingType.{{readingType}}) reading {{value}} is much higher than your usual {{baseline}}. Please check with your doctor soon."
+        },
+        "trend": {
+          "slow": "Your $t(insights.readingType.{{readingType}}) sugar has been slowly $t(insights.direction.{{direction}}) over the last {{windowDays}} days. Keep logging so we can keep an eye on it.",
+          "notable": "Your $t(insights.readingType.{{readingType}}) sugar has been steadily $t(insights.direction.{{direction}}) over the last {{windowDays}} days. It's worth watching — share this with your doctor.",
+          "rapid": "Your $t(insights.readingType.{{readingType}}) sugar has been $t(insights.direction.{{direction}}) quickly over the last {{windowDays}} days. Please talk to your doctor soon."
+        },
+        "anomaly": {
+          "low": "Your $t(insights.readingType.{{readingType}}) reading {{value}} is lower than your usual range. If you feel weak or dizzy, have something sweet and rest.",
+          "high": "Your $t(insights.readingType.{{readingType}}) reading {{value}} is higher than your usual range. Drink some water and mention it to your doctor.",
+          "extreme_low": "Your $t(insights.readingType.{{readingType}}) reading {{value}} is far below your usual range. Have something sweet now and please check with your doctor.",
+          "extreme_high": "Your $t(insights.readingType.{{readingType}}) reading {{value}} is far above your usual range. Drink water and please talk to your doctor soon."
+        },
+        "meal_correlation": {
+          "info": "When you eat $t(insights.mealCategory.{{mealCategory}}), your sugar runs a little higher — around {{categoryMean}}, about {{delta}} mg/dL above your usual. Something to keep in mind.",
+          "warn": "When you eat $t(insights.mealCategory.{{mealCategory}}), your sugar tends to be higher — around {{categoryMean}}, about {{delta}} mg/dL above your usual. Smaller portions may help.",
+          "critical": "When you eat $t(insights.mealCategory.{{mealCategory}}), your sugar goes much higher — around {{categoryMean}}, about {{delta}} mg/dL above your usual. Please discuss your diet with your doctor."
+        },
+        "cross_condition": {
+          "info": "On days your BP is higher (above {{systolicThreshold}}), your sugar tends to run a bit higher too — around {{highBpMean}} compared with {{normalBpMean}}. Worth keeping an eye on both together.",
+          "warn": "On days your BP is higher (above {{systolicThreshold}}), your sugar runs higher too — around {{highBpMean}} compared with {{normalBpMean}}, about {{delta}} mg/dL more. Mention this link to your doctor.",
+          "critical": "On days your BP is higher (above {{systolicThreshold}}), your sugar runs much higher — around {{highBpMean}} compared with {{normalBpMean}}, about {{delta}} mg/dL more. Please discuss managing BP and sugar together with your doctor."
+        }
+      }
+    }
   },
   "summary": {
     "headline": "Today",
