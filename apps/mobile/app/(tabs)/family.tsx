@@ -103,6 +103,26 @@ export default function FamilyScreen(): JSX.Element {
       >
         <Text className="text-important text-neutral">{t("family.subtitle")}</Text>
 
+        {/* Phase 3 — Silent Guardian: jump to the family-alerts surface. */}
+        <Pressable
+          onPress={() => router.push("/guardian")}
+          accessibilityRole="button"
+          accessibilityLabel={t("guardian.openFromFamily")}
+          style={{ minHeight: TOUCH_TARGET_MIN }}
+          className="flex-row items-center gap-3 rounded-2xl bg-white p-4 active:opacity-80"
+        >
+          <View className="h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+            <Icon name="notifications" size={24} color="#D97706" />
+          </View>
+          <View className="flex-1">
+            <Text className="text-important font-semibold text-gray-900">
+              {t("guardian.openFromFamily")}
+            </Text>
+            <Text className="text-body text-neutral">{t("guardian.openFromFamilyHint")}</Text>
+          </View>
+          <Icon name="chevron-forward" size={20} color="#6B7280" />
+        </Pressable>
+
         {/* Patient → Guardian: invite form. */}
         <InviteGuardianForm onSent={() => void load()} />
 

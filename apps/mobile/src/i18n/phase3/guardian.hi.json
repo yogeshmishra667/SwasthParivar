@@ -1,0 +1,23 @@
+{
+  "homeTitle": "Mere parivar",
+  "historyTitle": "Purane alerts",
+  "history": "Alert history",
+  "back": "Peeche",
+  "loading": "Load ho raha hai…",
+  "emptyHome": "Abhi koi alert nahi — sab theek lag raha hai.",
+  "emptyHistory": "Abhi tak koi alert nahi.",
+  "safeHeadline": "Sab theek hai",
+  "safeBody": "Abhi dhyaan dene layak kuch nahi.",
+  "severityOrange": "Dhyaan dein",
+  "severityYellow": "Nazar rakhein",
+  "viewDetail": "Vistar mein dekhein",
+  "whatHappened": "Kya hua?",
+  "whatToDo": "Kya karein?",
+  "viewPatient": "Poora dashboard dekhein",
+  "feedbackQuestion": "Kya yeh alert useful tha?",
+  "helpful": "Haan, useful tha",
+  "notHelpful": "Useful nahi tha",
+  "feedbackThanks": "Shukriya — isse hum behtar alert bhej payenge.",
+  "openFromFamily": "Parivar ke alerts",
+  "openFromFamilyHint": "Dekhein kya dhyaan dene layak hai"
+}

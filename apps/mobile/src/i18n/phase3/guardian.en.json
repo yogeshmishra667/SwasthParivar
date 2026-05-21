@@ -1,0 +1,23 @@
+{
+  "homeTitle": "My family",
+  "historyTitle": "Past alerts",
+  "history": "Alert history",
+  "back": "Back",
+  "loading": "Loading…",
+  "emptyHome": "No alerts right now — everything looks fine.",
+  "emptyHistory": "No alerts yet.",
+  "safeHeadline": "All good",
+  "safeBody": "Nothing needs your attention.",
+  "severityOrange": "Needs attention",
+  "severityYellow": "Keep an eye",
+  "viewDetail": "See details",
+  "whatHappened": "What happened?",
+  "whatToDo": "What to do?",
+  "viewPatient": "See the full dashboard",
+  "feedbackQuestion": "Was this alert helpful?",
+  "helpful": "Helpful",
+  "notHelpful": "Not helpful",
+  "feedbackThanks": "Thank you — this helps us alert you better.",
+  "openFromFamily": "Family alerts",
+  "openFromFamilyHint": "See what needs your attention"
+}

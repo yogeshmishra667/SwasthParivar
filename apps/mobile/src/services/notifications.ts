@@ -2,6 +2,7 @@ import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { router } from "expo-router";
 import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
 import { markNotificationSeen } from "@/services/notification-dedup";
@@ -98,4 +99,33 @@ export const scheduleMedicationReminder = async (
 
 export const cancelReminder = async (id: string): Promise<void> => {
   await Notifications.cancelScheduledNotificationAsync(id);
+};
+
+// Phase 3 Feature C — deep-link a tapped notification to its screen.
+// Silent Guardian alerts open AlertDetail; the daily summary opens
+// GuardianHome. Other notification types fall through (handled, if at
+// all, by their own screens).
+const routeFromNotificationData = (data: unknown): void => {
+  const payload = data as { type?: string; alertId?: string } | null;
+  if (!payload) return;
+  if (payload.type === "guardian_alert" && typeof payload.alertId === "string") {
+    router.push({
+      pathname: "/guardian/alert/[alertId]",
+      params: { alertId: payload.alertId },
+    });
+  } else if (payload.type === "guardian_daily_summary") {
+    router.push("/guardian");
+  }
+};
+
+// Registered once at app start (from the root layout). Handles both a
+// cold start — app launched by tapping a notification — and taps while
+// the app is already running.
+export const registerNotificationRouting = (): void => {
+  void Notifications.getLastNotificationResponseAsync().then((response) => {
+    if (response) routeFromNotificationData(response.notification.request.content.data);
+  });
+  Notifications.addNotificationResponseReceivedListener((response) => {
+    routeFromNotificationData(response.notification.request.content.data);
+  });
 };

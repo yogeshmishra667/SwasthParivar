@@ -48,9 +48,12 @@ export default function RootLayout(): JSX.Element | null {
     // Dynamic import: expo-notifications crashes Expo Go on SDK 53+
     // when imported at the top level, so we load it lazily.
     if (isExpoGo) return;
-    void import("@/services/notifications").then(({ registerAndSyncPushToken }) => {
-      void registerAndSyncPushToken();
-    });
+    void import("@/services/notifications").then(
+      ({ registerAndSyncPushToken, registerNotificationRouting }) => {
+        void registerAndSyncPushToken();
+        registerNotificationRouting();
+      },
+    );
   }, [ready, accessToken]);
 
   if (!ready) return null;
@@ -69,6 +72,7 @@ export default function RootLayout(): JSX.Element | null {
               <Stack.Screen name="(onboarding)" />
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="chat" />
+              <Stack.Screen name="guardian" />
               <Stack.Screen name="patient/[id]" options={{ headerShown: true }} />
               <Stack.Screen name="sos" options={{ presentation: "fullScreenModal" }} />
             </Stack>
