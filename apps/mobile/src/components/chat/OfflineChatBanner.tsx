@@ -15,7 +15,7 @@ export const OfflineChatBanner = ({ isOffline }: OfflineChatBannerProps): JSX.El
   if (!isOffline) return null;
   return (
     // gray-700 + white = ~9:1 contrast, safe in normal and high-contrast modes.
-    <View className="bg-gray-700 px-4 py-2" accessibilityRole="alert">
+    <View className="bg-gray-700 px-4 py-2.5" accessibilityRole="alert">
       <Text className="text-body font-semibold text-white">{t("chat.offlineBanner")}</Text>
     </View>
   );

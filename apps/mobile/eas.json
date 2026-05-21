@@ -47,13 +47,5 @@
         "language": "en-US"
       }
     }
-  },
-  "update": {
-    "production": {
-      "channel": "production"
-    },
-    "preview": {
-      "channel": "preview"
-    }
   }
 }

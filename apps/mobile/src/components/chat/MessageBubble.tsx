@@ -38,26 +38,26 @@ export const MessageBubble = ({
   const isUser = message.role === "user";
 
   return (
-    <View className={`my-1 px-4 ${isUser ? "items-end" : "items-start"}`}>
+    <View className={`my-2 px-4 ${isUser ? "items-end" : "items-start"}`}>
       <Pressable
         onLongPress={onLongPress ? () => onLongPress(message.id) : undefined}
         accessibilityRole="text"
-        className={`max-w-[85%] rounded-2xl px-4 py-3 ${isUser ? "bg-primary" : "bg-gray-100"}`}
+        className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+          isUser ? "rounded-br-md bg-primary" : "rounded-bl-md border border-gray-200 bg-white"
+        }`}
       >
         <Text className={`text-important ${isUser ? "text-white" : "text-gray-900"}`}>
           {message.content}
         </Text>
       </Pressable>
 
-      <View className="mt-1 flex-row items-center">
+      <View className={`mt-1 flex-row items-center gap-1.5 ${isUser ? "pr-1" : "pl-1"}`}>
         {!isUser && tier ? <CostTierBadge tier={tier} /> : null}
-        <Text className="ml-1 text-body text-neutral">
+        <Text className="text-body text-neutral">
           {formatTime(message.createdAt, t("chat.justNow"))}
         </Text>
         {!isUser ? (
-          <View className="ml-1">
-            <FlagButton onPress={() => onFlag(message.id)} flagged={flagged || flaggedByUser} />
-          </View>
+          <FlagButton onPress={() => onFlag(message.id)} flagged={flagged || flaggedByUser} />
         ) : null}
       </View>
     </View>
