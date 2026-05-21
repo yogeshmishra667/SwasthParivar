@@ -137,9 +137,9 @@ export const drainPendingChatSends = async (): Promise<{ sent: number }> => {
       const outcome = await sendChatMessage({
         clientUuid: row.clientUuid,
         version: 1,
-        ...(row.sessionId !== undefined && row.sessionId.length > 0
-          ? { sessionId: row.sessionId }
-          : {}),
+        // WatermelonDB returns `null` (not `undefined`) for an unset
+        // optional column, so test truthiness — covers null/empty too.
+        ...(row.sessionId ? { sessionId: row.sessionId } : {}),
         message: row.message,
       });
       if (outcome.ok) {
