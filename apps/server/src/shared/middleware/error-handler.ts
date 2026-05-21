@@ -20,6 +20,7 @@ const statusFor = (code: ErrorCode): number => {
     case "MEAL_NOT_FOUND":
     case "INSIGHT_NOT_FOUND":
     case "FAMILY_LINK_NOT_FOUND":
+    case "GUARDIAN_ALERT_NOT_FOUND":
       return 404;
     case "FAMILY_INVITE_INVALID":
       return 400;
