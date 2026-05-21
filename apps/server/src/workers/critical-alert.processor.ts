@@ -5,6 +5,7 @@ import { QUEUE_NAMES } from "../shared/queue.js";
 import { logger } from "../shared/logger.js";
 import { prisma } from "../shared/database.js";
 import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
+import { captureUnhandled } from "../shared/observability/sentry.js";
 import { sendExpoPush, type ExpoPushMessage } from "../shared/notifications/expo-push.js";
 import { sendSmsBatch, type SmsMessage } from "../shared/notifications/msg91-sms.js";
 
@@ -166,11 +167,33 @@ export const processCriticalAlert = async (job: Job<CriticalAlertJob>): Promise<
     "critical bypass dispatched",
   );
 
+  // A critical reading whose dispatch reached NO remote recipient — push
+  // delivered to zero devices AND the SMS fallback delivered to zero — is
+  // invisible to every guardian. The in-app fullscreen alert still fires
+  // client-side, but on-call must be paged: this is either a provider
+  // outage or a patient with no reachable emergency contact. Suppressed
+  // when push was never meant to fire (e.g. within the cooldown window —
+  // CLAUDE.md edge case #1 — where zero remote delivery is intended).
+  if (decision.triggerPush && pushSuccessCount === 0 && smsSuccessCount === 0) {
+    captureUnhandled(new Error("critical bypass dispatch reached no remote recipient"), {
+      userId,
+      readingId,
+      severity: decision.severity,
+      value,
+      pushTargets: decision.pushTargets.length,
+      smsTargets: decision.smsTargets.length,
+      smsTriggered,
+    });
+  }
+
   captureAnalyticsEvent("critical_bypass_triggered", userId, {
     value_mg_dl: value,
     severity: decision.severity,
     push_targets: decision.pushTargets.length,
+    push_success: pushSuccessCount > 0,
     sms_targets: decision.smsTargets.length,
+    sms_triggered: smsTriggered,
+    sms_success: smsSuccessCount > 0,
     within_cooldown: decision.withinCooldown,
   });
 };

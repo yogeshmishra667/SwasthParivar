@@ -39,11 +39,19 @@ export interface EventPropsMap {
     uncertainty_detected: boolean;
     rejected_reason: string | null;
   };
+  // `push_success` / `sms_success` are the per-event delivery booleans
+  // CLAUDE.md names; `sms_triggered` is the denominator the
+  // `critical_bypass_sms_success_rate` developer alert (URGENT < 95%)
+  // divides by — without it, events where SMS was never attempted
+  // (push succeeded) would deflate the rate.
   critical_bypass_triggered: {
     value_mg_dl: number;
     severity: "low" | "high";
     push_targets: number;
+    push_success: boolean;
     sms_targets: number;
+    sms_triggered: boolean;
+    sms_success: boolean;
     within_cooldown: boolean;
   };
   streak_milestone: {

@@ -11,9 +11,10 @@ import jwt from "jsonwebtoken";
 // instances exist BEFORE the mock factories evaluate (otherwise the
 // factory captures undefined and `sendExpoPush()` returns undefined at
 // runtime).
-const { sendExpoPushMock, sendSmsBatchMock } = vi.hoisted(() => ({
+const { sendExpoPushMock, sendSmsBatchMock, captureUnhandledMock } = vi.hoisted(() => ({
   sendExpoPushMock: vi.fn(),
   sendSmsBatchMock: vi.fn(),
+  captureUnhandledMock: vi.fn(),
 }));
 
 vi.mock("../../src/shared/notifications/expo-push.js", () => ({
@@ -21,6 +22,15 @@ vi.mock("../../src/shared/notifications/expo-push.js", () => ({
 }));
 vi.mock("../../src/shared/notifications/msg91-sms.js", () => ({
   sendSmsBatch: sendSmsBatchMock,
+}));
+// Stub Sentry so the "reached no recipient" capture is observable
+// without a real DSN. All exports are replaced — app.js taps
+// captureUnhandled from its error handler.
+vi.mock("../../src/shared/observability/sentry.js", () => ({
+  captureUnhandled: captureUnhandledMock,
+  initSentry: vi.fn(),
+  isSentryEnabled: vi.fn(() => false),
+  warnIfMisconfigured: vi.fn(),
 }));
 
 const runPrisma = (args: string[], opts: { input?: string } = {}): void => {
@@ -97,6 +107,7 @@ afterAll(async () => {
 beforeEach(() => {
   sendExpoPushMock.mockReset();
   sendSmsBatchMock.mockReset();
+  captureUnhandledMock.mockReset();
 });
 
 interface TestFixture {
@@ -217,6 +228,8 @@ describe("Critical-bypass full chain (HTTP → service → queue → worker → 
     expect(pushArgs[0]!.data.severity).toBe("low");
 
     expect(sendSmsBatchMock).not.toHaveBeenCalled();
+    // Push delivered → the alert reached a recipient → no Sentry page.
+    expect(captureUnhandledMock).not.toHaveBeenCalled();
   });
 
   it("high-glucose POST: push fails → SMS fallback triggered", async () => {
@@ -253,6 +266,44 @@ describe("Critical-bypass full chain (HTTP → service → queue → worker → 
     const smsArgs = sendSmsBatchMock.mock.calls[0]![0] as { phone: string; message: string }[];
     expect(smsArgs[0]!.message).toContain("BAHUT ZYADA");
     expect(smsArgs[0]!.message).toContain("330");
+    // SMS fallback delivered → a recipient was reached → no Sentry page.
+    expect(captureUnhandledMock).not.toHaveBeenCalled();
+  });
+
+  it("high-glucose POST: push fails AND SMS fails → Sentry capture fires (reached no one)", async () => {
+    const { patientToken } = await seedPatientWithGuardian();
+
+    sendExpoPushMock.mockResolvedValueOnce([
+      { token: "stub", success: false, errorCode: "DeviceNotRegistered" },
+    ]);
+    sendSmsBatchMock.mockResolvedValueOnce([{ phone: "+91XXXX", success: false }]);
+
+    const res = await request(app)
+      .post("/api/v1/readings/glucose")
+      .set("Authorization", `Bearer ${patientToken}`)
+      .send({
+        clientUuid: randomUUID(),
+        valueMgDl: 330,
+        readingType: "fasting",
+        context: "normal",
+        source: "manual",
+        measuredAt: new Date().toISOString(),
+        version: 1,
+      });
+    expect(res.status).toBe(201);
+
+    const job = await fetchEnqueuedJob(res.body.data.reading.id);
+    expect(job).not.toBeNull();
+
+    await processCriticalAlert({ data: job.data, id: String(job.id) });
+
+    expect(sendExpoPushMock).toHaveBeenCalledTimes(1);
+    expect(sendSmsBatchMock).toHaveBeenCalledTimes(1);
+    // Both channels delivered to zero recipients — on-call must be paged.
+    expect(captureUnhandledMock).toHaveBeenCalledTimes(1);
+    const [err, ctx] = captureUnhandledMock.mock.calls[0]!;
+    expect(err).toBeInstanceOf(Error);
+    expect((ctx as { severity: string }).severity).toBe("high");
   });
 
   it("preserves requestId from HTTP request through queue payload", async () => {
