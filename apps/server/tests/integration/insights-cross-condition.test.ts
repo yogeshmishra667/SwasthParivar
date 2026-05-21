@@ -145,7 +145,11 @@ const seedCrossConditionFixture = async (): Promise<string> => {
       diastolic: isHighBP ? 95 : 75,
       context: "normal",
       source: "manual",
-      measuredAt: new Date(dayMs - 2 * 60 * 60 * 1000), // 2h before glucose
+      // Same instant as the day's glucose row. The detector pairs
+      // glucose↔BP by UTC calendar day; an offset risks the BP row
+      // landing on the previous UTC day when the suite runs near
+      // midnight UTC, which would unpair it from its glucose reading.
+      measuredAt: new Date(dayMs),
       version: 1,
     });
 
@@ -226,5 +230,100 @@ describe("cross_condition_detector_enabled = ON", () => {
       where: { userId, patternType: "cross_condition" },
     });
     expect(events).toHaveLength(0);
+  });
+
+  it("does not append a duplicate cross_condition row on a second analyze run", async () => {
+    await setFlag("cross_condition_detector_enabled", true, "test");
+    resetFlagCache();
+
+    const readingId = await seedCrossConditionFixture();
+    // cross_condition is window-level — both runs recompute an identical
+    // result. The second must be deduped against the first run's row.
+    await processAnalyzeReading(makeJob({ readingId, userId, readingType: "fasting" }));
+    await processAnalyzeReading(makeJob({ readingId, userId, readingType: "fasting" }));
+
+    const events = await prisma.insightEvent.findMany({
+      where: { userId, patternType: "cross_condition" },
+    });
+    expect(events).toHaveLength(1);
+  });
+});
+
+// Seeds 21 post_meal readings spaced 8h apart across the 7-day window
+// (≈6.7-day span). The 5 most-recent follow a heavy_fried meal (glucose
+// ~270); the other 16 follow a light meal (~110). The heavy_fried bucket
+// clears the 5-instance floor and runs far above the post_meal baseline
+// → a high-confidence meal_correlation insight. Pure ms arithmetic — no
+// dependence on the wall-clock time of day.
+const seedMealCorrelationFixture = async (): Promise<string> => {
+  const now = new Date();
+  const glucoseRows: any[] = [];
+  const mealRows: any[] = [];
+  const SPACING_MS = 8 * 60 * 60 * 1000;
+
+  for (let i = 0; i < 21; i++) {
+    const readingMs = now.getTime() - i * SPACING_MS;
+    const heavy = i < 5;
+
+    mealRows.push({
+      id: randomUUID(),
+      clientUuid: randomUUID(),
+      userId,
+      mealType: "lunch",
+      mealCategory: heavy ? "heavy_fried" : "light",
+      loggedAt: new Date(readingMs - 60 * 60 * 1000), // 1h before the reading
+      version: 1,
+    });
+
+    glucoseRows.push({
+      id: randomUUID(),
+      clientUuid: randomUUID(),
+      userId,
+      valueMgDl: heavy ? 265 + Math.round(Math.random() * 10) : 106 + Math.round(Math.random() * 8),
+      readingType: "post_meal",
+      context: "normal",
+      source: "manual",
+      measuredAt: new Date(readingMs),
+      streakCreditedTo: new Date(new Date(readingMs).toISOString().slice(0, 10)),
+      version: 1,
+    });
+  }
+
+  await prisma.mealLog.createMany({ data: mealRows });
+  await prisma.glucoseReading.createMany({ data: glucoseRows });
+  return glucoseRows[0].id;
+};
+
+describe("correlation_detector_enabled = ON", () => {
+  it("writes exactly one meal_correlation InsightEvent — Phase 2 and Phase 3 detectors never both fire", async () => {
+    await setFlag("correlation_detector_enabled", true, "test");
+    resetFlagCache();
+
+    const readingId = await seedMealCorrelationFixture();
+    await processAnalyzeReading(makeJob({ readingId, userId, readingType: "post_meal" }));
+
+    const events = await prisma.insightEvent.findMany({
+      where: { userId, patternType: "meal_correlation" },
+    });
+    // Pre-fix this was 2: the Phase 2 detectMealCorrelation ran
+    // unconditionally alongside the flag-gated Phase 3 detector, both
+    // emitting a `meal_correlation` row. The flag now switches between
+    // them rather than adding the Phase 3 detector on top.
+    expect(events).toHaveLength(1);
+    expect(events[0]!.confidence).toBeGreaterThanOrEqual(0.7);
+  });
+
+  it("does not append a duplicate meal_correlation row on a second analyze run", async () => {
+    await setFlag("correlation_detector_enabled", true, "test");
+    resetFlagCache();
+
+    const readingId = await seedMealCorrelationFixture();
+    await processAnalyzeReading(makeJob({ readingId, userId, readingType: "post_meal" }));
+    await processAnalyzeReading(makeJob({ readingId, userId, readingType: "post_meal" }));
+
+    const events = await prisma.insightEvent.findMany({
+      where: { userId, patternType: "meal_correlation" },
+    });
+    expect(events).toHaveLength(1);
   });
 });
