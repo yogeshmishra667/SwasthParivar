@@ -37,6 +37,7 @@ import { getFlag } from "../shared/flags/index.js";
 import { logger } from "../shared/logger.js";
 import { captureUnhandled } from "../shared/observability/sentry.js";
 import { capture } from "../shared/analytics/posthog.js";
+import { enqueueGuardianAlertDispatch } from "../modules/silent-guardian/silent-guardian.jobs.js";
 
 const dayMs = 86_400_000;
 const MED_WINDOW_DAYS = 7;
@@ -269,6 +270,11 @@ const analyzePatient = async (group: PatientGroup, now: Date): Promise<number> =
       type: alertType,
       signal_count: activeSignals.length,
     });
+    // Hand the alert to the dispatch worker. While
+    // `silent_guardian_alerts_dispatch` is off the worker no-ops, so
+    // this is safe to wire unconditionally — the alert simply stays
+    // in-app until delivery is enabled.
+    await enqueueGuardianAlertDispatch(alert.id);
   }
 
   // Link the contributing signals back to the alert they fed (audit

@@ -26,6 +26,10 @@ export const QUEUE_NAMES = {
   // risk, and conditionally create a GuardianAlert. Gated by the
   // `silent_guardian_enabled` flag.
   SILENT_GUARDIAN_ANALYZE: "silent-guardian-analyze",
+  // Phase 3 Feature C — fired on GuardianAlert create. Push (primary) →
+  // SMS (fallback) delivery of one alert, after the weekly-orange cap +
+  // critical-bypass dedup. Gated by `silent_guardian_alerts_dispatch`.
+  GUARDIAN_ALERT_DISPATCH: "guardian-alert-dispatch",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

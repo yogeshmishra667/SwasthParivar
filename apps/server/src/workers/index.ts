@@ -19,6 +19,11 @@ import {
   silentGuardianAnalyzeWorker,
   bootstrapSilentGuardianAnalyzeCron,
 } from "./silent-guardian-analyze.worker.js";
+import { guardianAlertDispatchWorker } from "./guardian-alert-dispatch.worker.js";
+import {
+  dailyGuardianSummaryWorker,
+  bootstrapDailyGuardianSummaryCron,
+} from "./daily-guardian-summary.worker.js";
 import { logger } from "../shared/logger.js";
 
 const workers = [
@@ -32,6 +37,8 @@ const workers = [
   chatSafetyReviewWorker,
   chatRetentionSweepWorker,
   silentGuardianAnalyzeWorker,
+  guardianAlertDispatchWorker,
+  dailyGuardianSummaryWorker,
 ];
 
 export const workerNames = [
@@ -45,6 +52,8 @@ export const workerNames = [
   "chat-safety-review",
   "chat-retention-sweep",
   "silent-guardian-analyze",
+  "guardian-alert-dispatch",
+  "daily-guardian-summary",
 ];
 
 export const startWorkers = (): void => {
@@ -62,6 +71,9 @@ export const startWorkers = (): void => {
   );
   bootstrapSilentGuardianAnalyzeCron().catch((err) =>
     logger.error({ err }, "failed to bootstrap silent-guardian-analyze cron"),
+  );
+  bootstrapDailyGuardianSummaryCron().catch((err) =>
+    logger.error({ err }, "failed to bootstrap daily-guardian-summary cron"),
   );
   logger.info({ count: workers.length }, "workers started");
 };

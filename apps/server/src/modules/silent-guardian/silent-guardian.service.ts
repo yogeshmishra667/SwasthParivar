@@ -13,6 +13,7 @@ import { DomainError } from "@swasth/shared-types";
 import type { CursorPage } from "@swasth/shared-types";
 import type { Prisma, GuardianAlert } from "@prisma/client";
 import { prisma } from "../../shared/database.js";
+import { capture } from "../../shared/analytics/posthog.js";
 import type {
   DailySummaryParams,
   DailySummaryView,
@@ -86,10 +87,18 @@ export const markAlertRead = async (params: MarkAlertReadParams): Promise<Guardi
   // Idempotent — first read wins; a re-read keeps the original time so
   // `minutes_to_read` analytics stay accurate.
   if (alert.readAt !== null) return alert;
-  return await prisma.guardianAlert.update({
+  const readAt = new Date();
+  const updated = await prisma.guardianAlert.update({
     where: { id: alert.id },
-    data: { readAt: new Date() },
+    data: { readAt },
   });
+  capture("silent_guardian_alert_read", updated.patientId, {
+    minutes_to_read: Math.max(
+      0,
+      Math.round((readAt.getTime() - updated.createdAt.getTime()) / 60_000),
+    ),
+  });
+  return updated;
 };
 
 export const recordAlertFeedback = async (params: RecordFeedbackParams): Promise<GuardianAlert> => {
@@ -97,10 +106,15 @@ export const recordAlertFeedback = async (params: RecordFeedbackParams): Promise
   // `actionTaken` is what the guardian did; when they only tap the
   // helpful / not-helpful control, record that as the action.
   const actionTaken = params.actionTaken ?? (params.helpful ? "helpful" : "ignored");
-  return await prisma.guardianAlert.update({
+  const updated = await prisma.guardianAlert.update({
     where: { id: alert.id },
     data: { actionTaken },
   });
+  capture("silent_guardian_alert_feedback", updated.patientId, {
+    helpful: params.helpful,
+    action_taken: actionTaken,
+  });
+  return updated;
 };
 
 export const getDailySummaryForPatient = async (
