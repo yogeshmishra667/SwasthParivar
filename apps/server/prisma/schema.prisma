@@ -716,3 +716,67 @@ model GuardianAlert {
   @@index([guardianId, severity, createdAt(sort: Desc)])
   @@map("guardian_alerts")
 }
+
+// ─────────────────────────────────────────────────────────────
+// Admin / Ops console (out-of-phase operational tooling)
+//
+// Staff accounts for the internal admin console. Separate from `User`
+// (patients/guardians) on purpose — different auth (email+password+TOTP
+// vs phone OTP), different JWT secrets, different lifecycle. No relation
+// to patient data; the console reaches patient rows through queries, not
+// foreign keys. See docs/admin-dashboard-plan.md.
+// ─────────────────────────────────────────────────────────────
+
+enum AdminRole {
+  super_admin
+  ops
+  support
+  analyst
+}
+
+model AdminUser {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  role         AdminRole @default(analyst)
+  // Soft-disable: an inactive account fails auth without losing its
+  // audit history. Deactivation is preferred over deletion.
+  active       Boolean   @default(true)
+  // TOTP (2FA). `totpSecret` is base32, written at enrolment.
+  // `totpEnabled` flips true only after the first code is confirmed;
+  // until then a password-valid login yields an enrolment-only session.
+  totpSecret   String?   @map("totp_secret")
+  totpEnabled  Boolean   @default(false) @map("totp_enabled")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  auditLogs AdminAuditLog[]
+
+  @@map("admin_users")
+}
+
+model AdminAuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  adminUserId String   @map("admin_user_id") @db.Uuid
+  // Free-form action string (e.g. "flag.set", "user.tier_changed",
+  // "patient_data_viewed") — new actions need no migration.
+  action      String
+  // What the action touched. `targetType` is a coarse label
+  // ("flag", "user", "admin_user"); `targetId` is a flag key OR a UUID,
+  // so it is a plain string, not @db.Uuid.
+  targetType  String?  @map("target_type")
+  targetId    String?  @map("target_id")
+  // Structured before/after or context payload. Never holds patient
+  // free-text — keeps the audit log safe to export.
+  metadata    Json?
+  ip          String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@map("admin_audit_logs")
+}

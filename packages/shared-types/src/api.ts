@@ -52,4 +52,10 @@ export type ErrorCode =
   | "VALIDATION_ERROR"
   | "RATE_LIMITED"
   | "MAINTENANCE_MODE"
+  // Admin / ops console (out-of-phase operational tooling).
+  | "ADMIN_INVALID_CREDENTIALS"
+  | "ADMIN_2FA_REQUIRED"
+  | "ADMIN_2FA_INVALID"
+  | "ADMIN_FORBIDDEN"
+  | "ADMIN_ACCOUNT_DISABLED"
   | "INTERNAL_ERROR";

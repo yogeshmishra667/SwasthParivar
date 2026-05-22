@@ -12,8 +12,13 @@ const statusFor = (code: ErrorCode): number => {
     case "AUTH_OTP_INVALID":
     case "AUTH_TOKEN_EXPIRED":
     case "AUTH_UNAUTHORIZED":
+    case "ADMIN_INVALID_CREDENTIALS":
+    case "ADMIN_2FA_REQUIRED":
+    case "ADMIN_2FA_INVALID":
       return 401;
     case "FAMILY_NO_ACCESS":
+    case "ADMIN_FORBIDDEN":
+    case "ADMIN_ACCOUNT_DISABLED":
       return 403;
     case "MED_SCHEDULE_NOT_FOUND":
     case "READING_NOT_FOUND":
