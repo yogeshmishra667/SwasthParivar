@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { View, Text, ScrollView, RefreshControl, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
@@ -191,9 +191,13 @@ export default function DashboardScreen(): JSX.Element {
     }
   }, [setHousehold, activeProfileId]);
 
-  useEffect(() => {
-    void fetchAll();
-  }, [fetchAll]);
+  // Refetch whenever the tab regains focus — tab screens stay mounted,
+  // so a reading logged elsewhere wouldn't otherwise reflect on return.
+  useFocusEffect(
+    useCallback(() => {
+      void fetchAll();
+    }, [fetchAll]),
+  );
 
   const onRefresh = async (): Promise<void> => {
     setRefreshing(true);

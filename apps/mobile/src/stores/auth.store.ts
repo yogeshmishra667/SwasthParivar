@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
 import { clearDashboardCache } from "@/services/dashboard-cache";
+import { useProfileStore } from "@/stores/profile.store";
 
 interface AuthState {
   accessToken: string | null;
@@ -34,6 +35,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Drop cached server data — never leak the previous user's
     // dashboard onto a fresh login on the same device.
     await clearDashboardCache();
+    // Reset in-memory household/profile state too; otherwise a fresh
+    // login keeps the stale activeProfileId and the switcher breaks.
+    useProfileStore.getState().reset();
     set({ accessToken: null, refreshToken: null, userId: null });
   },
   hydrate: async () => {

@@ -22,9 +22,10 @@ interface ProfileState {
   markActive: () => void;
   requestSelector: () => void;
   dismissSelector: () => void;
+  reset: () => void;
 }
 
-export const useProfileStore = create<ProfileState>((set) => ({
+const INITIAL = {
   householdId: null,
   profiles: [],
   activeProfileId: null,
@@ -32,6 +33,10 @@ export const useProfileStore = create<ProfileState>((set) => ({
   lastActiveAt: null,
   profileLockedForLogging: false,
   selectorRequired: false,
+} satisfies Partial<ProfileState>;
+
+export const useProfileStore = create<ProfileState>((set) => ({
+  ...INITIAL,
   setHousehold: (id, profiles) =>
     set((s) => ({
       householdId: id,
@@ -49,6 +54,10 @@ export const useProfileStore = create<ProfileState>((set) => ({
   markActive: () => set({ lastActiveAt: Date.now() }),
   requestSelector: () => set({ selectorRequired: true }),
   dismissSelector: () => set({ selectorRequired: false }),
+  // Clears all household/profile state. Called on logout so a fresh
+  // login on the same device never inherits the previous account's
+  // active profile (which would no longer match any new household row).
+  reset: () => set(INITIAL),
 }));
 
 export const selectActiveProfile = (s: ProfileState): Profile | null =>
