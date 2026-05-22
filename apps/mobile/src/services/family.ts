@@ -43,6 +43,10 @@ export interface PendingInviteSummary {
 
 export interface InviteInput {
   guardianPhone: string;
+  // The household profile this invite is for. Omitted → the JWT
+  // subject (the primary). Set to the active profile so a shared phone
+  // can give each profile its own guardian.
+  targetUserId?: string;
   relationship?: string;
   visibleConditions: string[];
   alertEnabled: boolean;

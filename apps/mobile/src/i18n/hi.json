@@ -285,6 +285,7 @@
     "tabInvites": "Pending invites",
     "inviteTitle": "Guardian ko invite karein",
     "inviteHint": "Guardian ka phone number — wo pehle app install kar lein.",
+    "inviteForProfile": "👤 {{name}} ji ke liye guardian invite kar rahe hain",
     "inviteSend": "Invite bhejein",
     "inviteSent": "Invite bhej diya gaya 🙏",
     "inviteFailed": "Invite nahi ja paya — phone number check karein.",

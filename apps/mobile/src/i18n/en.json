@@ -285,6 +285,7 @@
     "tabInvites": "Pending invites",
     "inviteTitle": "Invite a guardian",
     "inviteHint": "Enter the guardian's phone — they should already have the app.",
+    "inviteForProfile": "Inviting a guardian for 👤 {{name}} ji",
     "inviteSend": "Send invite",
     "inviteSent": "Invite sent 🙏",
     "inviteFailed": "Could not send invite — check the phone number.",
