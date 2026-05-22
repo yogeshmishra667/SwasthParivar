@@ -141,6 +141,37 @@ enum ChatCostTier {
   sonnet
 }
 
+// Source of a Silent Guardian signal (Phase 3 — Feature C). Phase 3
+// scope is med_adherence + data_anomaly only; chat_sentiment /
+// schedule_miss / activity_drop / cross_signal are deferred to Phase 4.
+enum SignalSource {
+  med_adherence
+  data_anomaly
+}
+
+// What a fired GuardianAlert is about. `combined` = both a med-adherence
+// and a trend concern in the same analysis window.
+enum GuardianAlertType {
+  trend_concern
+  med_adherence
+  combined
+}
+
+// Stored guardian-alert severity. `red` is reserved for Phase 4
+// (SOS-adjacent); in Phase 3 the highest band is orange.
+enum GuardianAlertSeverity {
+  yellow
+  orange
+}
+
+// Delivery channel a guardian alert was sent over. WhatsApp is a Phase 4
+// addition — the enum is intentionally forward-compatible.
+enum AlertChannel {
+  push
+  sms
+  in_app
+}
+
 // ─────────────────────────────────────────────────────────────
 // Users & Household (Phase 1)
 // ─────────────────────────────────────────────────────────────
@@ -170,26 +201,31 @@ model User {
   createdAt          DateTime    @default(now()) @map("created_at")
   updatedAt          DateTime    @updatedAt @map("updated_at")
 
-  household           Household            @relation(fields: [householdId], references: [id])
-  glucoseReadings     GlucoseReading[]
-  bpReadings          BPReading[]
-  mealLogs            MealLog[]
-  insights            InsightEvent[]
-  medicationSchedules MedicationSchedule[]
-  medicationLogs      MedicationLog[]
-  streak              UserStreak?
-  feedbackEvents      FeedbackEvent[]
-  notificationState   NotificationState?
-  emergencyContacts   EmergencyContact[]
-  pushTokens          PushToken[]
-  healthScores        HealthScore[]
+  household              Household              @relation(fields: [householdId], references: [id])
+  glucoseReadings        GlucoseReading[]
+  bpReadings             BPReading[]
+  mealLogs               MealLog[]
+  insights               InsightEvent[]
+  medicationSchedules    MedicationSchedule[]
+  medicationLogs         MedicationLog[]
+  streak                 UserStreak?
+  feedbackEvents         FeedbackEvent[]
+  notificationState      NotificationState?
+  emergencyContacts      EmergencyContact[]
+  pushTokens             PushToken[]
+  healthScores           HealthScore[]
   // Family links — a user can be the patient on some rows and the
   // guardian on others. Phase 2 ships the read-only dashboard; alerts
   // arrive in Phase 3.
-  patientFamilyLinks  FamilyLink[]         @relation("PatientLinks")
-  guardianFamilyLinks FamilyLink[]         @relation("GuardianLinks")
-  chatSessions        ChatSession[]
-  chatMessages        ChatMessage[]
+  patientFamilyLinks     FamilyLink[]           @relation("PatientLinks")
+  guardianFamilyLinks    FamilyLink[]           @relation("GuardianLinks")
+  chatSessions           ChatSession[]
+  chatMessages           ChatMessage[]
+  // Silent Guardian (Phase 3 — Feature C). Signals are detected about a
+  // patient; alerts have a patient side and a guardian side.
+  silentGuardianSignals  SilentGuardianSignal[]
+  patientGuardianAlerts  GuardianAlert[]        @relation("PatientAlerts")
+  guardianGuardianAlerts GuardianAlert[]        @relation("GuardianAlerts")
 
   @@index([householdId])
   @@map("users")
@@ -595,4 +631,88 @@ model ChatMessage {
   // with flagged=true.
   @@index([flagged, createdAt])
   @@map("chat_messages")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Silent Guardian (Phase 3 — Feature C)
+//
+// A SILENT_GUARDIAN_ANALYZE job (added in a later slice) detects
+// concerns about a patient, scores each as a SilentGuardianSignal, and
+// — when decayed signals aggregate past the alert threshold — fires a
+// GuardianAlert to each linked guardian. Phase 3 scope: med-adherence
+// and worsening-trend signals only.
+// ─────────────────────────────────────────────────────────────
+
+model SilentGuardianSignal {
+  id     String @id @default(uuid()) @db.Uuid
+  // The patient the signal is about.
+  userId String @map("user_id") @db.Uuid
+
+  signalSource     SignalSource @map("signal_source")
+  // Machine string from the scorer, e.g. "med_missed_frequent",
+  // "worsening_trend". Free-form so a new signal sub-type needs no
+  // migration.
+  signalType       String       @map("signal_type")
+  // Structured numeric evidence from the analysis window. Never holds
+  // patient free-text — the alert-explainer reads numbers only.
+  rawEvidence      Json         @default("{}") @map("raw_evidence")
+  // 0-100 contribution to aggregate risk, BEFORE decay.
+  riskContribution Int          @map("risk_contribution")
+  // Recomputed by the aggregator: 0.5 ^ (ageDays / 7), so a 7-day-old
+  // signal is worth 0.5. Stored for traceability.
+  decayFactor      Float        @default(1.0) @map("decay_factor")
+  detectedAt       DateTime     @default(now()) @map("detected_at")
+  // GuardianAlert.id if this signal contributed to a fired alert.
+  consumedByAlert  String?      @map("consumed_by_alert") @db.Uuid
+  createdAt        DateTime     @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, detectedAt(sort: Desc)])
+  @@index([consumedByAlert])
+  @@map("silent_guardian_signals")
+}
+
+model GuardianAlert {
+  id         String @id @default(uuid()) @db.Uuid
+  patientId  String @map("patient_id") @db.Uuid
+  guardianId String @map("guardian_id") @db.Uuid
+
+  alertType       GuardianAlertType     @map("alert_type")
+  riskScore       Int                   @map("risk_score") // 0-100
+  severity        GuardianAlertSeverity
+  // Patient-facing copy, generated template-only by the alert-explainer
+  // (no verbatim patient content — phase3.md C.2.4).
+  title           String
+  summary         String
+  // Structured payload for mobile rendering.
+  details         Json                  @default("{}")
+  explanation     String                @db.Text
+  suggestedAction String                @map("suggested_action") @db.Text
+  // SilentGuardianSignal ids that produced this alert (audit trail).
+  signalIds       String[]              @default([]) @map("signal_ids")
+  // Channels the dispatch job actually sent over. Empty until dispatch.
+  sentVia         AlertChannel[]        @default([]) @map("sent_via")
+  pushDelivered   Boolean               @default(false) @map("push_delivered")
+  smsDelivered    Boolean               @default(false) @map("sms_delivered")
+  readAt          DateTime?             @map("read_at")
+  // 'called_patient' | 'ignored' | 'helpful' | null — free-form so new
+  // guardian actions need no migration.
+  actionTaken     String?               @map("action_taken")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+
+  patient  User @relation("PatientAlerts", fields: [patientId], references: [id], onDelete: Cascade)
+  guardian User @relation("GuardianAlerts", fields: [guardianId], references: [id], onDelete: Cascade)
+
+  @@index([guardianId, createdAt(sort: Desc)])
+  @@index([patientId, createdAt(sort: Desc)])
+  @@index([severity, createdAt])
+  // Backs the dispatch weekly-orange-cap lookup and the per-patient
+  // daily summary — both filter on (guardianId, patientId, createdAt).
+  @@index([guardianId, patientId, createdAt(sort: Desc)])
+  // Backs the DAILY_GUARDIAN_SUMMARY yellow-alert count, which filters
+  // on (guardianId, severity, createdAt).
+  @@index([guardianId, severity, createdAt(sort: Desc)])
+  @@map("guardian_alerts")
 }

@@ -94,6 +94,40 @@ export interface EventPropsMap {
     cost_tier: string;
     flag_reason: string;
   };
+  // Phase 3 Feature C — emitted by the SILENT_GUARDIAN_ANALYZE worker:
+  // one `signal_detected` per persisted SilentGuardianSignal, one
+  // `alert_created` per fired GuardianAlert. distinctId is the patient.
+  silent_guardian_signal_detected: {
+    source: "med_adherence" | "data_anomaly";
+    type: string;
+    contribution: number;
+  };
+  silent_guardian_alert_created: {
+    severity: "yellow" | "orange";
+    type: "trend_concern" | "med_adherence" | "combined";
+    signal_count: number;
+  };
+  // Phase 3 Feature C — emitted by the GUARDIAN_ALERT_DISPATCH worker
+  // (dispatched / suppressed) and the guardian-alert endpoints
+  // (read / feedback). distinctId is the patient.
+  silent_guardian_alert_dispatched: {
+    severity: "yellow" | "orange";
+    type: "trend_concern" | "med_adherence" | "combined";
+    push_success: boolean;
+    sms_success: boolean;
+  };
+  silent_guardian_dedup_suppressed: {
+    reason: string;
+    severity: "yellow" | "orange";
+    type: "trend_concern" | "med_adherence" | "combined";
+  };
+  silent_guardian_alert_read: {
+    minutes_to_read: number;
+  };
+  silent_guardian_alert_feedback: {
+    helpful: boolean;
+    action_taken: string;
+  };
   // CC.12.6 — emitted by setFlag on every flag write so a rollout or
   // rollback lands on the same dashboards as the feature's own metrics.
   // The Redis audit log remains the system-of-record.

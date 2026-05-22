@@ -21,6 +21,15 @@ export const QUEUE_NAMES = {
   // Phase 3 — weekly cron. Archives chat sessions at 90 days and
   // hard-deletes them at 1 year (CC.11 §5 — DPDP retention).
   CHAT_RETENTION_SWEEP: "chat-retention-sweep",
+  // Phase 3 Feature C — daily cron. Per patient with an accepted
+  // guardian link: detect + score Silent Guardian signals, aggregate
+  // risk, and conditionally create a GuardianAlert. Gated by the
+  // `silent_guardian_enabled` flag.
+  SILENT_GUARDIAN_ANALYZE: "silent-guardian-analyze",
+  // Phase 3 Feature C — fired on GuardianAlert create. Push (primary) →
+  // SMS (fallback) delivery of one alert, after the weekly-orange cap +
+  // critical-bypass dedup. Gated by `silent_guardian_alerts_dispatch`.
+  GUARDIAN_ALERT_DISPATCH: "guardian-alert-dispatch",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

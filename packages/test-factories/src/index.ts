@@ -7,3 +7,5 @@ export * from "./notification-state.factory.js";
 export * from "./voice-transcript.fixtures.js";
 export * from "./chat-session.factory.js";
 export * from "./chat-message.factory.js";
+export * from "./silent-guardian-signal.factory.js";
+export * from "./guardian-alert.factory.js";
