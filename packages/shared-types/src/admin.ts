@@ -51,3 +51,81 @@ export interface AdminAuditLogDto {
   ip: string | null;
   createdAt: string;
 }
+
+// ── Patient user inspection (admin user-detail view) ─────────────────
+
+/** Patient (app user) subscription tier — mirrors the Prisma `Tier` enum. */
+export type AdminTier = "free" | "premium" | "family";
+
+/** A patient user as shown in the admin user list and co-profile lists. */
+export interface AdminPatientListItem {
+  id: string;
+  name: string;
+  phone: string;
+  age: number;
+  tier: AdminTier;
+  conditions: string[];
+  onboardingComplete: boolean;
+  householdId: string;
+  createdAt: string;
+}
+
+/** A page of patient users. Offset pagination — admin grids want page jumps. */
+export interface AdminPatientList {
+  users: AdminPatientListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+/** Full profile fields shown on the detailed user view. */
+export interface AdminPatientProfile extends AdminPatientListItem {
+  gender: string | null;
+  preferredLanguage: string;
+  timezone: string;
+  onboardingStep: number;
+  timeAnomalyCount: number;
+  updatedAt: string;
+}
+
+/** Metadata for one registered resource panel in the user-detail view. */
+export interface AdminResourcePanelMeta {
+  key: string;
+  label: string;
+  description: string;
+  sensitive: boolean;
+}
+
+/** The detailed 360° view of one patient user. */
+export interface AdminPatientDetail {
+  user: AdminPatientProfile;
+  /** Other profiles sharing the household (shared-phone setup). */
+  coProfiles: AdminPatientListItem[];
+  /** UserStreak row, or null if the user has never logged. */
+  streak: unknown;
+  /** NotificationState row, or null. */
+  notificationState: unknown;
+  /** Registered resource panels — each fetched lazily by key. */
+  panels: AdminResourcePanelMeta[];
+}
+
+/** One page of a registry resource panel for a patient user. */
+export interface AdminResourcePanelData {
+  key: string;
+  label: string;
+  /** Whether viewing this panel was audit-logged as a sensitive-data view. */
+  sensitive: boolean;
+  rows: unknown[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+/** Result of a patient tier change. */
+export interface AdminTierChangeResult {
+  id: string;
+  previousTier: AdminTier;
+  tier: AdminTier;
+}

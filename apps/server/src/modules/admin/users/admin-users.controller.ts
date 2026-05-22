@@ -1,0 +1,58 @@
+import type { Request, Response } from "express";
+import { ok } from "../../../shared/http.js";
+import { recordAdminAction } from "../../../shared/admin/audit.js";
+import * as service from "./admin-users.service.js";
+
+export const listUsers = async (req: Request, res: Response): Promise<void> => {
+  const query = req.query as unknown as { search?: string; limit: number; offset: number };
+  ok(res, await service.listUsers(query));
+};
+
+export const getUser = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  ok(res, await service.getUserDetail(id));
+};
+
+export const getUserResource = async (req: Request, res: Response): Promise<void> => {
+  const { id, key } = req.params as { id: string; key: string };
+  const { limit, offset } = req.query as unknown as { limit: number; offset: number };
+  const admin = req.admin!;
+
+  const result = await service.getUserResource({
+    userId: id,
+    key,
+    role: admin.role,
+    limit,
+    offset,
+  });
+
+  // Viewing raw patient health data leaves an access trail.
+  if (result.sensitive) {
+    await recordAdminAction({
+      adminUserId: admin.id,
+      action: "patient_data_viewed",
+      targetType: "user",
+      targetId: id,
+      metadata: { resource: key },
+      ip: req.ip,
+    });
+  }
+  ok(res, result);
+};
+
+export const changeUserTier = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const { tier } = req.body as { tier: "free" | "premium" | "family" };
+  const admin = req.admin!;
+
+  const result = await service.changeUserTier({ userId: id, tier });
+  await recordAdminAction({
+    adminUserId: admin.id,
+    action: "user.tier_changed",
+    targetType: "user",
+    targetId: id,
+    metadata: { from: result.previousTier, to: result.tier },
+    ip: req.ip,
+  });
+  ok(res, result);
+};

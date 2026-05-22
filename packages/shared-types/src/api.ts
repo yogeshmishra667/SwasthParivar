@@ -58,4 +58,5 @@ export type ErrorCode =
   | "ADMIN_2FA_INVALID"
   | "ADMIN_FORBIDDEN"
   | "ADMIN_ACCOUNT_DISABLED"
+  | "ADMIN_NOT_FOUND"
   | "INTERNAL_ERROR";

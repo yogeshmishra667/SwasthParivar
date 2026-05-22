@@ -1,8 +1,13 @@
 import { Router } from "express";
 import cookieParser from "cookie-parser";
-import { requireAdminAuth, requireAdminRole } from "../../shared/middleware/admin-rbac.js";
+import { requireAdminAuth } from "../../shared/middleware/admin-rbac.js";
 import { adminAuthRouter } from "./auth/admin-auth.routes.js";
-import * as flags from "./flags.controller.js";
+import { adminUsersRouter } from "./users/admin-users.routes.js";
+import { adminAnalyticsRouter } from "./analytics/admin-analytics.routes.js";
+import { adminFlagsRouter } from "./flags/admin-flags.routes.js";
+import { adminOpsRouter } from "./ops/admin-ops.routes.js";
+import { adminAdminsRouter } from "./admins/admin-admins.routes.js";
+import { adminAuditRouter } from "./audit/admin-audit.routes.js";
 
 export const adminRouter = Router();
 
@@ -15,13 +20,26 @@ adminRouter.use(cookieParser());
 // itself with requireAdminAuth.
 adminRouter.use("/auth", adminAuthRouter);
 
-// Everything past this point requires a valid admin session.
+// Everything past this point requires a valid admin session. Per-route
+// RBAC role gates live inside each sub-router.
 adminRouter.use(requireAdminAuth);
 
-// Feature flags. Reads are open to every authenticated role; writes and
-// the audit trail are limited to super_admin + ops (see the RBAC table
-// in docs/admin-dashboard-plan.md).
-adminRouter.get("/flags", flags.list);
-adminRouter.get("/flags/:key", flags.getOne);
-adminRouter.put("/flags/:key", requireAdminRole("super_admin", "ops"), flags.set);
-adminRouter.get("/flags/:key/audit", requireAdminRole("super_admin", "ops"), flags.audit);
+// Patient user inspection — list/search, the 360° detail view, the
+// registry-driven resource panels, and tier changes.
+adminRouter.use("/users", adminUsersRouter);
+
+// Analytics — registry-driven KPI metrics (overview + per-metric).
+adminRouter.use("/analytics", adminAnalyticsRouter);
+
+// Feature-flag & rollout control plane — list/read/write, audit timeline,
+// one-click rollback, rollout preview, atomic cohort edits.
+adminRouter.use("/flags", adminFlagsRouter);
+
+// Ops — BullMQ queue depth, system-health probe, maintenance kill switch.
+adminRouter.use("/ops", adminOpsRouter);
+
+// Admin-account management (RBAC).
+adminRouter.use("/admins", adminAdminsRouter);
+
+// Unified admin audit trail.
+adminRouter.use("/audit", adminAuditRouter);

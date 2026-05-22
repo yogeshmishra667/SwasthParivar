@@ -20,8 +20,8 @@ export interface RecordAdminActionInput {
   targetId?: string;
   /** Structured before/after or context payload — never patient free-text. */
   metadata?: Record<string, unknown>;
-  /** Caller IP (`req.ip`). */
-  ip?: string;
+  /** Caller IP — pass `req.ip` directly (which is `string | undefined`). */
+  ip: string | undefined;
 }
 
 export const recordAdminAction = async (input: RecordAdminActionInput): Promise<void> => {
