@@ -1,9 +1,12 @@
 {
   "homeTitle": "Mere parivar",
   "historyTitle": "Purane alerts",
-  "history": "Alert history",
+  "detailTitle": "Alert",
+  "history": "Purane alerts",
   "back": "Peeche",
   "loading": "Load ho raha hai…",
+  "loadError": "Load nahi ho paya — internet check karein.",
+  "retry": "Dobara koshish karein",
   "emptyHome": "Abhi koi alert nahi — sab theek lag raha hai.",
   "emptyHistory": "Abhi tak koi alert nahi.",
   "safeHeadline": "Sab theek hai",

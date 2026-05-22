@@ -1,9 +1,12 @@
 {
   "homeTitle": "My family",
   "historyTitle": "Past alerts",
+  "detailTitle": "Alert",
   "history": "Alert history",
   "back": "Back",
   "loading": "Loading…",
+  "loadError": "Couldn't load — check your connection.",
+  "retry": "Try again",
   "emptyHome": "No alerts right now — everything looks fine.",
   "emptyHistory": "No alerts yet.",
   "safeHeadline": "All good",

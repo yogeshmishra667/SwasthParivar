@@ -10,6 +10,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 
+import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
 import { Icon } from "@/components/ui/Icon";
 import { Button } from "@/components/ui/Button";
 import {
@@ -28,19 +29,23 @@ export default function AlertDetailScreen(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [feedbackDone, setFeedbackDone] = useState(false);
 
-  useEffect(() => {
-    void (async () => {
-      if (!alertId) {
-        setLoading(false);
-        return;
-      }
-      // Opening the alert marks it read; the same call returns the row.
-      const row = await markGuardianAlertRead(alertId);
-      setAlert(row);
-      if (row?.actionTaken) setFeedbackDone(true);
+  // Opening the alert marks it read; the same call returns the row, so
+  // it doubles as the fetch. Extracted so the error state can retry it.
+  const load = useCallback(async (): Promise<void> => {
+    if (!alertId) {
       setLoading(false);
-    })();
+      return;
+    }
+    setLoading(true);
+    const row = await markGuardianAlertRead(alertId);
+    setAlert(row);
+    if (row?.actionTaken) setFeedbackDone(true);
+    setLoading(false);
   }, [alertId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const giveFeedback = useCallback(
     (helpful: boolean): void => {
@@ -53,17 +58,20 @@ export default function AlertDetailScreen(): JSX.Element {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <View className="flex-row items-center gap-1 border-b border-gray-200 px-2 py-2">
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel={t("guardian.back")}
-          className="min-h-touch min-w-touch items-center justify-center"
-          hitSlop={8}
-        >
-          <Icon name="chevron-back" size={24} color="#111827" />
-        </Pressable>
-        <Text className="text-hero font-bold">{t("guardian.homeTitle")}</Text>
+      <View className="flex-row items-center justify-between border-b border-gray-200 px-2 py-2">
+        <View className="flex-row items-center gap-1">
+          <Pressable
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel={t("guardian.back")}
+            className="min-h-touch min-w-touch items-center justify-center"
+            hitSlop={8}
+          >
+            <Icon name="chevron-back" size={24} color="#111827" />
+          </Pressable>
+          <Text className="text-hero font-bold">{t("guardian.detailTitle")}</Text>
+        </View>
+        <ActiveProfileBadge />
       </View>
 
       {loading ? (
@@ -72,10 +80,13 @@ export default function AlertDetailScreen(): JSX.Element {
         </View>
       ) : alert === null ? (
         <View className="flex-1 items-center justify-center px-6">
-          <Icon name="alert-circle-outline" size={48} color="#6B7280" />
+          <Icon name="cloud-offline-outline" size={48} color="#6B7280" />
           <Text className="mt-3 text-center text-important text-neutral">
-            {t("guardian.emptyHistory")}
+            {t("guardian.loadError")}
           </Text>
+          <View className="mt-4">
+            <Button label={t("guardian.retry")} onPress={() => void load()} />
+          </View>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
@@ -92,14 +103,18 @@ export default function AlertDetailScreen(): JSX.Element {
             <Text className="mb-1 text-important font-bold text-gray-900">
               {t("guardian.whatHappened")}
             </Text>
-            <Text className="text-important text-gray-800">{alert.explanation}</Text>
+            <Text accessibilityRole="text" className="text-important text-gray-800">
+              {alert.explanation}
+            </Text>
           </View>
 
           <View>
             <Text className="mb-1 text-important font-bold text-gray-900">
               {t("guardian.whatToDo")}
             </Text>
-            <Text className="text-important text-gray-800">{alert.suggestedAction}</Text>
+            <Text accessibilityRole="text" className="text-important text-gray-800">
+              {alert.suggestedAction}
+            </Text>
           </View>
 
           <Button

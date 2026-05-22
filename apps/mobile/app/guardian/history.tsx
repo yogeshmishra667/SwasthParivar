@@ -3,11 +3,12 @@
 // patients. A patient-name map is fetched once so each row is named.
 
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, Pressable, FlatList } from "react-native";
+import { View, Text, Pressable, FlatList, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 
+import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
 import { AlertCard } from "@/components/family/AlertCard";
 import { Icon } from "@/components/ui/Icon";
 import { listPatientsForGuardian } from "@/services/family";
@@ -23,20 +24,30 @@ export default function AlertHistoryScreen(): JSX.Element {
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // First page + the patient-name map. Re-run on pull-to-refresh.
+  const load = useCallback(async (): Promise<void> => {
+    const [patients, page] = await Promise.all([
+      listPatientsForGuardian("accepted"),
+      listGuardianAlerts({ limit: 20 }),
+    ]);
+    setNames(new Map(patients.map((p) => [p.patient.id, p.patient.name])));
+    setAlerts(page.data);
+    setCursor(page.cursor);
+    setHasMore(page.hasMore);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    void (async () => {
-      const [patients, page] = await Promise.all([
-        listPatientsForGuardian("accepted"),
-        listGuardianAlerts({ limit: 20 }),
-      ]);
-      setNames(new Map(patients.map((p) => [p.patient.id, p.patient.name])));
-      setAlerts(page.data);
-      setCursor(page.cursor);
-      setHasMore(page.hasMore);
-      setLoading(false);
-    })();
-  }, []);
+    void load();
+  }, [load]);
+
+  const onRefresh = async (): Promise<void> => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
 
   const loadMore = useCallback((): void => {
     if (!hasMore || cursor === null || loadingMore) return;
@@ -52,17 +63,20 @@ export default function AlertHistoryScreen(): JSX.Element {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <View className="flex-row items-center gap-1 border-b border-gray-200 px-2 py-2">
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel={t("guardian.back")}
-          className="min-h-touch min-w-touch items-center justify-center"
-          hitSlop={8}
-        >
-          <Icon name="chevron-back" size={24} color="#111827" />
-        </Pressable>
-        <Text className="text-hero font-bold">{t("guardian.historyTitle")}</Text>
+      <View className="flex-row items-center justify-between border-b border-gray-200 px-2 py-2">
+        <View className="flex-row items-center gap-1">
+          <Pressable
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel={t("guardian.back")}
+            className="min-h-touch min-w-touch items-center justify-center"
+            hitSlop={8}
+          >
+            <Icon name="chevron-back" size={24} color="#111827" />
+          </Pressable>
+          <Text className="text-hero font-bold">{t("guardian.historyTitle")}</Text>
+        </View>
+        <ActiveProfileBadge />
       </View>
 
       {loading ? (
@@ -83,6 +97,9 @@ export default function AlertHistoryScreen(): JSX.Element {
           contentContainerStyle={{ padding: 16, gap: 12 }}
           onEndReachedThreshold={0.4}
           onEndReached={loadMore}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+          }
           renderItem={({ item }) => (
             <AlertCard
               severity={item.severity}

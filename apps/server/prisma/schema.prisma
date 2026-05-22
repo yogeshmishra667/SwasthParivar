@@ -708,5 +708,11 @@ model GuardianAlert {
   @@index([guardianId, createdAt(sort: Desc)])
   @@index([patientId, createdAt(sort: Desc)])
   @@index([severity, createdAt])
+  // Backs the dispatch weekly-orange-cap lookup and the per-patient
+  // daily summary — both filter on (guardianId, patientId, createdAt).
+  @@index([guardianId, patientId, createdAt(sort: Desc)])
+  // Backs the DAILY_GUARDIAN_SUMMARY yellow-alert count, which filters
+  // on (guardianId, severity, createdAt).
+  @@index([guardianId, severity, createdAt(sort: Desc)])
   @@map("guardian_alerts")
 }

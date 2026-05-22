@@ -30,7 +30,13 @@ import {
   type ScoredSignal,
   type TypedReading,
 } from "@swasth/domain-logic";
-import type { GlucoseReadingType, GuardianAlertSeverity } from "@prisma/client";
+import type {
+  GlucoseReadingType,
+  GuardianAlertSeverity,
+  Prisma,
+  SignalSource,
+  SilentGuardianSignal,
+} from "@prisma/client";
 
 import { prisma } from "../shared/database.js";
 import { getFlag } from "../shared/flags/index.js";
@@ -89,6 +95,57 @@ const baselineOf = (values: readonly number[]): { mean: number; sigma: number } 
   return { mean, sigma: Math.sqrt(variance) };
 };
 
+// A BullMQ retry re-runs analyzePatient wholesale. A signal created
+// within this window is treated as the current cycle's signal, so a
+// retry reuses it instead of inserting a duplicate row + re-emitting
+// PostHog. Comfortably larger than the 3-attempt exponential backoff,
+// smaller than the 24h cron interval.
+const RETRY_DEDUP_HOURS = 23;
+
+// Persists one scored signal — or, on a retry, reuses this cycle's
+// existing one. Returns the row that should feed risk aggregation,
+// which may be an older signal still inside the decay window when
+// nothing new scored this run.
+const persistSignal = async (
+  patientId: string,
+  source: SignalSource,
+  scored: ScoredSignal,
+  evidence: Prisma.InputJsonObject,
+  now: Date,
+  lookbackCutoff: Date,
+): Promise<SilentGuardianSignal | null> => {
+  const latest = await prisma.silentGuardianSignal.findFirst({
+    where: { userId: patientId, signalSource: source, detectedAt: { gte: lookbackCutoff } },
+    orderBy: { detectedAt: "desc" },
+  });
+
+  // Nothing new scored — keep the latest persisted signal so a
+  // still-decaying older concern continues to contribute.
+  if (scored.contribution <= 0) return latest;
+
+  // Idempotency — a retry within the dedup window reuses this cycle's
+  // signal instead of inserting a duplicate.
+  const retryCutoff = new Date(now.getTime() - RETRY_DEDUP_HOURS * 3_600_000);
+  if (latest !== null && latest.detectedAt >= retryCutoff) return latest;
+
+  const created = await prisma.silentGuardianSignal.create({
+    data: {
+      userId: patientId,
+      signalSource: source,
+      signalType: scored.signalType,
+      rawEvidence: evidence,
+      riskContribution: scored.contribution,
+      detectedAt: now,
+    },
+  });
+  capture("silent_guardian_signal_detected", patientId, {
+    source,
+    type: scored.signalType,
+    contribution: scored.contribution,
+  });
+  return created;
+};
+
 // ── per-patient analysis ────────────────────────────────────────────
 
 // Returns the number of GuardianAlert rows created for this patient.
@@ -120,25 +177,22 @@ const analyzePatient = async (group: PatientGroup, now: Date): Promise<number> =
     evidence: medEvidence,
     userBaseline: null,
   });
-  if (medScored.contribution > 0) {
-    await prisma.silentGuardianSignal.create({
-      data: {
-        userId: patientId,
-        signalSource: "med_adherence",
-        signalType: medScored.signalType,
-        rawEvidence: medEvidence,
-        riskContribution: medScored.contribution,
-        detectedAt: now,
-      },
-    });
-    capture("silent_guardian_signal_detected", patientId, {
-      source: "med_adherence",
-      type: medScored.signalType,
-      contribution: medScored.contribution,
-    });
-  }
+  const medSignal = await persistSignal(
+    patientId,
+    "med_adherence",
+    medScored,
+    medEvidence,
+    now,
+    signalCutoff,
+  );
 
   // ── data-anomaly (worsening trend) signal ──
+  let anomalyScored: ScoredSignal = {
+    contribution: 0,
+    signalType: "trend_stable",
+    reasoning: "no trend detected",
+  };
+  let anomalyEvidence: Prisma.InputJsonObject = {};
   const trend = detectTrend({
     readings: toTyped(fastingReadings),
     windowDays: TREND_WINDOW_DAYS,
@@ -149,53 +203,31 @@ const analyzePatient = async (group: PatientGroup, now: Date): Promise<number> =
     const slopeRaw = trend.messageParams.slopePerDay;
     const directionRaw = trend.messageParams.direction;
     const rSquaredRaw = trend.evidence.rSquared;
-    const anomalyEvidence = {
+    const ev = {
       slopePerDay: typeof slopeRaw === "number" ? slopeRaw : 0,
       direction: typeof directionRaw === "string" ? directionRaw : "",
       rSquared: typeof rSquaredRaw === "number" ? rSquaredRaw : 0,
       readingType: "fasting",
     };
-    const anomalyScored: ScoredSignal = scoreSignal({
+    anomalyScored = scoreSignal({
       source: "data_anomaly",
-      evidence: anomalyEvidence,
+      evidence: ev,
       userBaseline: baselineOf(fastingReadings.map((r) => r.valueMgDl)),
     });
-    if (anomalyScored.contribution > 0) {
-      await prisma.silentGuardianSignal.create({
-        data: {
-          userId: patientId,
-          signalSource: "data_anomaly",
-          signalType: anomalyScored.signalType,
-          rawEvidence: anomalyEvidence,
-          riskContribution: anomalyScored.contribution,
-          detectedAt: now,
-        },
-      });
-      capture("silent_guardian_signal_detected", patientId, {
-        source: "data_anomaly",
-        type: anomalyScored.signalType,
-        contribution: anomalyScored.contribution,
-      });
-    }
+    anomalyEvidence = ev;
   }
+  const anomalySignal = await persistSignal(
+    patientId,
+    "data_anomaly",
+    anomalyScored,
+    anomalyEvidence,
+    now,
+    signalCutoff,
+  );
 
   // ── aggregate the latest signal per source ──
-  const [latestMed, latestAnomaly] = await Promise.all([
-    prisma.silentGuardianSignal.findFirst({
-      where: {
-        userId: patientId,
-        signalSource: "med_adherence",
-        detectedAt: { gte: signalCutoff },
-      },
-      orderBy: { detectedAt: "desc" },
-    }),
-    prisma.silentGuardianSignal.findFirst({
-      where: { userId: patientId, signalSource: "data_anomaly", detectedAt: { gte: signalCutoff } },
-      orderBy: { detectedAt: "desc" },
-    }),
-  ]);
-  const activeSignals = [latestMed, latestAnomaly].filter(
-    (s): s is NonNullable<typeof s> => s !== null,
+  const activeSignals = [medSignal, anomalySignal].filter(
+    (s): s is SilentGuardianSignal => s !== null,
   );
   if (activeSignals.length === 0) return 0;
 
@@ -218,21 +250,27 @@ const analyzePatient = async (group: PatientGroup, now: Date): Promise<number> =
   const signalIds = activeSignals.map((s) => s.id);
   const createdAlertIds: string[] = [];
 
+  // Creation-guard input: the most severe unread alert per guardian from
+  // the last 24h, fetched in one query (not per-guardian — avoids N+1).
+  const recentUnread = await prisma.guardianAlert.findMany({
+    where: { patientId, readAt: null, createdAt: { gte: new Date(now.getTime() - dayMs) } },
+    select: { guardianId: true, severity: true },
+  });
+  const coveredRankByGuardian = new Map<string, number>();
+  for (const a of recentUnread) {
+    const rank = SEVERITY_RANK[a.severity];
+    if (rank > (coveredRankByGuardian.get(a.guardianId) ?? 0)) {
+      coveredRankByGuardian.set(a.guardianId, rank);
+    }
+  }
+
   for (const guardian of group.guardians) {
     // Creation-guard: the cron runs daily, so a patient who stays in the
     // same band would otherwise get a fresh alert every day. Skip when an
     // unread alert of equal-or-higher severity already exists from the
     // last 24h — a genuine escalation (yellow → orange) still gets through.
-    const recentUnread = await prisma.guardianAlert.findFirst({
-      where: {
-        patientId,
-        guardianId: guardian.guardianId,
-        readAt: null,
-        createdAt: { gte: new Date(now.getTime() - dayMs) },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    if (recentUnread && SEVERITY_RANK[recentUnread.severity] >= SEVERITY_RANK[risk.severity]) {
+    const coveredRank = coveredRankByGuardian.get(guardian.guardianId) ?? 0;
+    if (coveredRank >= SEVERITY_RANK[risk.severity]) {
       logger.debug(
         { patientId, guardianId: guardian.guardianId },
         "silent-guardian-analyze: recent unread alert covers this — skipping creation",

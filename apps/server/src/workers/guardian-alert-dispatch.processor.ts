@@ -26,6 +26,7 @@ import { prisma } from "../shared/database.js";
 import { getFlag } from "../shared/flags/index.js";
 import { logger } from "../shared/logger.js";
 import { capture } from "../shared/analytics/posthog.js";
+import { captureUnhandled } from "../shared/observability/sentry.js";
 import { sendExpoPush, type ExpoPushMessage } from "../shared/notifications/expo-push.js";
 import { sendSms } from "../shared/notifications/msg91-sms.js";
 
@@ -177,12 +178,21 @@ export const processGuardianAlertDispatch = async (
   });
 
   if (!pushSuccess && !smsSuccess) {
-    // Non-critical, so no on-call page (unlike critical-bypass) — but a
-    // guardian alert that reached no remote channel is logged for the
-    // delivery-success dashboard.
+    // A guardian alert that reached no remote channel is invisible until
+    // the guardian next opens the app. Less acute than a critical-bypass
+    // (no IVR escalation), but it still means a real concern went
+    // undelivered — capture to Sentry so a provider outage or a guardian
+    // with no reachable device surfaces on the delivery dashboard.
     log.warn(
       { guardianId: alert.guardianId },
       "guardian-alert-dispatch: reached no remote channel",
     );
+    captureUnhandled(new Error("guardian-alert-dispatch reached no remote channel"), {
+      alertId: alert.id,
+      guardianId: alert.guardianId,
+      patientId: alert.patientId,
+      severity: alert.severity,
+      pushTokens: tokens.length,
+    });
   }
 };
