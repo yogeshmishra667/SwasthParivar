@@ -6,6 +6,7 @@ import { router } from "expo-router";
 import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
 import { markNotificationSeen } from "@/services/notification-dedup";
+import { useProfileStore } from "@/stores/profile.store";
 import { isExpoGo } from "@/utils/runtime";
 
 // Remote notification APIs were removed from Expo Go in SDK 53+.
@@ -101,6 +102,22 @@ export const cancelReminder = async (id: string): Promise<void> => {
   await Notifications.cancelScheduledNotificationAsync(id);
 };
 
+// A household notification carries `targetUserId` — the profile it was
+// addressed to. On a shared phone, switch the active profile to it
+// BEFORE routing, so a tapped "Maa ji" reminder lands the app on Maa's
+// profile rather than whoever was last active. No-ops when the profile
+// is unknown to this device, already active, or the switcher is locked
+// mid-logging (profile.store enforces the lock).
+const switchProfileFromNotificationData = (data: unknown): void => {
+  const targetUserId = (data as { targetUserId?: string } | null)?.targetUserId;
+  if (typeof targetUserId !== "string") return;
+
+  const store = useProfileStore.getState();
+  if (store.activeProfileId === targetUserId) return;
+  if (!store.profiles.some((p) => p.id === targetUserId)) return;
+  store.switchProfile(targetUserId);
+};
+
 // Phase 3 Feature C — deep-link a tapped notification to its screen.
 // Silent Guardian alerts open AlertDetail; the daily summary opens
 // GuardianHome. Other notification types fall through (handled, if at
@@ -108,6 +125,7 @@ export const cancelReminder = async (id: string): Promise<void> => {
 const routeFromNotificationData = (data: unknown): void => {
   const payload = data as { type?: string; alertId?: string } | null;
   if (!payload) return;
+  switchProfileFromNotificationData(data);
   if (payload.type === "guardian_alert" && typeof payload.alertId === "string") {
     router.push({
       pathname: "/guardian/alert/[alertId]",

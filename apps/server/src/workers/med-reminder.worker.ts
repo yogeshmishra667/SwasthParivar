@@ -4,6 +4,7 @@ import { createWorker, createQueue, QUEUE_NAMES } from "../shared/queue.js";
 import { prisma } from "../shared/database.js";
 import { logger } from "../shared/logger.js";
 import { sendExpoPush } from "../shared/notifications/expo-push.js";
+import { resolveHouseholdDelivery } from "../shared/notifications/household-delivery.js";
 
 export interface MedReminderJob {
   scheduleId: string;
@@ -19,8 +20,13 @@ export interface MedMissedAlertJob {
 
 const missedAlertQueue = createQueue<MedMissedAlertJob>(QUEUE_NAMES.MED_MISSED_ALERT);
 
-const MED_REMINDER_COPY = (medicine: string): { title: string; body: string } => ({
-  title: "Dawai ka time",
+const MED_REMINDER_COPY = (
+  medicine: string,
+  profileName: string | null,
+): { title: string; body: string } => ({
+  // On a shared-device household the profile name disambiguates whose
+  // reminder this is; a single-profile household keeps the bare title.
+  title: profileName ? `${profileName} ji: Dawai ka time` : "Dawai ka time",
   body: `${medicine} lene ka time ho gaya. Pani ke saath lein 🙏`,
 });
 
@@ -31,27 +37,40 @@ export const medReminderWorker: Worker<MedReminderJob> = createWorker<MedReminde
 
     const schedule = await prisma.medicationSchedule.findUnique({
       where: { id: scheduleId },
-      select: { medicineName: true, active: true, isCritical: true, userId: true },
+      select: {
+        medicineName: true,
+        active: true,
+        isCritical: true,
+        userId: true,
+        user: { select: { name: true } },
+      },
     });
     if (!schedule || !schedule.active || schedule.userId !== userId) return;
 
-    const tokens = await prisma.pushToken.findMany({
-      where: { userId },
-      select: { token: true },
-    });
+    // The schedule's owner may be a non-primary household profile whose
+    // device token lives under the household primary — resolve delivery
+    // across the whole household so the shared phone still rings.
+    const { memberIds, tokens } = await resolveHouseholdDelivery(userId);
 
     if (tokens.length > 0) {
-      const copy = MED_REMINDER_COPY(schedule.medicineName);
+      const profileName = memberIds.length > 1 ? schedule.user.name : null;
+      const copy = MED_REMINDER_COPY(schedule.medicineName, profileName);
       const notificationId = randomUUID();
       await sendExpoPush(
-        tokens.map((t) => ({
-          to: t.token,
+        tokens.map((token) => ({
+          to: token,
           title: copy.title,
           body: copy.body,
           sound: "default",
           priority: "high",
           channelId: "medications",
-          data: { notificationId, type: "med_reminder", scheduleId, timeSlot },
+          data: {
+            notificationId,
+            type: "med_reminder",
+            scheduleId,
+            timeSlot,
+            targetUserId: userId,
+          },
         })),
       );
     }

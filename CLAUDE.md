@@ -95,6 +95,10 @@ Home screen: profile avatars at top (like Netflix). Tap to switch. Each profile:
 
 **Data Corruption Prevention:** Confirmation screen ALWAYS shows: "👤 Ramesh ji ke liye save kar rahe hain — sahi hai?" Wrong profile → tap avatar to switch BEFORE saving. App open after 30+ min inactive → show profile selector.
 
+**Notification Delivery (household-scoped — ENFORCE):** A shared device registers ONE Expo push token, always under the household primary (`POST /auth/push-token` keys the token to the JWT subject). Non-primary profiles own NO token row. Every patient-facing push job (med reminders, contextual reminders, critical-bypass patient device) MUST resolve recipients via `resolveHouseholdDelivery()` / `householdUserIds()` in `shared/notifications/household-delivery.ts` — NEVER `pushToken.findMany({ where: { userId } })`. On a multi-profile household the notification copy is prefixed with the profile name ("Maa ji: …") and the payload carries `data.targetUserId` so a tap switches the app to that profile. Single-profile households are byte-identical to a plain `userId` query — no behaviour change.
+
+**Family/Guardian (profile-aware):** Guardian role requires login → a guardian is ALWAYS a primary account. Patient role = ANY household profile. `POST /family/invite` carries optional `targetUserId` (the active profile); the controller resolves + household-authorises it via `resolveHouseholdMember`. `updatePrivacy`/revoke authz treats any member of the patient's household as the patient side (the primary operates the shared device on every profile's behalf). Guardian-side endpoints stay keyed on the JWT subject.
+
 ## Habit Loop (Trigger → Action → Reward)
 
 **NotificationState (persisted per user):** fatigue_level(0-3), consecutive_ignores, last_notification_at, best_log_time_fasting, best_log_time_post_meal, notification_history_7d(JSONB)

@@ -125,6 +125,11 @@ export const respondToInvite = async (params: {
 
 export interface UpdatePrivacyInput {
   callerId: string;
+  // Household of the caller (from the JWT). The "patient side" of a
+  // link is owned by the household, not a single user id — the primary
+  // operates the shared device on behalf of every profile in it, so any
+  // member of the patient's household counts as the patient side.
+  callerHouseholdId: string;
   linkId: string;
   visibleConditions?: readonly string[] | undefined;
   alertEnabled?: boolean | undefined;
@@ -133,10 +138,15 @@ export interface UpdatePrivacyInput {
 }
 
 export const updatePrivacy = async (input: UpdatePrivacyInput): Promise<FamilyLink> => {
-  const link = await prisma.familyLink.findUnique({ where: { id: input.linkId } });
+  const link = await prisma.familyLink.findUnique({
+    where: { id: input.linkId },
+    include: { patient: { select: { householdId: true } } },
+  });
   if (!link) throw new DomainError("FAMILY_LINK_NOT_FOUND", "link not found");
 
-  const isPatient = link.patientId === input.callerId;
+  // Patient side = anyone in the patient's household (shared-device
+  // model). Guardian side = the guardian account exactly.
+  const isPatient = link.patient.householdId === input.callerHouseholdId;
   const isGuardian = link.guardianId === input.callerId;
   if (!isPatient && !isGuardian) {
     throw new DomainError("FAMILY_NO_ACCESS", "you are not part of this link");
