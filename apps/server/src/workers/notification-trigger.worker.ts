@@ -12,6 +12,7 @@ import { prisma } from "../shared/database.js";
 import { logger } from "../shared/logger.js";
 import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
 import { sendExpoPush } from "../shared/notifications/expo-push.js";
+import { resolveHouseholdDelivery } from "../shared/notifications/household-delivery.js";
 
 interface TickJob {
   tick: true;
@@ -198,11 +199,22 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
     update: {},
   });
 
-  const tokens = await prisma.pushToken.findMany({
-    where: { userId },
-    select: { token: true },
-  });
+  // A non-primary household profile owns no push token of its own —
+  // resolve delivery across the household so the shared device still
+  // receives this profile's nudge.
+  const { memberIds, tokens } = await resolveHouseholdDelivery(userId);
   if (tokens.length === 0) return;
+
+  // The profile name only labels the notification on a shared device;
+  // a single-profile household keeps the unprefixed copy untouched.
+  let profileName: string | null = null;
+  if (memberIds.length > 1) {
+    const profile = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    profileName = profile?.name ?? null;
+  }
 
   const streak = await prisma.userStreak.findUnique({ where: { userId } });
 
@@ -210,7 +222,7 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
     userId,
     state: toShared(stateRaw),
     stateRaw,
-    tokens: tokens.map((t) => t.token),
+    tokens,
     lastLogDate: streak?.lastLogDate ?? null,
     currentStreak: streak?.currentStreakDays ?? 0,
   };
@@ -236,11 +248,12 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
   }
 
   const copy = COPY[result.chosen.trigger](result.chosen.params);
+  const title = profileName ? `${profileName} ji: ${copy.title}` : copy.title;
   const notificationId = randomUUID();
   await sendExpoPush(
     ctx.tokens.map((t) => ({
       to: t,
-      title: copy.title,
+      title,
       body: copy.body,
       sound: "default",
       priority: "high",
@@ -249,6 +262,7 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
         notificationId,
         type: result.chosen.trigger,
         messageKey: result.chosen.messageKey,
+        targetUserId: userId,
       },
     })),
   );
