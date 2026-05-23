@@ -8,8 +8,11 @@
 > the Session Log whenever you stop. Tick tasks only when fully done (typecheck + lint
 > clean for that slice).
 
-**Status:** M0 + M1 done — the full admin API surface (server typecheck + lint clean).
-**Next task:** M2-T1 — scaffold the `@swasth/admin` Vite + React workspace package.
+**Status:** M0 + M1 + M2 done — admin API surface live; `@swasth/admin` SPA scaffolded
+(Vite 8 + React 19 + Tailwind v4 + TanStack Router/Query/Table + shadcn-style component
+library). Workspace-wide typecheck + lint + build all clean.
+**Next task:** M3-T1 — flesh out the login page (password → TOTP → enrolment) with
+polished error / validation copy on top of the functional MVP shipped in M2-T3.
 
 ---
 
@@ -49,13 +52,37 @@
 - [x] **M1-T10** `admin.routes.ts` mounts all sub-routers: `/auth`, `/users`,
       `/analytics`, `/flags`, `/ops`, `/admins`, `/audit` (all behind `requireAdminAuth`).
 
-## M2 — Frontend scaffold + component library
+## M2 — Frontend scaffold + component library ✅
 
-- [ ] **M2-T1** New `@swasth/admin` workspace package (Vite + React + TS).
-- [ ] **M2-T2** shadcn/ui + shared component library.
-- [ ] **M2-T3** App shell — auth, routing, layout, theming.
-- [ ] **M2-T4** Typed API client + frontend `userPanelRegistry`.
-- [ ] **M2-T5** Extend CI with admin lint/typecheck/build.
+- [x] **M2-T1** New `@swasth/admin` workspace package (Vite 8 + React 19 + TS strict).
+      Tailwind v4 via `@tailwindcss/vite`, alias `@/* → ./src/*`, dev proxy that
+      forwards `/admin` to the local server on :3000.
+- [x] **M2-T2** Tailwind v4 token theme (light + dark via `@theme inline` + `.dark`
+      class, `tw-animate-css` for the Radix transitions), `cn` util (`clsx` +
+      `tailwind-merge` v3), 18 shadcn-style UI primitives owned in-repo, and the
+      shared library from the plan: `DataTable`, `DetailDrawer`, `KpiCard`,
+      `ChartCard`, `FlagEditor` (with `flagEditorRegistry` keyed by rollout kind so
+      a Phase 4 `tier` rollout = one new editor), `AuditTimeline`, `JsonViewer`,
+      `ConfirmDialog`, `RoleGate`.
+- [x] **M2-T3** App shell — `AuthProvider` (in-memory access token in the api client
+      closure, single-flight refresh, restores session via the refresh cookie on
+      mount), `ThemeProvider` (system / light / dark, reactive to OS preference),
+      TanStack Router code-based route tree (`/login` sibling + pathless `_app`
+      layout containing the 8 section pages), layout with `Sidebar` (role-gated nav
+      via `useAdminRole`) and `Topbar` (theme + user menu), placeholder pages for
+      every M3 section, plus a functional Login page driving the full
+      password → TOTP / enrolment-with-QR flow.
+- [x] **M2-T4** Typed `adminApi` covering every server endpoint (auth, users + lazy
+      panels + tier, analytics overview/metric, flags + audit/evaluate/rollback/
+      cohort, ops, admins, audit). `request()` wraps fetch with `Authorization:
+    Bearer`, `credentials: include`, envelope-unwrap, and a single-flight
+      refresh-on-401. `ApiClientError` carries `status` + the typed `ErrorCode`.
+      TanStack Query read hooks for the boot path; frontend `userPanelRegistry`
+      mirrors the server registry (generic JSON renderer for M2; M3 specializes).
+- [x] **M2-T5** ESLint `react-hooks` block extended to `apps/admin/**`; CI `changes`
+      job grew an `admin:` paths filter (reserved for future admin-only deploy
+      jobs). The existing workspace-recursive `typecheck` / `lint` / `build` jobs
+      already cover the admin package via the scripts in `apps/admin/package.json`.
 
 ## M3 — Frontend pages
 
@@ -75,6 +102,27 @@
 - [ ] **M4-T2** Frontend component tests.
 - [ ] **M4-T3** Full `verify` gate.
 - [ ] **M4-T4** Docs: `docs/admin-dashboard.md`, finalize this file, `.env.example`.
+
+---
+
+## Deferred / follow-ups
+
+Work intentionally left out of M0–M4 — revisit before or during Phase 4.
+
+- **PostHog query client.** `critical_bypass_sms_success_rate` (the URGENT ops
+  metric) and true voice-success-rate + retention are PostHog-event-derived — there
+  is no DB table for them. They are registered in the analytics metric registry and
+  surfaced as `available: false` with a note. Wiring a PostHog query (HogQL) client
+  is the follow-up that makes them live.
+- **Deactivate / suspend a patient user.** `User` has no `active` / `deactivatedAt`
+  field; adding one _and_ enforcing it in patient login is a patient-facing change,
+  beyond the scope of an additive admin API. Needs a schema migration + auth-layer
+  enforcement — coordinate with the team / Phase 4. (Tier change shipped in M1-T4.)
+- **TOTP recovery codes + email-based admin password reset.** v1 password reset is
+  super_admin-initiated via the Admin Users page; there is no self-service recovery.
+- **Runtime-adjustable rate limits.** `shared/middleware/rate-limit.ts` limits are
+  hardcoded; the console shows them read-only. Making them flag-driven is a separate
+  server change.
 
 ---
 
@@ -137,4 +185,64 @@
     streak distribution, med adherence) + 3 PostHog metrics (critical-bypass SMS
     success, voice success, retention) registered but `available:false` with a note.
 - **Full admin API now live** under `/admin/*`. Next: M2 — the `apps/admin` frontend.
-- Reminder: M1 work is **uncommitted** on `admin/console`.
+- **M1 committed** — `admin/console`, commit `2a8efc4` (local-only; M0 `88ce488` is
+  pushed). Deferred items consolidated under the "Deferred / follow-ups" section above.
+
+### 2026-05-23 — Session 2
+
+- **M2 complete — `apps/admin` Vite + React scaffold + shared component library.**
+  Workspace-wide `pnpm -r --parallel run typecheck/lint` and `pnpm build` clean
+  across all six packages (shared-types, domain-logic, test-factories, server,
+  mobile, admin).
+- **M2-T1 — package scaffold.** New `@swasth/admin` workspace package: Vite 8 +
+  `@vitejs/plugin-react` 6, React 19.1.0 (pinned to match mobile / Expo 54),
+  TypeScript strict via `tsconfig.base.json`, Tailwind v4 via `@tailwindcss/vite`,
+  alias `@/* → ./src/*`. Dev server on :5174 with `/admin` proxied to the local
+  server (`VITE_API_TARGET`, default `http://localhost:3000`). Picked up
+  automatically by every workspace-recursive script.
+- **M2-T2 — component library.** Tailwind v4 token theme (light + dark via
+  `@theme inline` and a `.dark` class on `<html>`, `tw-animate-css` for Radix
+  transitions), `cn` util (`clsx` + `tailwind-merge` v3). 18 shadcn-style UI
+  primitives owned in-repo + 9 shared components from the plan. `FlagEditor`
+  ships a kind-keyed `flagEditorRegistry` so adding a Phase 4 `tier` rollout =
+  one new entry, not a rewrite.
+- **M2-T3 — app shell.** AuthProvider holds the access token in module scope
+  (the api client closure — never on React context / localStorage / sessionStorage)
+  and boots by calling `/admin/auth/me`; the client transparently refreshes via
+  the httpOnly cookie on 401 with single-flight semantics. ThemeProvider toggles
+  `.dark` and reacts to OS theme changes when in `system` mode. TanStack Router
+  code-based tree: `/login` sibling + pathless `_app` layout route containing
+  the 8 section pages (Overview, Users, Analytics, App Control, Ops, Admin Users,
+  Audit, Billing). Sidebar nav role-gates via `useAdminRole`. LoginPage drives
+  the full password → TOTP / enrolment-with-QR flow.
+- **M2-T4 — API client + registry.** `adminApi.*` covers every server endpoint
+  with `@swasth/shared-types` DTOs plus local DTOs in `src/api/types.ts` for
+  endpoints whose response shapes aren't yet in shared-types. `request()` wraps
+  fetch with `Authorization: Bearer`, `credentials: include`, envelope-unwrap,
+  and a single-flight refresh-on-401. `ApiClientError` carries `status` + the
+  typed `ErrorCode`. TanStack Query hooks for the boot reads. The frontend
+  `userPanelRegistry` mirrors the server registry; the generic JSON renderer
+  covers all 14 keys for M2 (M3 will specialize glucose / BP / chat / alerts).
+- **M2-T5 — CI.** ESLint `react-hooks` block extended to `apps/admin/**`;
+  added an `admin:` paths filter to the `changes` job for future admin-only
+  deploy steps. The workspace-recursive `typecheck` / `lint` / `build` jobs
+  pick up the admin package automatically via the scripts in
+  `apps/admin/package.json`.
+- **Notes for next session:**
+  - **Pin caveat:** `react` and `react-dom` deliberately pinned to `19.1.0`
+    exact (no caret) so admin + mobile share one React across the workspace.
+    `@types/react-dom` pinned `~19.1.11` (no 19.1.12+ has been published yet).
+    Tailwind v4 (`^4.3.0`) in admin coexists with mobile's NativeWind-pinned
+    `tailwindcss 3.3.2` — each package gets its own resolution via pnpm, so
+    the hoist doesn't bite.
+  - **Bundle size:** 518 KB raw / 159 KB gzipped (one chunk) — code-splitting
+    is a follow-up, not a blocker for M3.
+  - **CORS:** the Vite dev proxy keeps the SPA same-origin with the server,
+    so cookies flow without CORS gymnastics. When the admin SPA moves off the
+    proxy in prod, confirm the server's `corsAllowList` admits the admin
+    origin **and** the global cors `credentials: true` is set (so the
+    refresh cookie can flow). The current server config in
+    `apps/server/src/app.ts` allows credentials by default — sanity-check.
+  - **Typed nav:** `declare module "@tanstack/react-router" { interface Register
+{ router: typeof router } }` is wired in `src/router/router.tsx`, so
+    `<Link to="/users">` is type-checked against the registered paths.
