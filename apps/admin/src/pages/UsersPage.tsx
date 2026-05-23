@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AdminPatientListItem } from "@swasth/shared-types";
 import { useUsers } from "@/api/queries";
@@ -30,16 +31,17 @@ const columns: ColumnDef<AdminPatientListItem, unknown>[] = [
 export function UsersPage() {
   const [search, setSearch] = useState("");
   // Defer search to a memoized normalized value so we don't refetch on every keystroke.
-  // (Pages can adopt a debounce hook in M3-T3; for the scaffold the empty input is the common case.)
+  // (Pages can adopt a debounce hook later; for the scaffold the empty input is common.)
   const params = useMemo(() => (search.trim() ? { search } : {}), [search]);
   const { data, isLoading, isError } = useUsers(params);
+  const navigate = useNavigate();
 
   return (
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
         <p className="text-sm text-muted-foreground">
-          Patient profiles. Click a row in M3 to open the detailed 360° view.
+          Patient profiles. Click a row to open the detailed 360° view.
         </p>
       </header>
       <Input
@@ -57,6 +59,9 @@ export function UsersPage() {
           columns={columns}
           data={data?.users ?? []}
           emptyMessage={isLoading ? "Loading…" : "No users found."}
+          onRowClick={(row) => {
+            void navigate({ to: "/users/$id", params: { id: row.id } });
+          }}
         />
       )}
       {data ? (

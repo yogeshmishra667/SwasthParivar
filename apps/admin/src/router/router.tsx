@@ -12,6 +12,7 @@ import { AppLayout } from "@/layout/AppLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { OverviewPage } from "@/pages/OverviewPage";
 import { UsersPage } from "@/pages/UsersPage";
+import { UserDetailPage } from "@/pages/UserDetailPage";
 import { AnalyticsPage } from "@/pages/AnalyticsPage";
 import { FlagsPage } from "@/pages/FlagsPage";
 import { OpsPage } from "@/pages/OpsPage";
@@ -44,6 +45,11 @@ const usersRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/users",
   component: UsersPage,
+});
+export const userDetailRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/users/$id",
+  component: UserDetailPage,
 });
 const analyticsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
@@ -81,6 +87,7 @@ const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([
     overviewRoute,
     usersRoute,
+    userDetailRoute,
     analyticsRoute,
     flagsRoute,
     opsRoute,

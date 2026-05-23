@@ -75,7 +75,7 @@ polished error / validation copy on top of the functional MVP shipped in M2-T3.
 - [x] **M2-T4** Typed `adminApi` covering every server endpoint (auth, users + lazy
       panels + tier, analytics overview/metric, flags + audit/evaluate/rollback/
       cohort, ops, admins, audit). `request()` wraps fetch with `Authorization:
-    Bearer`, `credentials: include`, envelope-unwrap, and a single-flight
+  Bearer`, `credentials: include`, envelope-unwrap, and a single-flight
       refresh-on-401. `ApiClientError` carries `status` + the typed `ErrorCode`.
       TanStack Query read hooks for the boot path; frontend `userPanelRegistry`
       mirrors the server registry (generic JSON renderer for M2; M3 specializes).
@@ -86,11 +86,22 @@ polished error / validation copy on top of the functional MVP shipped in M2-T3.
 
 ## M3 — Frontend pages
 
-- [ ] **M3-T1** Login (password → TOTP → enrolment).
-- [ ] **M3-T2** Overview dashboard.
-- [ ] **M3-T3** Users — table + detailed user page.
+- [x] **M3-T1** Login — zod validation, inline error display, `humanizeApiError`
+      mapping `ErrorCode → human copy`, auto-submit on 6-digit code, back-to-email
+      button on the TOTP / enrolment stages.
+- [x] **M3-T2** Overview — analytics registry grouped into sections (Users &
+      growth, Activity, AI chat, Safety & guardian, Not-yet-wired) with per-key
+      value renderers (distribution bars, sub-stats). Critical-bypass SMS success
+      rate broken into its own banner (URGENT per CLAUDE.md).
+- [x] **M3-T3** Users — clickable rows route to `/users/$id`; detail page shows
+      profile + streak + notification state + co-profiles, role-gated tier
+      change (ConfirmDialog + `useChangeUserTier` mutation), and a left-nav
+      with lazy panels (`useUserResource` + `renderUserPanel` from the registry).
 - [ ] **M3-T4** Analytics.
-- [ ] **M3-T5** App Control (flags, kill switches, maintenance, feature map).
+- [x] **M3-T5** App Control — list of flags with `summarizeValue` cards; clicking
+      opens a `DetailDrawer` with the kind-keyed `FlagEditor`, rollout preview
+      by user ID (`useEvaluateFlag`), per-flag audit timeline, `useSetFlag` /
+      `useRollbackFlag` (ConfirmDialog) mutations, all role-gated to ops+.
 - [ ] **M3-T6** Ops / Health.
 - [ ] **M3-T7** Admin Users (RBAC management).
 - [ ] **M3-T8** Audit Log.

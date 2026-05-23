@@ -7,8 +7,10 @@
 //   - Read hooks expose just the data shape; mutations are added per
 //     page (M3) so the call site can wire optimistic updates.
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { AdminTier } from "@swasth/shared-types";
 import { adminApi } from "./endpoints";
+import type { FlagValue } from "@/flags/types";
 
 // Centralised query keys. Pages import `queryKeys` and use it both for
 // `useQuery` and `queryClient.invalidateQueries` so a typo never silently
@@ -113,5 +115,70 @@ export function useOpsHealth() {
   return useQuery({
     queryKey: queryKeys.opsHealth(),
     queryFn: () => adminApi.opsHealth(),
+  });
+}
+
+// ── Mutations ────────────────────────────────────────────────────
+
+/**
+ * Patient tier change. On success invalidates the user detail + the
+ * users list so the new tier shows up everywhere it's displayed.
+ */
+export function useChangeUserTier(userId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (tier: AdminTier) => adminApi.changeUserTier(userId, tier),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.user(userId) });
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+  });
+}
+
+// Flags — audit + rollout preview reads.
+
+export function useFlagAudit(key: string | null, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.flagAudit(key ?? ""),
+    queryFn: () => {
+      if (!key) throw new Error("useFlagAudit: key is required");
+      return adminApi.flagAudit(key);
+    },
+    enabled: key !== null && options.enabled !== false,
+  });
+}
+
+/** GET-style evaluate exposed as a mutation so it fires on a button click. */
+export function useEvaluateFlag(key: string) {
+  return useMutation({
+    mutationFn: (userId: string) => adminApi.evaluateFlag(key, userId),
+  });
+}
+
+// Flag writes — set + rollback + cohort patch.
+
+const invalidateFlag = (queryClient: ReturnType<typeof useQueryClient>, key: string): void => {
+  void queryClient.invalidateQueries({ queryKey: queryKeys.flags() });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.flag(key) });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.flagAudit(key) });
+};
+
+export function useSetFlag(key: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (value: FlagValue) => adminApi.setFlag(key, value),
+    onSuccess: () => {
+      invalidateFlag(queryClient, key);
+    },
+  });
+}
+
+export function useRollbackFlag(key: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => adminApi.rollbackFlag(key),
+    onSuccess: () => {
+      invalidateFlag(queryClient, key);
+    },
   });
 }
