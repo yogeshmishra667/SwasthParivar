@@ -9,7 +9,7 @@ import {
   adminTotpCodeSchema,
 } from "./admin-auth.validation.js";
 import * as controller from "./admin-auth.controller.js";
-import { doubleCsrfProtection, issueCsrfToken } from "./admin-csrf.js";
+import { csrfProtection, issueCsrfToken } from "./admin-csrf.js";
 
 // Mounted at /admin/auth. Login + the TOTP step + refresh are reachable
 // without an admin token (that is the point — they mint the token).
@@ -23,13 +23,14 @@ export const adminAuthRouter: Router = Router();
 // cookie-related vulnerability cannot reach them.
 adminAuthRouter.use(cookieParser());
 
-// Mint a CSRF token (sets the matching cookie). Public + idempotent —
-// the client calls this before any state-changing /admin/auth POST.
-adminAuthRouter.get("/csrf", issueCsrfToken);
+// `csurf` is applied to every route below. It transparently passes
+// GET / HEAD / OPTIONS (so the /csrf endpoint itself works) and
+// validates the `x-csrf-token` header on state-changing methods.
+adminAuthRouter.use(csrfProtection);
 
-// Double-submit CSRF protection for every state-changing route below.
-// GET / HEAD / OPTIONS are skipped inside doubleCsrfProtection itself.
-adminAuthRouter.use(doubleCsrfProtection);
+// Mint a CSRF token (sets / refreshes the matching cookie). Public +
+// idempotent — the client calls this on boot and on a 403 retry.
+adminAuthRouter.get("/csrf", issueCsrfToken);
 
 adminAuthRouter.post("/login", authRateLimit, validateBody(adminLoginSchema), controller.postLogin);
 adminAuthRouter.post(
