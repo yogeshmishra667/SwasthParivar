@@ -25,10 +25,16 @@ export type RolloutConfig = CohortRollout | PercentageRollout | CohortOrPercenta
 
 /**
  * A flag value is either a global kill-switch boolean, a typed rollout
- * config, or an arbitrary JSON object (free-form config, e.g.
- * `{ provider: "log" }` for `auth.otp.provider`).
+ * config, or an arbitrary JSON object/primitive (free-form config, e.g.
+ * `"log"` for `auth.otp.provider`).
  */
-export type FlagValue = boolean | RolloutConfig | Record<string, unknown>;
+export type FlagValue =
+  | boolean
+  | string
+  | number
+  | unknown[]
+  | RolloutConfig
+  | Record<string, unknown>;
 
 /** The editor variant rendered by `<FlagEditor>` for a given value. */
 export type FlagEditorKind = "boolean" | RolloutKind | "raw";
@@ -39,7 +45,7 @@ export type FlagEditorKind = "boolean" | RolloutKind | "raw";
  */
 export function detectFlagKind(value: FlagValue): FlagEditorKind {
   if (typeof value === "boolean") return "boolean";
-  if (value !== null && typeof value === "object" && "rollout" in value) {
+  if (value !== null && typeof value === "object" && !Array.isArray(value) && "rollout" in value) {
     const r = (value as { rollout?: unknown }).rollout;
     if (r === "cohort" || r === "percentage" || r === "cohort_or_percentage") return r;
   }

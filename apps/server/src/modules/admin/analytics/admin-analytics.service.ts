@@ -20,12 +20,12 @@ const resolveMetric = async (metric: AdminMetric): Promise<AdminMetricResult> =>
     source: metric.source,
   };
 
-  if (metric.source === "posthog") {
-    return { ...base, available: false, value: null, note: metric.note };
-  }
-
   try {
-    return { ...base, available: true, value: await metric.compute(), note: null };
+    const value = await metric.compute();
+    if (metric.source === "posthog" && value === null) {
+      return { ...base, available: false, value: null, note: metric.note };
+    }
+    return { ...base, available: true, value, note: null };
   } catch (err) {
     logger.warn({ err, metric: metric.key }, "admin analytics: metric compute failed");
     return { ...base, available: false, value: null, note: "metric computation failed" };

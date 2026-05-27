@@ -71,6 +71,7 @@ export const getUserDetail = async (userId: string): Promise<AdminPatientDetail>
     prisma.user.findMany({
       where: { householdId: user.householdId, id: { not: user.id } },
       orderBy: { createdAt: "asc" },
+      take: 20,
     }),
     prisma.userStreak.findUnique({ where: { userId } }),
     prisma.notificationState.findUnique({ where: { userId } }),

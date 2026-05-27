@@ -88,6 +88,8 @@ const envSchema = z.object({
 
   SENTRY_DSN: z.string().optional(),
   POSTHOG_API_KEY: z.string().optional(),
+  POSTHOG_PERSONAL_API_KEY: z.string().optional(),
+  POSTHOG_PROJECT_ID: z.string().optional(),
 
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),

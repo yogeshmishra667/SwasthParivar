@@ -778,5 +778,6 @@ model AdminAuditLog {
 
   @@index([adminUserId, createdAt(sort: Desc)])
   @@index([action, createdAt(sort: Desc)])
+  @@index([targetId, createdAt(sort: Desc)])
   @@map("admin_audit_logs")
 }

@@ -17,6 +17,7 @@ import { DetailDrawer } from "@/components/shared/DetailDrawer";
 import { FlagEditor } from "@/components/shared/FlagEditor";
 import { JsonViewer } from "@/components/shared/JsonViewer";
 import { RoleGate } from "@/components/shared/RoleGate";
+import { UserSearchInput } from "@/components/shared/UserSearchInput";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Plus } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const KIND_LABEL: Record<string, string> = {
   boolean: "Kill switch",
@@ -48,7 +58,7 @@ const summarizeValue = (value: FlagValue): string => {
       return `${String(v.percent)}% + ${String(v.userIds.length)} users`;
     }
     case "raw":
-      return "config";
+      return typeof value === "string" || typeof value === "number" ? String(value) : "config";
   }
 };
 
@@ -106,10 +116,15 @@ function FlagDrawer({ flagKey, onClose }: FlagDrawerProps) {
 
   // Seed the editor from the loaded value (once).
   useEffect(() => {
-    if (data?.value !== undefined && data.value !== null && draft === null) {
-      setDraft(data.value);
+    if (!isLoading && draft === null) {
+      if (data?.value !== undefined && data.value !== null) {
+        setDraft(data.value);
+      } else {
+        // Flag does not exist in Redis; initialize as a kill-switch set to false
+        setDraft(false);
+      }
     }
-  }, [data, draft]);
+  }, [data, isLoading, draft]);
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
   if (isError) {
@@ -121,18 +136,7 @@ function FlagDrawer({ flagKey, onClose }: FlagDrawerProps) {
       </Alert>
     );
   }
-  if (!data || data.value === null) {
-    return (
-      <Alert>
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Flag has no value yet</AlertTitle>
-        <AlertDescription>
-          This flag key has no value in Redis. Set one to start using it.
-        </AlertDescription>
-      </Alert>
-    );
-  }
-  const value = data.value;
+  const value = data?.value ?? null;
   const dirty = JSON.stringify(draft) !== JSON.stringify(value);
 
   const save = async (): Promise<void> => {
@@ -229,13 +233,12 @@ function FlagDrawer({ flagKey, onClose }: FlagDrawerProps) {
             <Label htmlFor="eval-user-id" className="text-xs">
               User ID
             </Label>
-            <Input
+            <UserSearchInput
               id="eval-user-id"
               value={evalUserId}
-              placeholder="usr_…"
-              onChange={(e) => {
-                setEvalUserId(e.currentTarget.value);
-              }}
+              placeholder="Search by name, phone, or enter user ID..."
+              onChange={setEvalUserId}
+              onSelect={evaluate}
             />
           </div>
           <Button
@@ -271,7 +274,11 @@ function FlagDrawer({ flagKey, onClose }: FlagDrawerProps) {
 
       <section className="space-y-2">
         <h3 className="text-sm font-semibold">Current value (raw)</h3>
-        <JsonViewer value={value} className="max-h-40" />
+        {value !== null ? (
+          <JsonViewer value={value} className="max-h-40" />
+        ) : (
+          <p className="text-xs text-muted-foreground">Not created yet.</p>
+        )}
       </section>
 
       <ConfirmDialog
@@ -295,15 +302,30 @@ function FlagDrawer({ flagKey, onClose }: FlagDrawerProps) {
 export function FlagsPage() {
   const { data, isLoading, isError, error } = useFlags();
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [newFlagOpen, setNewFlagOpen] = useState(false);
+  const [newFlagKey, setNewFlagKey] = useState("");
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">App control</h1>
-        <p className="text-sm text-muted-foreground">
-          Feature flags and rollout config. Click a card to edit, roll back, or preview the rollout
-          for a specific user.
-        </p>
+      <header className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">App control</h1>
+          <p className="text-sm text-muted-foreground">
+            Feature flags and rollout config. Click a card to edit, roll back, or preview the
+            rollout for a specific user.
+          </p>
+        </div>
+        <RoleGate allow={["super_admin", "ops"]}>
+          <Button
+            onClick={() => {
+              setNewFlagKey("");
+              setNewFlagOpen(true);
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New flag
+          </Button>
+        </RoleGate>
       </header>
 
       {isError ? (
@@ -353,6 +375,48 @@ export function FlagsPage() {
           />
         ) : null}
       </DetailDrawer>
+
+      <Dialog open={newFlagOpen} onOpenChange={setNewFlagOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create new flag</DialogTitle>
+            <DialogDescription>
+              Enter a unique key for the new feature flag or rollout config.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="new-flag-key">Flag Key</Label>
+            <Input
+              id="new-flag-key"
+              className="mt-1"
+              placeholder="e.g. some_new_feature_enabled"
+              value={newFlagKey}
+              onChange={(e) => {
+                setNewFlagKey(e.currentTarget.value);
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setNewFlagOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!newFlagKey.trim()}
+              onClick={() => {
+                setNewFlagOpen(false);
+                setOpenKey(newFlagKey.trim());
+              }}
+            >
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

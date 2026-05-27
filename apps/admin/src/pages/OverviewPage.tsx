@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from "react";
+import { AreaChart, Area, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import { AlertCircle } from "lucide-react";
 import { useAnalyticsOverview } from "@/api/queries";
 import type { AdminMetricResult } from "@/api/types";
@@ -54,17 +55,50 @@ interface UserGrowthValue {
   last7d: number;
   last30d: number;
   onboarded: number;
+  daily?: { date: string; count: number }[];
 }
 type DistMap = Record<string, number>;
 interface ReadingVolumeValue {
   total: number;
   bySource: DistMap;
   voiceRatio: number;
+  daily?: { date: string; count: number }[];
 }
 interface MedAdherenceValue {
   total: number;
   byStatus: DistMap;
   takenRate: number;
+}
+
+function TinyChart({ data }: { data: { date: string; count: number }[] | undefined }) {
+  if (!data || data.length === 0) return null;
+  return (
+    <div className="mt-4 h-24 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data}>
+          <Area
+            type="monotone"
+            dataKey="count"
+            stroke="var(--primary)"
+            fill="var(--primary)"
+            fillOpacity={0.2}
+          />
+          <RechartsTooltip
+            contentStyle={{
+              fontSize: "12px",
+              padding: "4px 8px",
+              borderRadius: "6px",
+              border: "1px solid var(--border)",
+              backgroundColor: "var(--background)",
+              color: "var(--foreground)",
+            }}
+            labelStyle={{ color: "var(--muted-foreground)", marginBottom: "2px" }}
+            formatter={(val) => [val, "Count"]}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
 }
 
 const renderMetric = (m: AdminMetricResult): ReactNode => {
@@ -78,6 +112,7 @@ const renderMetric = (m: AdminMetricResult): ReactNode => {
           <p className="text-xs text-muted-foreground">
             +{num(u.last7d)} this week · +{num(u.last30d)} this month · {num(u.onboarded)} onboarded
           </p>
+          <TinyChart data={u.daily} />
         </div>
       );
     }
@@ -97,6 +132,7 @@ const renderMetric = (m: AdminMetricResult): ReactNode => {
           <p className="text-xs text-muted-foreground">
             {pct(r.voiceRatio)} via voice ({num(r.bySource.voice ?? 0)} of {num(r.total)})
           </p>
+          <TinyChart data={r.daily} />
         </div>
       );
     }

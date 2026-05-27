@@ -1,11 +1,17 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   detectFlagKind,
   type CohortOrPercentageRollout,
@@ -13,7 +19,9 @@ import {
   type FlagEditorKind,
   type FlagValue,
   type PercentageRollout,
+  type RolloutConfig,
 } from "@/flags/types";
+import { UserSearchInput } from "@/components/shared/UserSearchInput";
 
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
 
@@ -70,18 +78,12 @@ function CohortEditor({ value, onChange }: EditorProps<CohortRollout>) {
   return (
     <div className="space-y-3">
       <div className="flex gap-2">
-        <Input
-          placeholder="Add user ID"
+        <UserSearchInput
+          className="flex-1"
           value={draft}
-          onChange={(e) => {
-            setDraft(e.currentTarget.value);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              add();
-            }
-          }}
+          onChange={setDraft}
+          onSelect={add}
+          placeholder="Search by name, phone, or enter user ID"
         />
         <Button type="button" variant="outline" onClick={add}>
           Add
@@ -136,17 +138,17 @@ function CohortOrPercentageEditor({ value, onChange }: EditorProps<CohortOrPerce
   );
 }
 
-function RawEditor({ value, onChange }: EditorProps<Record<string, unknown>>) {
+function RawEditor({ value, onChange }: EditorProps<Exclude<FlagValue, boolean | RolloutConfig>>) {
   const [text, setText] = useState(() => JSON.stringify(value, null, 2));
   const [err, setErr] = useState<string | null>(null);
   const apply = (next: string): void => {
     setText(next);
     try {
-      const parsed: unknown = JSON.parse(next);
-      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-        throw new Error("flag value must be a JSON object");
+      if (!next.trim()) {
+        throw new Error("Cannot be empty");
       }
-      onChange(parsed as Record<string, unknown>);
+      const parsed: unknown = JSON.parse(next);
+      onChange(parsed as Exclude<FlagValue, boolean | RolloutConfig>);
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "invalid JSON");
@@ -194,18 +196,71 @@ interface FlagEditorProps {
  */
 export function FlagEditor({ value, onChange }: FlagEditorProps) {
   const kind: FlagEditorKind = detectFlagKind(value);
-  switch (kind) {
-    case "boolean":
-      return <BooleanEditor value={value as boolean} onChange={onChange} />;
-    case "percentage":
-      return <PercentageEditor value={value as PercentageRollout} onChange={onChange} />;
-    case "cohort":
-      return <CohortEditor value={value as CohortRollout} onChange={onChange} />;
-    case "cohort_or_percentage":
-      return (
-        <CohortOrPercentageEditor value={value as CohortOrPercentageRollout} onChange={onChange} />
-      );
-    case "raw":
-      return <RawEditor value={value as Record<string, unknown>} onChange={onChange} />;
-  }
+
+  const handleKindChange = (newKind: string) => {
+    if (newKind === kind) return;
+    switch (newKind) {
+      case "boolean":
+        onChange(false);
+        break;
+      case "percentage":
+        onChange({ rollout: "percentage", percent: 0 });
+        break;
+      case "cohort":
+        onChange({ rollout: "cohort", userIds: [] });
+        break;
+      case "cohort_or_percentage":
+        onChange({ rollout: "cohort_or_percentage", percent: 0, userIds: [] });
+        break;
+      case "raw":
+        onChange({});
+        break;
+    }
+  };
+
+  const renderEditor = () => {
+    switch (kind) {
+      case "boolean":
+        return <BooleanEditor value={value as boolean} onChange={onChange} />;
+      case "percentage":
+        return <PercentageEditor value={value as PercentageRollout} onChange={onChange} />;
+      case "cohort":
+        return <CohortEditor value={value as CohortRollout} onChange={onChange} />;
+      case "cohort_or_percentage":
+        return (
+          <CohortOrPercentageEditor
+            value={value as CohortOrPercentageRollout}
+            onChange={onChange}
+          />
+        );
+      case "raw":
+        return (
+          <RawEditor
+            value={value as Exclude<FlagValue, boolean | RolloutConfig>}
+            onChange={onChange}
+          />
+        );
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs text-muted-foreground">Flag Type</Label>
+        <Select value={kind} onValueChange={handleKindChange}>
+          <SelectTrigger className="w-full text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="boolean">Boolean (Global On/Off)</SelectItem>
+            <SelectItem value="percentage">Percentage Rollout</SelectItem>
+            <SelectItem value="cohort">Cohort (Allowlist)</SelectItem>
+            <SelectItem value="cohort_or_percentage">Cohort + Percentage</SelectItem>
+            <SelectItem value="raw">Raw Data / String</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="rounded-md border p-4 bg-card">{renderEditor()}</div>
+    </div>
+  );
 }

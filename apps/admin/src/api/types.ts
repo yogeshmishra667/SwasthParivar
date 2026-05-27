@@ -71,8 +71,8 @@ export interface OpsQueuesResponse {
 }
 
 export interface OpsHealthResponse {
-  database: { ok: boolean; latencyMs: number | null };
-  redis: { ok: boolean; latencyMs: number | null };
+  status: "ok" | "degraded";
+  checks: { db: "ok" | "fail"; redis: "ok" | "fail" };
 }
 
 export interface OpsMaintenanceResult {

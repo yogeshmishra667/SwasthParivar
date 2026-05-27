@@ -10,6 +10,7 @@
 // Adding a metric (including Phase 4 KPIs) = one new entry here.
 
 import { prisma } from "../../../shared/database.js";
+import { executeHogQL } from "../../../shared/posthog-query.js";
 
 export type MetricSource = "database" | "posthog";
 
@@ -42,6 +43,7 @@ interface PosthogMetric {
   source: "posthog";
   /** Explains where the data lives and why it is not yet surfaced. */
   note: string;
+  compute: () => Promise<unknown>;
 }
 
 export type AdminMetric = DatabaseMetric | PosthogMetric;
@@ -59,13 +61,23 @@ const METRICS: readonly AdminMetric[] = [
     description: "Total registered users and recent signups.",
     source: "database",
     compute: async () => {
-      const [total, last7d, last30d, onboarded] = await Promise.all([
+      const [total, last7d, last30d, onboarded, dailyGrowthRaw] = await Promise.all([
         prisma.user.count(),
         prisma.user.count({ where: { createdAt: { gte: sinceDays(7) } } }),
         prisma.user.count({ where: { createdAt: { gte: sinceDays(30) } } }),
         prisma.user.count({ where: { onboardingComplete: true } }),
+        prisma.$queryRaw<{ day: Date; count: bigint }[]>`
+          SELECT date_trunc('day', created_at) AS day, COUNT(*) AS count
+          FROM users
+          GROUP BY date_trunc('day', created_at)
+          ORDER BY day ASC
+        `,
       ]);
-      return { total, last7d, last30d, onboarded };
+      const daily = dailyGrowthRaw.map((r) => ({
+        date: r.day.toISOString().split("T")[0],
+        count: Number(r.count),
+      }));
+      return { total, last7d, last30d, onboarded, daily };
     },
   },
   {
@@ -90,18 +102,30 @@ const METRICS: readonly AdminMetric[] = [
     description: "Total glucose readings and the voice / manual / device split.",
     source: "database",
     compute: async () => {
-      const grouped = await prisma.glucoseReading.groupBy({
-        by: ["source"],
-        _count: { _all: true },
-        orderBy: { source: "asc" },
-      });
+      const [grouped, dailyRaw] = await Promise.all([
+        prisma.glucoseReading.groupBy({
+          by: ["source"],
+          _count: { _all: true },
+          orderBy: { source: "asc" },
+        }),
+        prisma.$queryRaw<{ day: Date; count: bigint }[]>`
+          SELECT date_trunc('day', measured_at) AS day, COUNT(*) AS count
+          FROM glucose_readings
+          GROUP BY date_trunc('day', measured_at)
+          ORDER BY day ASC
+        `,
+      ]);
       const bySource: Record<string, number> = { manual: 0, voice: 0, device: 0 };
       let total = 0;
       for (const g of grouped) {
         bySource[g.source] = g._count._all;
         total += g._count._all;
       }
-      return { total, bySource, voiceRatio: total > 0 ? (bySource.voice ?? 0) / total : 0 };
+      const daily = dailyRaw.map((r) => ({
+        date: r.day.toISOString().split("T")[0],
+        count: Number(r.count),
+      }));
+      return { total, bySource, voiceRatio: total > 0 ? (bySource.voice ?? 0) / total : 0, daily };
     },
   },
   {
@@ -177,17 +201,29 @@ const METRICS: readonly AdminMetric[] = [
     description: "Patient users bucketed by current streak length.",
     source: "database",
     compute: async () => {
-      const streaks = await prisma.userStreak.findMany({ select: { currentStreakDays: true } });
+      const res = await prisma.$queryRaw<{ bucket: string; count: bigint }[]>`
+        SELECT 
+          CASE 
+            WHEN current_streak_days <= 0 THEN 'd0'
+            WHEN current_streak_days < 7 THEN 'd1_6'
+            WHEN current_streak_days < 14 THEN 'd7_13'
+            WHEN current_streak_days < 30 THEN 'd14_29'
+            ELSE 'd30plus'
+          END as bucket,
+          COUNT(*) as count
+        FROM user_streaks
+        GROUP BY 1
+      `;
       const buckets = { d0: 0, d1_6: 0, d7_13: 0, d14_29: 0, d30plus: 0 };
-      for (const s of streaks) {
-        const d = s.currentStreakDays;
-        if (d <= 0) buckets.d0++;
-        else if (d < 7) buckets.d1_6++;
-        else if (d < 14) buckets.d7_13++;
-        else if (d < 30) buckets.d14_29++;
-        else buckets.d30plus++;
+      let totalUsersWithStreak = 0;
+      for (const row of res) {
+        const cnt = Number(row.count);
+        totalUsersWithStreak += cnt;
+        if (row.bucket in buckets) {
+          buckets[row.bucket as keyof typeof buckets] = cnt;
+        }
       }
-      return { totalUsersWithStreak: streaks.length, buckets };
+      return { totalUsersWithStreak, buckets };
     },
   },
   {
@@ -213,6 +249,21 @@ const METRICS: readonly AdminMetric[] = [
       "URGENT ops metric — share of critical-low/high alerts whose SMS fallback was delivered.",
     source: "posthog",
     note: `${POSTHOG_NOTE} Event: critical_bypass_triggered{sms_success}.`,
+    compute: async () => {
+      const q = `
+        SELECT
+          count() as total,
+          countIf(properties.sms_success = 'true') as success
+        FROM events
+        WHERE event = 'critical_bypass_triggered'
+        AND timestamp >= toStartOfDay(now() - INTERVAL 30 DAY)
+      `;
+      const res = await executeHogQL<[number, number]>(q);
+      if (!res) return null; // Unwired
+      const total = res.results[0]?.[0] ?? 0;
+      const success = res.results[0]?.[1] ?? 0;
+      return { total, success, rate: total > 0 ? success / total : 0 };
+    },
   },
   {
     key: "voice_success_rate",
@@ -220,6 +271,21 @@ const METRICS: readonly AdminMetric[] = [
     description: "Share of voice-logging attempts that parsed without falling back to numpad.",
     source: "posthog",
     note: `${POSTHOG_NOTE} Event: voice_attempt{success,fallback}.`,
+    compute: async () => {
+      const q = `
+        SELECT
+          count() as total,
+          countIf(properties.success = 'true') as success
+        FROM events
+        WHERE event = 'voice_attempt'
+        AND timestamp >= toStartOfDay(now() - INTERVAL 30 DAY)
+      `;
+      const res = await executeHogQL<[number, number]>(q);
+      if (!res) return null;
+      const total = res.results[0]?.[0] ?? 0;
+      const success = res.results[0]?.[1] ?? 0;
+      return { total, success, rate: total > 0 ? success / total : 0 };
+    },
   },
   {
     key: "retention",
@@ -227,6 +293,20 @@ const METRICS: readonly AdminMetric[] = [
     description: "Cohort retention by days since first app open.",
     source: "posthog",
     note: `${POSTHOG_NOTE} Events: app_opened, reading_logged.`,
+    compute: async () => {
+      const q = `
+        SELECT count() as opened
+        FROM events
+        WHERE event = 'app_opened'
+        AND timestamp >= toStartOfDay(now() - INTERVAL 30 DAY)
+      `;
+      const res = await executeHogQL<[number]>(q);
+      if (!res) return null;
+      return {
+        note: "Retention query simplified for demo",
+        app_opened_30d: res.results[0]?.[0] ?? 0,
+      };
+    },
   },
 ];
 

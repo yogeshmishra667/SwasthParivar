@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AdminPatientListItem } from "@swasth/shared-types";
@@ -6,6 +6,7 @@ import { useUsers } from "@/api/queries";
 import { DataTable } from "@/components/shared/DataTable";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 const columns: ColumnDef<AdminPatientListItem, unknown>[] = [
   { accessorKey: "name", header: "Name" },
@@ -28,13 +29,36 @@ const columns: ColumnDef<AdminPatientListItem, unknown>[] = [
   },
 ];
 
+const PAGE_SIZE = 50;
+
 export function UsersPage() {
   const [search, setSearch] = useState("");
-  // Defer search to a memoized normalized value so we don't refetch on every keystroke.
-  // (Pages can adopt a debounce hook later; for the scaffold the empty input is common.)
-  const params = useMemo(() => (search.trim() ? { search } : {}), [search]);
-  const { data, isLoading, isError } = useUsers(params);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [offset, setOffset] = useState(0);
   const navigate = useNavigate();
+
+  // Debounce the search input — admin grids hit the server, no point
+  // re-querying on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setOffset(0); // Reset paging whenever the query changes.
+    }, 250);
+    return () => {
+      clearTimeout(t);
+    };
+  }, [search]);
+
+  const params = useMemo<{ search?: string; limit: number; offset: number }>(() => {
+    const out: { search?: string; limit: number; offset: number } = {
+      limit: PAGE_SIZE,
+      offset,
+    };
+    if (debouncedSearch) out.search = debouncedSearch;
+    return out;
+  }, [debouncedSearch, offset]);
+
+  const { data, isLoading, isError } = useUsers(params);
 
   return (
     <div className="space-y-6">
@@ -65,9 +89,33 @@ export function UsersPage() {
         />
       )}
       {data ? (
-        <p className="text-xs text-muted-foreground">
-          {data.users.length} of {data.total} · offset {data.offset}
-        </p>
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>
+            {data.users.length} of {data.total} · offset {data.offset}
+          </span>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={offset === 0 || isLoading}
+              onClick={() => {
+                setOffset(Math.max(0, offset - PAGE_SIZE));
+              }}
+            >
+              Previous
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!data.hasMore || isLoading}
+              onClick={() => {
+                setOffset(offset + PAGE_SIZE);
+              }}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
       ) : null}
     </div>
   );

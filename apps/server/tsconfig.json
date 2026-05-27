@@ -8,6 +8,12 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src/**/*", "tests/**/*", "prisma/seed-admin.ts"],
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "prisma/seed-admin.ts",
+    "prisma/seed-flags.ts",
+    "prisma/seed-patients.ts"
+  ],
   "exclude": ["dist", "node_modules"]
 }

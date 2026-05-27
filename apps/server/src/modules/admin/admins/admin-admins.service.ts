@@ -20,7 +20,7 @@ const toDto = (a: AdminUser): AdminUserDto => ({
 });
 
 export const listAdmins = async (): Promise<AdminUserDto[]> => {
-  const rows = await prisma.adminUser.findMany({ orderBy: { createdAt: "asc" } });
+  const rows = await prisma.adminUser.findMany({ orderBy: { createdAt: "asc" }, take: 100 });
   return rows.map(toDto);
 };
 

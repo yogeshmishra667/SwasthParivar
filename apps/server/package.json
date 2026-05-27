@@ -19,6 +19,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "admin:seed": "tsx prisma/seed-admin.ts",
+    "db:seed:flags": "tsx prisma/seed-flags.ts",
+    "db:seed:patients": "tsx prisma/seed-patients.ts",
     "clean": "rm -rf dist coverage *.tsbuildinfo"
   },
   "dependencies": {

@@ -13,10 +13,14 @@ import type { ZodTypeAny } from "zod";
 // so a straight assignment works for `validateBody`.
 
 const replaceRequestProperty = <T>(req: Request, key: "query" | "params", value: T): void => {
+  let currentValue = value;
   Object.defineProperty(req, key, {
     configurable: true,
     enumerable: true,
-    get: () => value,
+    get: () => currentValue,
+    set: (newValue: T) => {
+      currentValue = newValue;
+    },
   });
 };
 

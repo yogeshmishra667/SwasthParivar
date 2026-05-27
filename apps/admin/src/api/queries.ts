@@ -8,7 +8,7 @@
 //     page (M3) so the call site can wire optimistic updates.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AdminTier } from "@swasth/shared-types";
+import type { AdminRole, AdminTier } from "@swasth/shared-types";
 import { adminApi } from "./endpoints";
 import type { FlagValue } from "@/flags/types";
 
@@ -118,6 +118,53 @@ export function useOpsHealth() {
   });
 }
 
+export function useOpsQueues() {
+  return useQuery({
+    queryKey: queryKeys.opsQueues(),
+    queryFn: () => adminApi.opsQueues(),
+    // BullMQ counts change every job — keep the panel fresh.
+    refetchInterval: 10_000,
+  });
+}
+
+export function useAnalyticsMetric(key: string | null) {
+  return useQuery({
+    queryKey: queryKeys.analyticsMetric(key ?? ""),
+    queryFn: () => {
+      if (!key) throw new Error("useAnalyticsMetric: key is required");
+      return adminApi.analyticsMetric(key);
+    },
+    enabled: key !== null,
+  });
+}
+
+export function useAdmins() {
+  return useQuery({
+    queryKey: queryKeys.admins(),
+    queryFn: () => adminApi.listAdmins(),
+  });
+}
+
+export function useAuditLog(
+  params: {
+    action?: string;
+    adminUserId?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+) {
+  const normalized: { action?: string; adminUserId?: string; limit: number; offset: number } = {
+    limit: params.limit ?? 50,
+    offset: params.offset ?? 0,
+  };
+  if (params.action !== undefined) normalized.action = params.action;
+  if (params.adminUserId !== undefined) normalized.adminUserId = params.adminUserId;
+  return useQuery({
+    queryKey: queryKeys.audit(normalized),
+    queryFn: () => adminApi.listAudit(normalized),
+  });
+}
+
 // ── Mutations ────────────────────────────────────────────────────
 
 /**
@@ -180,5 +227,63 @@ export function useRollbackFlag(key: string) {
     onSuccess: () => {
       invalidateFlag(queryClient, key);
     },
+  });
+}
+
+// Ops — kill-switch toggle.
+export function useSetMaintenance() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) => adminApi.setMaintenance(enabled),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.flags() });
+    },
+  });
+}
+
+// Admin accounts (super_admin only on the server).
+
+interface CreateAdminInput {
+  email: string;
+  name: string;
+  role: AdminRole;
+  password: string;
+}
+
+export function useCreateAdmin() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateAdminInput) => adminApi.createAdmin(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admins() });
+    },
+  });
+}
+
+interface UpdateAdminInput {
+  id: string;
+  role?: AdminRole;
+  active?: boolean;
+}
+
+export function useUpdateAdmin() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, role, active }: UpdateAdminInput) => {
+      const body: { role?: AdminRole; active?: boolean } = {};
+      if (role !== undefined) body.role = role;
+      if (active !== undefined) body.active = active;
+      return adminApi.updateAdmin(id, body);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admins() });
+    },
+  });
+}
+
+export function useResetAdminPassword() {
+  return useMutation({
+    mutationFn: ({ id, password }: { id: string; password: string }) =>
+      adminApi.resetAdminPassword(id, password),
   });
 }
