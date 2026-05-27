@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 import { inviteGuardian, type AlertSensitivity } from "@/services/family";
+import { useActiveProfile } from "@/hooks/useActiveProfile";
 import { normalizeIndianPhone } from "@/utils/phone";
 
 interface InviteGuardianFormProps {
@@ -21,6 +22,7 @@ const SENSITIVITIES: readonly AlertSensitivity[] = ["low", "medium", "high"] as 
 
 export const InviteGuardianForm = ({ onSent }: InviteGuardianFormProps): JSX.Element => {
   const { t } = useTranslation();
+  const activeProfile = useActiveProfile();
   const [phone, setPhone] = useState("");
   const [relationship, setRelationship] = useState("");
   const [alertEnabled, setAlertEnabled] = useState(true);
@@ -39,6 +41,9 @@ export const InviteGuardianForm = ({ onSent }: InviteGuardianFormProps): JSX.Ele
     setError(null);
     const res = await inviteGuardian({
       guardianPhone: normalized,
+      // The invite is for whichever profile is active on this shared
+      // device — not always the primary account.
+      ...(activeProfile ? { targetUserId: activeProfile.id } : {}),
       ...(relationship.trim().length > 0 ? { relationship: relationship.trim() } : {}),
       visibleConditions: ["diabetes"],
       alertEnabled,
@@ -66,6 +71,14 @@ export const InviteGuardianForm = ({ onSent }: InviteGuardianFormProps): JSX.Ele
     <Card>
       <Text className="text-hero font-bold">{t("family.inviteTitle")}</Text>
       <Text className="mt-1 text-body text-neutral">{t("family.inviteHint")}</Text>
+
+      {/* Which profile this invite is for — guards against linking a
+          guardian to the wrong household profile on a shared phone. */}
+      {activeProfile !== null && (
+        <Text className="mt-2 text-important font-semibold text-primary">
+          {t("family.inviteForProfile", { name: activeProfile.name })}
+        </Text>
+      )}
 
       <View className="mt-4 gap-3">
         <View>

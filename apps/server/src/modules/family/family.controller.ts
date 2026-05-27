@@ -8,6 +8,7 @@ import type { Request, Response } from "express";
 import { DomainError } from "@swasth/shared-types";
 import type { FamilyLinkStatus } from "@prisma/client";
 import { ok } from "../../shared/http.js";
+import { resolveHouseholdMember } from "../../shared/auth/household.js";
 import * as service from "./family.service.js";
 
 // req.params is typed as `string | string[] | undefined` under Express
@@ -26,13 +27,20 @@ const requireParamUuid = (raw: string | string[] | undefined, name: string): str
 export const postInvite = async (req: Request, res: Response): Promise<void> => {
   const body = req.body as {
     guardianPhone: string;
+    targetUserId?: string;
     relationship?: string;
     visibleConditions: string[];
     alertEnabled: boolean;
     alertSensitivity: "low" | "medium" | "high";
   };
+  // The invite is for whichever household profile is active on the
+  // shared device. `resolveHouseholdMember` returns the JWT subject
+  // when `targetUserId` is omitted, and rejects a target outside the
+  // caller's household — so a profile can never be invited on behalf
+  // of another household.
+  const patientId = await resolveHouseholdMember(req.auth!, body.targetUserId);
   const result = await service.createInvite({
-    patientId: req.auth!.sub,
+    patientId,
     guardianPhone: body.guardianPhone,
     relationship: body.relationship,
     visibleConditions: body.visibleConditions,
@@ -63,6 +71,7 @@ export const putLinkPrivacy = async (req: Request, res: Response): Promise<void>
   };
   const link = await service.updatePrivacy({
     callerId: req.auth!.sub,
+    callerHouseholdId: req.auth!.householdId,
     linkId,
     visibleConditions: body.visibleConditions,
     alertEnabled: body.alertEnabled,

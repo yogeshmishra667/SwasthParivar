@@ -8,6 +8,7 @@ import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js
 import { captureUnhandled } from "../shared/observability/sentry.js";
 import { sendExpoPush, type ExpoPushMessage } from "../shared/notifications/expo-push.js";
 import { sendSmsBatch, type SmsMessage } from "../shared/notifications/msg91-sms.js";
+import { householdUserIds } from "../shared/notifications/household-delivery.js";
 
 export interface CriticalAlertJob {
   readingId: string;
@@ -61,9 +62,13 @@ const resolveGuardianPushTokens = async (
   });
   const guardianUserIds = guardianUsers.map((u) => u.id);
 
-  // Also include the patient themselves (they need the fullscreen alert trigger).
+  // Also include the patient's own device (they need the fullscreen
+  // alert trigger). The reading may belong to a non-primary household
+  // profile, whose device token is registered under the household
+  // primary — so resolve the whole household, not just `userId`.
+  const patientHouseholdIds = await householdUserIds(userId);
   const tokens = await prisma.pushToken.findMany({
-    where: { userId: { in: [...guardianUserIds, userId] } },
+    where: { userId: { in: [...guardianUserIds, ...patientHouseholdIds] } },
     select: { token: true },
   });
 
@@ -127,6 +132,9 @@ export const processCriticalAlert = async (job: Job<CriticalAlertJob>): Promise<
           type: "critical_alert",
           readingId,
           userId,
+          // Profile this alert is about — lets a tapped notification
+          // switch the shared device to the right household profile.
+          targetUserId: userId,
           severity: decision.severity,
         },
       }));

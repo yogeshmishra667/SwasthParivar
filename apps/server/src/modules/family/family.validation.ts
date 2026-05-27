@@ -17,6 +17,12 @@ const phoneSchema = z.string().regex(/^\+[1-9]\d{9,14}$/, "phone must be E.164 (
 
 export const inviteCreateSchema = z.object({
   guardianPhone: phoneSchema,
+  // The household profile the invite is FOR. Omitted → the caller
+  // invites a guardian for themselves (the JWT subject). Set to a
+  // non-primary household profile so a shared-phone household can give
+  // each profile its own guardian. The service resolves + household-
+  // authorises it via `resolveHouseholdMember`.
+  targetUserId: z.string().uuid().optional(),
   relationship: z.string().min(1).max(40).optional(),
   // Visible conditions: subset of the patient's `conditions` array. We
   // *don't* enum-validate against `Condition` here so that a future

@@ -443,3 +443,84 @@ describe("decline flow", () => {
     expect(res.body.data.link.status).toBe("declined");
   });
 });
+
+// Shared-phone households: a non-primary profile (e.g. Maa) has no
+// login of its own — the primary's JWT acts for it. An invite must
+// still be linkable TO that profile via `targetUserId`, and the
+// primary must be able to manage that link on the profile's behalf.
+describe("profile-aware invites (shared-phone household)", () => {
+  const SECOND_GUARDIAN_PHONE = "+919812345740";
+  let maaId: string;
+  let secondGuardianId: string;
+  let maaLinkId: string;
+
+  beforeAll(async () => {
+    // Maa is a non-primary profile inside the PRIMARY patient's
+    // household — created the way the household profile switcher does
+    // (synthetic phone, no independent login).
+    const patient = await prisma.user.findUnique({
+      where: { id: patientId },
+      select: { householdId: true },
+    });
+    const maa = await prisma.user.create({
+      data: {
+        phone: `household:${patientId}:maa`,
+        name: "Maa",
+        age: 62,
+        householdId: patient.householdId,
+        conditions: ["diabetes"],
+        onboardingComplete: true,
+      },
+    });
+    maaId = maa.id;
+
+    // A fresh guardian in their own household.
+    const guardianHousehold = await prisma.household.create({ data: {} });
+    const guardian = await prisma.user.create({
+      data: {
+        phone: SECOND_GUARDIAN_PHONE,
+        name: "Anjali",
+        age: 33,
+        householdId: guardianHousehold.id,
+        onboardingComplete: true,
+      },
+    });
+    secondGuardianId = guardian.id;
+  });
+
+  it("links the invite to the non-primary profile named by targetUserId", async () => {
+    const res = await request(app)
+      .post("/api/v1/family/invite")
+      .set("Authorization", `Bearer ${patientToken}`)
+      .send({
+        guardianPhone: SECOND_GUARDIAN_PHONE,
+        targetUserId: maaId,
+        relationship: "daughter",
+      });
+    expect(res.status).toBe(201);
+    // The patient side is Maa — NOT the primary caller who holds the JWT.
+    expect(res.body.data.link.patientId).toBe(maaId);
+    expect(res.body.data.link.guardianId).toBe(secondGuardianId);
+    maaLinkId = res.body.data.link.id;
+  });
+
+  it("rejects a targetUserId outside the caller's household", async () => {
+    const res = await request(app)
+      .post("/api/v1/family/invite")
+      .set("Authorization", `Bearer ${patientToken}`)
+      .send({ guardianPhone: SECOND_GUARDIAN_PHONE, targetUserId: outsiderId });
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("FAMILY_NO_ACCESS");
+  });
+
+  it("lets the household primary revoke a non-primary profile's link", async () => {
+    // The JWT subject (primary) is neither the link's patient nor its
+    // guardian — authorisation flows through shared household identity.
+    const res = await request(app)
+      .put(`/api/v1/family/links/${maaLinkId}/privacy`)
+      .set("Authorization", `Bearer ${patientToken}`)
+      .send({ revoke: true });
+    expect(res.status).toBe(200);
+    expect(res.body.data.link.status).toBe("revoked");
+  });
+});
