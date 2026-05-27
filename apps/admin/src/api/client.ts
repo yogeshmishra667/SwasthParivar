@@ -68,7 +68,10 @@ const refresh = async (): Promise<string | null> => {
   refreshInflight ??= (async (): Promise<string | null> => {
     try {
       // /admin/auth/refresh is a state-changing POST under /admin/auth,
-      // so it needs the CSRF header just like the other auth endpoints.
+      // so it needs the CSRF header. On a page reload csrfToken is null
+      // (in-memory only), so fetch it first before the POST or csurf
+      // will reject with 403 and the session restore silently fails.
+      if (!csrfToken) await fetchCsrfToken();
       const headers = new Headers({ Accept: "application/json" });
       if (csrfToken) headers.set("x-csrf-token", csrfToken);
       const res = await fetch(`${API_BASE}/admin/auth/refresh`, {
