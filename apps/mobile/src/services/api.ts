@@ -10,12 +10,18 @@ import { TIMEOUTS } from "@/utils/constants";
 
 const baseURL =
   (Constants.expoConfig?.extra as { apiBaseUrl?: string } | undefined)?.apiBaseUrl ??
-  "http://10.254.69.196:4000/api/v1";
+  "http://10.157.159.196:4000/api/v1";
 
 const client: AxiosInstance = axios.create({
   baseURL,
   timeout: TIMEOUTS.apiRequestMs,
 });
+
+let onMaintenanceMode: ((active: boolean) => void) | null = null;
+
+export function setOnMaintenanceMode(handler: ((active: boolean) => void) | null): void {
+  onMaintenanceMode = handler;
+}
 
 // --- Request: attach Bearer token ---
 client.interceptors.request.use((config) => {
@@ -49,6 +55,16 @@ const doRefresh = async (): Promise<boolean> => {
 };
 
 client.interceptors.response.use(undefined, async (error: AxiosError) => {
+  if (error.response?.status === 503) {
+    const data = error.response.data as
+      | { success?: boolean; error?: { code?: string; message?: string } }
+      | undefined;
+    if (data?.error?.code === "MAINTENANCE_MODE") {
+      onMaintenanceMode?.(true);
+      throw error;
+    }
+  }
+
   const original = error.config as
     | (InternalAxiosRequestConfig & { _retried?: boolean })
     | undefined;

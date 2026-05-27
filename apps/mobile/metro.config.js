@@ -12,7 +12,10 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),
   path.resolve(workspaceRoot, "node_modules"),
 ];
-config.resolver.disableHierarchicalLookup = true;
+// Keep hierarchical lookup ON — pnpm's nested node_modules (e.g. for
+// transitive deps that are intentionally NOT root-hoisted, see .npmrc
+// public-hoist-pattern exclusions) are only discoverable by walking up
+// from the importing file. nodeModulesPaths still serves as the fallback.
 config.resolver.unstable_enableSymlinks = true;
 config.resolver.unstable_enablePackageExports = true;
 
