@@ -35,7 +35,7 @@ jobs:
             echo "SKIP=true" >> "$GITHUB_ENV"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: env.SKIP != 'true'
 
       - uses: pnpm/action-setup@v4
