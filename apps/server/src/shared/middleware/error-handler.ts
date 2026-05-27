@@ -19,6 +19,7 @@ const statusFor = (code: ErrorCode): number => {
     case "FAMILY_NO_ACCESS":
     case "ADMIN_FORBIDDEN":
     case "ADMIN_ACCOUNT_DISABLED":
+    case "ADMIN_CSRF_INVALID":
       return 403;
     case "MED_SCHEDULE_NOT_FOUND":
     case "READING_NOT_FOUND":
@@ -79,6 +80,23 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       },
     };
     res.status(400).json(body);
+    return;
+  }
+
+  // csrf-csrf raises a Forbidden http-error with code "EBADCSRFTOKEN"
+  // (no token on a state-changing request, or token didn't HMAC-match
+  // the cookie). Map it to a typed admin code so the client can
+  // distinguish CSRF failures (which it retries transparently after
+  // re-fetching a token) from genuine RBAC denials.
+  if ((err as { code?: string } | null)?.code === "EBADCSRFTOKEN") {
+    const body: ApiError = {
+      success: false,
+      error: {
+        code: "ADMIN_CSRF_INVALID",
+        message: "CSRF token missing or expired. Refresh and try again.",
+      },
+    };
+    res.status(403).json(body);
     return;
   }
 

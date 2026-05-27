@@ -1,5 +1,4 @@
 import { Router } from "express";
-import cookieParser from "cookie-parser";
 import { requireAdminAuth } from "../../shared/middleware/admin-rbac.js";
 import { adminAuthRouter } from "./auth/admin-auth.routes.js";
 import { adminUsersRouter } from "./users/admin-users.routes.js";
@@ -11,9 +10,10 @@ import { adminAuditRouter } from "./audit/admin-audit.routes.js";
 
 export const adminRouter = Router();
 
-// The refresh token rides in an httpOnly cookie scoped to /admin/auth;
-// cookie-parser is mounted here (not globally) so only /admin needs it.
-adminRouter.use(cookieParser());
+// cookie-parser is intentionally NOT mounted at this level — only the
+// auth sub-router reads or writes cookies (refresh token + CSRF
+// token). Scoping it to /admin/auth keeps the cookie-handling surface
+// minimal and lets CodeQL reason that data routes are cookie-free.
 
 // Auth endpoints (login / TOTP / refresh) must be reachable WITHOUT an
 // admin token — they are what mints it. /me inside this router guards

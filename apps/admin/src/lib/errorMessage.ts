@@ -11,6 +11,8 @@ const ERROR_COPY: Partial<Record<ErrorCode, string>> = {
   ADMIN_2FA_REQUIRED: "Two-factor authentication is required.",
   ADMIN_2FA_INVALID: "That 6-digit code isn't valid — try the latest one in your app.",
   ADMIN_FORBIDDEN: "You don't have permission for that action.",
+  ADMIN_CSRF_INVALID:
+    "Your security token expired. Refresh the page and try again — we already retried once.",
   ADMIN_ACCOUNT_DISABLED: "This admin account is disabled. Contact a super_admin to re-enable it.",
   ADMIN_NOT_FOUND: "Not found.",
   // Generic

@@ -79,6 +79,11 @@ const envSchema = z.object({
   // other. Optional in dev/test; prod-required by the guard below.
   ADMIN_JWT_SECRET: z.string().min(32).optional(),
   ADMIN_JWT_REFRESH_SECRET: z.string().min(32).optional(),
+  // CSRF protection on /admin/auth — double-submit cookie pattern via
+  // `csrf-csrf`. Defense in depth alongside SameSite=strict on the
+  // refresh cookie + the CORS allowlist. Optional in dev/test;
+  // prod-required by the guard below.
+  ADMIN_CSRF_SECRET: z.string().min(32).optional(),
   // Issuer label shown in the operator's authenticator app entry.
   ADMIN_TOTP_ISSUER: z.string().default("SwasthParivar Admin"),
   // Bootstrap super-admin — read only by `pnpm admin:seed`, never at
@@ -106,6 +111,7 @@ const PROD_REQUIRED_KEYS = [
   "POSTHOG_API_KEY",
   "ADMIN_JWT_SECRET",
   "ADMIN_JWT_REFRESH_SECRET",
+  "ADMIN_CSRF_SECRET",
 ] as const;
 
 const parsed = envSchema.safeParse(process.env);

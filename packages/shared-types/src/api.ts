@@ -59,4 +59,7 @@ export type ErrorCode =
   | "ADMIN_FORBIDDEN"
   | "ADMIN_ACCOUNT_DISABLED"
   | "ADMIN_NOT_FOUND"
+  // Double-submit CSRF token missing / invalid on /admin/auth POSTs.
+  // The client transparently fetches a fresh token and retries.
+  | "ADMIN_CSRF_INVALID"
   | "INTERNAL_ERROR";

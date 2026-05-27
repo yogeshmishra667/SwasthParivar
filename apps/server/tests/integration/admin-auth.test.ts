@@ -67,12 +67,30 @@ afterAll(async () => {
   if (redisContainer) await redisContainer.stop();
 });
 
+/**
+ * Fetch a fresh CSRF token + matching cookie for use on subsequent
+ * state-changing POSTs. The double-submit pattern (csrf-csrf) needs
+ * both the cookie and the `x-csrf-token` header on every write.
+ */
+const getCsrf = async (): Promise<{ token: string; cookie: string }> => {
+  const res = await request(app).get("/admin/auth/csrf");
+  return {
+    token: res.body.data.csrfToken as string,
+    cookie: (res.headers["set-cookie"] as string[] | undefined)?.[0] ?? "",
+  };
+};
+
 describe("Admin Auth Service", () => {
   it("rejects login with invalid credentials", async () => {
-    const res = await request(app).post("/admin/auth/login").send({
-      email: "does-not-exist@example.com",
-      password: "wrong",
-    });
+    const csrf = await getCsrf();
+    const res = await request(app)
+      .post("/admin/auth/login")
+      .set("Cookie", csrf.cookie)
+      .set("x-csrf-token", csrf.token)
+      .send({
+        email: "does-not-exist@example.com",
+        password: "wrong",
+      });
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe("ADMIN_INVALID_CREDENTIALS");
   });
@@ -91,20 +109,30 @@ describe("Admin Auth Service", () => {
       },
     });
 
+    const csrf = await getCsrf();
+
     // 1. Login should return UNVERIFIED and a challenge token
-    const loginRes = await request(app).post("/admin/auth/login").send({
-      email: admin.email,
-      password,
-    });
+    const loginRes = await request(app)
+      .post("/admin/auth/login")
+      .set("Cookie", csrf.cookie)
+      .set("x-csrf-token", csrf.token)
+      .send({
+        email: admin.email,
+        password,
+      });
     expect(loginRes.status).toBe(200);
     expect(loginRes.body.data.stage).toBe("totp_enrollment_required");
     const challengeToken = loginRes.body.data.challengeToken;
     expect(challengeToken).toBeDefined();
 
     // 2. Enroll TOTP
-    const enrollRes = await request(app).post("/admin/auth/totp/enroll").send({
-      challengeToken,
-    });
+    const enrollRes = await request(app)
+      .post("/admin/auth/totp/enroll")
+      .set("Cookie", csrf.cookie)
+      .set("x-csrf-token", csrf.token)
+      .send({
+        challengeToken,
+      });
     expect(enrollRes.status).toBe(200);
     expect(enrollRes.body.data.secret).toBeDefined();
     expect(enrollRes.body.data.otpauthUrl).toBeDefined();
@@ -113,10 +141,14 @@ describe("Admin Auth Service", () => {
     const validCode = generateSync({ secret: totpSecret });
 
     // 3. Confirm TOTP
-    const confirmRes = await request(app).post("/admin/auth/totp/confirm").send({
-      challengeToken,
-      code: validCode,
-    });
+    const confirmRes = await request(app)
+      .post("/admin/auth/totp/confirm")
+      .set("Cookie", csrf.cookie)
+      .set("x-csrf-token", csrf.token)
+      .send({
+        challengeToken,
+        code: validCode,
+      });
     expect(confirmRes.status).toBe(200);
     expect(confirmRes.body.data.stage).toBe("authenticated");
     expect(confirmRes.body.data.accessToken).toBeDefined();
@@ -149,19 +181,29 @@ describe("Admin Auth Service", () => {
       },
     });
 
-    const loginRes = await request(app).post("/admin/auth/login").send({
-      email: admin.email,
-      password,
-    });
+    const csrf = await getCsrf();
+
+    const loginRes = await request(app)
+      .post("/admin/auth/login")
+      .set("Cookie", csrf.cookie)
+      .set("x-csrf-token", csrf.token)
+      .send({
+        email: admin.email,
+        password,
+      });
     expect(loginRes.status).toBe(200);
     expect(loginRes.body.data.stage).toBe("totp_required");
     const challengeToken = loginRes.body.data.challengeToken;
 
     const validCode = generateSync({ secret: totpSecret });
-    const verifyRes = await request(app).post("/admin/auth/totp/verify").send({
-      challengeToken,
-      code: validCode,
-    });
+    const verifyRes = await request(app)
+      .post("/admin/auth/totp/verify")
+      .set("Cookie", csrf.cookie)
+      .set("x-csrf-token", csrf.token)
+      .send({
+        challengeToken,
+        code: validCode,
+      });
 
     expect(verifyRes.status).toBe(200);
     expect(verifyRes.body.data.stage).toBe("authenticated");
@@ -193,16 +235,26 @@ describe("Admin Auth Service", () => {
       },
     });
 
-    const loginRes = await request(app).post("/admin/auth/login").send({
-      email: admin.email,
-      password,
-    });
+    const csrf = await getCsrf();
+
+    const loginRes = await request(app)
+      .post("/admin/auth/login")
+      .set("Cookie", csrf.cookie)
+      .set("x-csrf-token", csrf.token)
+      .send({
+        email: admin.email,
+        password,
+      });
     const challengeToken = loginRes.body.data.challengeToken;
 
-    const verifyRes = await request(app).post("/admin/auth/totp/verify").send({
-      challengeToken,
-      code: "000000", // Invalid code
-    });
+    const verifyRes = await request(app)
+      .post("/admin/auth/totp/verify")
+      .set("Cookie", csrf.cookie)
+      .set("x-csrf-token", csrf.token)
+      .send({
+        challengeToken,
+        code: "000000", // Invalid code
+      });
 
     expect(verifyRes.status).toBe(401);
     expect(verifyRes.body.error.code).toBe("ADMIN_2FA_INVALID");
