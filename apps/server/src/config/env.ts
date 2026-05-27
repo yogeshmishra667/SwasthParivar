@@ -73,13 +73,28 @@ const envSchema = z.object({
   // verify-firebase requests at startup of the helper.
   FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
 
-  // Bearer secret guarding /admin routes (currently just the flag service
-  // admin endpoints). Optional in dev/test; promoted to required for
-  // production by the prod guard below.
-  ADMIN_API_TOKEN: z.string().min(32).optional(),
+  // Admin / ops console (out-of-phase tooling). The console authenticates
+  // staff with email+password+TOTP and mints its own JWTs — separate
+  // secrets from the patient JWTs above so a leak of one never forges the
+  // other. Optional in dev/test; prod-required by the guard below.
+  ADMIN_JWT_SECRET: z.string().min(32).optional(),
+  ADMIN_JWT_REFRESH_SECRET: z.string().min(32).optional(),
+  // CSRF protection on /admin/auth — double-submit cookie pattern via
+  // `csrf-csrf`. Defense in depth alongside SameSite=strict on the
+  // refresh cookie + the CORS allowlist. Optional in dev/test;
+  // prod-required by the guard below.
+  ADMIN_CSRF_SECRET: z.string().min(32).optional(),
+  // Issuer label shown in the operator's authenticator app entry.
+  ADMIN_TOTP_ISSUER: z.string().default("SwasthParivar Admin"),
+  // Bootstrap super-admin — read only by `pnpm admin:seed`, never at
+  // request time. Leave unset once the first account exists.
+  ADMIN_BOOTSTRAP_EMAIL: z.string().optional(),
+  ADMIN_BOOTSTRAP_PASSWORD: z.string().min(12).optional(),
 
   SENTRY_DSN: z.string().optional(),
   POSTHOG_API_KEY: z.string().optional(),
+  POSTHOG_PERSONAL_API_KEY: z.string().optional(),
+  POSTHOG_PROJECT_ID: z.string().optional(),
 
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
@@ -91,7 +106,13 @@ const envSchema = z.object({
 // them, otherwise the server loses error visibility and product analytics
 // silently. Treat absence as a fatal config error, same as a missing
 // DATABASE_URL.
-const PROD_REQUIRED_KEYS = ["SENTRY_DSN", "POSTHOG_API_KEY", "ADMIN_API_TOKEN"] as const;
+const PROD_REQUIRED_KEYS = [
+  "SENTRY_DSN",
+  "POSTHOG_API_KEY",
+  "ADMIN_JWT_SECRET",
+  "ADMIN_JWT_REFRESH_SECRET",
+  "ADMIN_CSRF_SECRET",
+] as const;
 
 const parsed = envSchema.safeParse(process.env);
 

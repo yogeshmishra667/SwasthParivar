@@ -25,7 +25,7 @@ beforeAll(async () => {
   process.env.JWT_SECRET = "test-secret-test-secret-test-secret-123";
   process.env.JWT_REFRESH_SECRET = "test-refresh-test-refresh-test-refresh-123";
   process.env.OTP_SECRET = "test-otp-test-otp-test-otp-test-otp-12345";
-  process.env.ADMIN_API_TOKEN = "admin-token-admin-token-admin-token-12";
+  process.env.ADMIN_JWT_SECRET = "test-admin-secret-test-admin-secret-123";
 
   const appModule = await import("../../src/app.js");
   const flagsModule = await import("../../src/shared/flags/index.js");

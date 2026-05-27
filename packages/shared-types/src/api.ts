@@ -52,4 +52,14 @@ export type ErrorCode =
   | "VALIDATION_ERROR"
   | "RATE_LIMITED"
   | "MAINTENANCE_MODE"
+  // Admin / ops console (out-of-phase operational tooling).
+  | "ADMIN_INVALID_CREDENTIALS"
+  | "ADMIN_2FA_REQUIRED"
+  | "ADMIN_2FA_INVALID"
+  | "ADMIN_FORBIDDEN"
+  | "ADMIN_ACCOUNT_DISABLED"
+  | "ADMIN_NOT_FOUND"
+  // Double-submit CSRF token missing / invalid on /admin/auth POSTs.
+  // The client transparently fetches a fresh token and retries.
+  | "ADMIN_CSRF_INVALID"
   | "INTERNAL_ERROR";

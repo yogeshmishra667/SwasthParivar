@@ -66,6 +66,7 @@ jobs:
     outputs:
       domain_logic: ${{ steps.filter.outputs.domain_logic }}
       server_image: ${{ steps.filter.outputs.server_image }}
+      admin: ${{ steps.filter.outputs.admin }}
     steps:
       - uses: actions/checkout@v4
       - id: filter
@@ -81,6 +82,15 @@ jobs:
               - 'packages/**'
               - 'apps/server/Dockerfile'
               - 'docker-compose*.yml'
+              - 'pnpm-lock.yaml'
+              - '.github/workflows/ci.yml'
+            # apps/admin is a static SPA — the workspace-recursive
+            # typecheck/lint/build jobs already pick it up automatically.
+            # This filter is reserved for future admin-only jobs (e.g.
+            # a static-site deploy step).
+            admin:
+              - 'apps/admin/**'
+              - 'packages/shared-types/**'
               - 'pnpm-lock.yaml'
               - '.github/workflows/ci.yml'
 

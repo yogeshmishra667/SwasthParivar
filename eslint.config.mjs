@@ -30,9 +30,10 @@ export default [
       "eqeqeq": ["error", "always", { null: "ignore" }],
     },
   },
-  // React Hooks rules — applied only to mobile (the only React codebase in the workspace)
+  // React Hooks rules — applied to every React codebase in the workspace
+  // (mobile + the admin console SPA).
   {
-    files: ["apps/mobile/**/*.{ts,tsx}"],
+    files: ["apps/mobile/**/*.{ts,tsx}", "apps/admin/**/*.{ts,tsx}"],
     plugins: { "react-hooks": reactHooks },
     rules: {
       "react-hooks/rules-of-hooks": "error",

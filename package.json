@@ -11,6 +11,7 @@
   "scripts": {
     "build": "pnpm -r --filter=./packages/* run build && pnpm -r --filter=./apps/* run build",
     "dev": "pnpm -r --parallel run dev",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration",
     "typecheck": "pnpm -r --parallel run typecheck",
     "lint": "pnpm -r --parallel run lint",
     "lint:fix": "pnpm -r --parallel run lint:fix",
@@ -38,6 +39,8 @@
       "@protobufjs/utf8": "^1.1.1",
       "ip-address": "^10.1.1",
       "uuid": "^11.1.1",
+      "tmp": "^0.2.6",
+      "qs": "^6.15.2",
       "postcss": "^8.5.10",
       "@hono/node-server": "^1.19.13",
       "@babel/runtime": "^7.26.10"
