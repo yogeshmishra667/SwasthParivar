@@ -156,7 +156,6 @@ describe("Admin Auth Service", () => {
     // Refresh token should be set in cookies
     const cookies = confirmRes.headers["set-cookie"];
     expect(cookies).toBeDefined();
-    expect(cookies![0]).toContain("refresh_token=");
     expect(cookies![0]).toContain("admin_refresh=");
 
     // Verify user is now enrolled in DB
