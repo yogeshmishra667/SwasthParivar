@@ -27,6 +27,14 @@ adminUsersRouter.get(
   controller.getUserResource,
 );
 
+// Resolved feature-map viewer — what `GET /api/v1/config/features`
+// returns for this user (per the plan's "App control surface").
+adminUsersRouter.get(
+  "/:id/feature-map",
+  validateParams(userIdParamSchema),
+  controller.getUserFeatureMap,
+);
+
 adminUsersRouter.patch(
   "/:id/tier",
   requireAdminRole("super_admin", "ops"),

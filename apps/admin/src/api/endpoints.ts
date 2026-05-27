@@ -112,6 +112,15 @@ export const adminApi = {
       })}`,
     ),
 
+  /**
+   * Resolved feature map for one user — what `GET /api/v1/config/features`
+   * returns for them. Plan's "App control surface" feature-map viewer.
+   */
+  getUserFeatureMap: (id: string) =>
+    request<{ userId: string; features: Record<string, boolean> }>(
+      `/admin/users/${enc(id)}/feature-map`,
+    ),
+
   changeUserTier: (id: string, tier: AdminTier) =>
     request<AdminTierChangeResult>(`/admin/users/${enc(id)}/tier`, {
       method: "PATCH",

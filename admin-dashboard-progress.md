@@ -138,11 +138,12 @@ Bearer`, `credentials: include`, envelope-unwrap, and a single-flight
 
 Work intentionally left out of M0–M4 — revisit before or during Phase 4.
 
-- **PostHog query client.** `critical_bypass_sms_success_rate` (the URGENT ops
-  metric) and true voice-success-rate + retention are PostHog-event-derived — there
-  is no DB table for them. They are registered in the analytics metric registry and
-  surfaced as `available: false` with a note. Wiring a PostHog query (HogQL) client
-  is the follow-up that makes them live.
+- **PostHog query client — ✅ wired in Session 3 (Antigravity).** `shared/posthog-
+query.ts` runs HogQL queries against the PostHog projects API; the three
+  PostHog-derived metrics (`critical_bypass_sms_success_rate`, `voice_success_
+rate`, `retention`) now compute live whenever `POSTHOG_PERSONAL_API_KEY` +
+  `POSTHOG_PROJECT_ID` are set, and degrade to `available:false` with the
+  registered note otherwise.
 - **Deactivate / suspend a patient user.** `User` has no `active` / `deactivatedAt`
   field; adding one _and_ enforcing it in patient login is a patient-facing change,
   beyond the scope of an additive admin API. Needs a schema migration + auth-layer
@@ -156,6 +157,48 @@ Work intentionally left out of M0–M4 — revisit before or during Phase 4.
 ---
 
 ## Session log
+
+### 2026-05-23 — Session 4 (production-readiness audit)
+
+Re-read `docs/admin-dashboard-plan.md` + `CLAUDE.md` + this progress file
+end-to-end and cross-checked the running code. Two material gaps vs the
+plan's "production-grade" bar; both fixed in this session.
+
+- **Feature-map viewer — missing per the plan.** The "App control surface"
+  paragraph explicitly calls for "a resolved feature-map viewer (what
+  `GET /api/v1/config/features` returns)" so ops can answer "what does
+  this user see right now". Built it end-to-end:
+  - **Server:** `GET /admin/users/:id/feature-map` (in `admin-users.*`)
+    delegates to the existing `resolveFeatures(userId)` in
+    `modules/config/config.service.ts` — same code path the mobile app
+    hits at boot, so the admin viewer is guaranteed to match reality.
+  - **Client:** `adminApi.getUserFeatureMap` + `useUserFeatureMap` +
+    a new `FeatureMapCard` on `UserDetailPage` (read-only — flag edits
+    still go through App Control).
+- **No error boundary at the app root.** A render error in any page
+  would have blanked the whole console. Added a class-based
+  `<ErrorBoundary>` in `components/shared/`, wired as the outermost
+  provider in `App.tsx`. Renders a recoverable fallback (message +
+  Reload button), logs to `console.error`, and leaves a TODO note to
+  forward to Sentry once the admin SPA gets its own DSN.
+- **PostHog query client status.** The progress file said "Deferred";
+  audit found `shared/posthog-query.ts` is actually wired (executes
+  HogQL via the PostHog projects API) and the three PostHog metrics
+  in the registry now compute live whenever the env vars are set.
+  Moved the entry from Deferred → done, with the env-gating noted.
+- **Critical-bypass medical-constant guardrail review.** Plan flags
+  these as "must NOT expose as flags". Verified: the constants live
+  in `packages/domain-logic` (not Redis), `evaluateRollout` never
+  consults them, and `shared/flags/listFlags` only returns Redis
+  keys — so they're architecturally unreachable from the admin. No
+  separate deny-list needed; an admin can't accidentally create a
+  Redis key with one of those names _and_ have the medical code path
+  honor it.
+- **Verification.** `pnpm -r --parallel run typecheck` / `lint` clean
+  across all six packages, `pnpm --filter @swasth/admin test` 16/16,
+  `node scripts/check-domain-purity.mjs` clean (56 files), admin
+  build green (972 KB raw / 291 KB gzipped — code-splitting still a
+  follow-up but acceptable for a staff-facing SPA).
 
 ### 2026-05-23 — Session 3 (audit pass)
 

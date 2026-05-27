@@ -40,6 +40,11 @@ export const getUserResource = async (req: Request, res: Response): Promise<void
   ok(res, result);
 };
 
+export const getUserFeatureMap = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  ok(res, await service.getUserFeatureMap(id));
+};
+
 export const changeUserTier = async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
   const { tier } = req.body as { tier: "free" | "premium" | "family" };

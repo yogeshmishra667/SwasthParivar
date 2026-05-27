@@ -18,6 +18,7 @@ import {
   type AdminTierChangeResult,
 } from "@swasth/shared-types";
 import { prisma } from "../../../shared/database.js";
+import { resolveFeatures } from "../../config/config.service.js";
 import { adminResources, getAdminResource } from "../registry/admin-resource.registry.js";
 import { roleAtLeast } from "../registry/admin-resource.types.js";
 
@@ -136,6 +137,25 @@ export const getUserResource = async (params: {
     offset: params.offset,
     hasMore: page.hasMore,
   };
+};
+
+/**
+ * Resolved feature map for one patient user — the same payload the
+ * mobile app sees from `GET /api/v1/config/features`. Plan's "App
+ * control surface" calls for an admin viewer so ops can answer
+ * "what does this user actually see right now". Read-only — rollout
+ * is changed via `/admin/flags/:key`.
+ */
+export const getUserFeatureMap = async (
+  userId: string,
+): Promise<{ userId: string; features: Record<string, boolean> }> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
+  if (!user) throw new DomainError("ADMIN_NOT_FOUND", "patient user not found");
+  const resolved = await resolveFeatures(userId);
+  return { userId, features: resolved.features };
 };
 
 export const changeUserTier = async (params: {

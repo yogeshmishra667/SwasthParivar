@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { AlertCircle, ArrowLeft, Lock, Phone, User as UserIcon } from "lucide-react";
 import type { AdminPatientListItem, AdminResourcePanelMeta, AdminTier } from "@swasth/shared-types";
-import { useChangeUserTier, useUser, useUserResource } from "@/api/queries";
+import { useChangeUserTier, useUser, useUserFeatureMap, useUserResource } from "@/api/queries";
 import { humanizeApiError } from "@/lib/errorMessage";
 import { cn } from "@/lib/cn";
 import { userDetailRoute } from "@/router/router";
@@ -191,6 +191,53 @@ function CoProfilesCard({ profiles }: CoProfilesCardProps) {
   );
 }
 
+// ── Feature map ──────────────────────────────────────────────────
+
+interface FeatureMapCardProps {
+  userId: string;
+}
+
+/**
+ * Read-only viewer for the resolved feature map this user sees from
+ * the mobile app. Calls the same code path mobile hits at boot
+ * (`resolveFeatures`), through the admin proxy. Read-only by design —
+ * change rollout via the App Control page; this just shows the result.
+ */
+function FeatureMapCard({ userId }: FeatureMapCardProps) {
+  const { data, isLoading, isError, error } = useUserFeatureMap(userId);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Feature map</CardTitle>
+        <CardDescription className="text-xs">
+          What this user sees from <code>GET /api/v1/config/features</code>.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isError ? (
+          <p className="text-xs text-destructive">{humanizeApiError(error)}</p>
+        ) : isLoading || !data ? (
+          <Skeleton className="h-16 w-full" />
+        ) : Object.keys(data.features).length === 0 ? (
+          <p className="text-xs text-muted-foreground">No CC.12-gated features are built yet.</p>
+        ) : (
+          <ul className="space-y-1.5 text-xs">
+            {Object.entries(data.features).map(([feature, enabled]) => (
+              <li
+                key={feature}
+                className="flex items-center justify-between rounded-md border bg-muted/20 px-2 py-1.5"
+              >
+                <span className="font-mono">{feature}</span>
+                <Badge variant={enabled ? "success" : "secondary"}>{enabled ? "on" : "off"}</Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────
 
 export function UserDetailPage() {
@@ -325,6 +372,8 @@ export function UserDetailPage() {
           </Card>
 
           {coProfiles.length > 0 ? <CoProfilesCard profiles={coProfiles} /> : null}
+
+          <FeatureMapCard userId={user.id} />
         </div>
 
         <Card className="lg:col-span-2">

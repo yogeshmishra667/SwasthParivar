@@ -26,6 +26,7 @@ export const queryKeys = {
   flags: () => ["flags"] as const,
   flag: (key: string) => ["flag", key] as const,
   flagAudit: (key: string) => ["flag", key, "audit"] as const,
+  userFeatureMap: (id: string) => ["user", id, "feature-map"] as const,
   opsHealth: () => ["ops", "health"] as const,
   opsQueues: () => ["ops", "queues"] as const,
   admins: () => ["admins"] as const,
@@ -83,6 +84,22 @@ export function useUserResource(
     queryKey: queryKeys.userResource(id, key, normalized),
     queryFn: () => adminApi.getUserResource(id, key, normalized),
     enabled: options.enabled !== false,
+  });
+}
+
+/**
+ * Resolved feature map for one patient — the same payload the mobile
+ * app sees from `GET /api/v1/config/features`, exposed on the admin
+ * console per the plan's "App control surface" requirement.
+ */
+export function useUserFeatureMap(id: string | null) {
+  return useQuery({
+    queryKey: queryKeys.userFeatureMap(id ?? ""),
+    queryFn: () => {
+      if (!id) throw new Error("useUserFeatureMap: id is required");
+      return adminApi.getUserFeatureMap(id);
+    },
+    enabled: id !== null,
   });
 }
 
