@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { Outlet, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/auth/auth-context";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
@@ -34,8 +35,26 @@ export function AppLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />
         <main className="flex-1 overflow-auto p-6">
-          <Outlet />
+          {/* Suspense scoped to the content area so the sidebar + topbar
+              stay visible while the next page's chunk streams in. */}
+          <Suspense fallback={<PageLoading />}>
+            <Outlet />
+          </Suspense>
         </main>
+      </div>
+    </div>
+  );
+}
+
+function PageLoading() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-4 w-72" />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
       </div>
     </div>
   );
