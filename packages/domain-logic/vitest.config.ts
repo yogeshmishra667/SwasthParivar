@@ -82,6 +82,12 @@ export default defineConfig({
         // phase3.md C.9 (spec floor 95%; the functions are simple,
         // pure and exhaustively tested, so we hold the higher bar).
         "src/silent-guardian/**": { 100: true },
+        // Phase 4 Feature D' — SOS escalation state machine.
+        // Safety-critical (CLAUDE.md "Phase 4 Invariants — Multi-
+        // condition Critical-Bypass Dispatch"). A regression here can
+        // skip an escalation stage and a real emergency reaches no
+        // one. Locked at 100% per phase3.md §D.9.
+        "src/sos-escalation/state-machine.ts": { 100: true },
 
         // Ratchet floors at CURRENT measured values (2026-05-14 baseline).
         // Raise these as tests close the gap to CLAUDE.md targets.
@@ -160,6 +166,26 @@ export default defineConfig({
           functions: 100,
           branches: 94,
           statements: 98,
+        },
+        // Phase 4 Feature D' — SOS contact resolver. CLAUDE.md target
+        // is 95%+; measured 100% lines/functions, 97% branches (gap
+        // is a defensive nil check for noUncheckedIndexedAccess that
+        // is runtime-unreachable). Pinned slightly below measured.
+        "src/sos-escalation/contact-resolver.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 96,
+          statements: 98,
+        },
+        // Phase 4 Feature D' — SOS message builder. Same 95%+ target;
+        // measured 100% lines/functions, 95% branches (gap is the
+        // no-space-at-all word-trim path that real-world copy never
+        // hits but stays defensive against pathological input).
+        "src/sos-escalation/message-builder.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 95,
+          statements: 100,
         },
       },
     },

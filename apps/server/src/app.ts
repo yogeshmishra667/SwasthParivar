@@ -22,6 +22,7 @@ import { usersRouter } from "./modules/users/users.routes.js";
 import { householdRouter } from "./modules/household/household.routes.js";
 import { familyRouter } from "./modules/family/family.routes.js";
 import { silentGuardianRouter } from "./modules/silent-guardian/silent-guardian.routes.js";
+import { sosRouter } from "./modules/sos/sos.routes.js";
 import { chatRouter } from "./modules/chat/chat.routes.js";
 import { configRouter } from "./modules/config/config.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
@@ -103,6 +104,7 @@ export const buildApp = (): Express => {
   app.use("/api/v1/household", householdRouter);
   app.use("/api/v1/family", familyRouter);
   app.use("/api/v1/guardian", silentGuardianRouter);
+  app.use("/api/v1/sos", sosRouter);
   app.use("/api/v1/chat", chatRouter);
   app.use("/api/v1/config", configRouter);
   app.use("/admin", adminRouter);

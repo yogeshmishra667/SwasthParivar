@@ -99,6 +99,24 @@ const envSchema = z.object({
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+
+  // Phase 4 Feature D' — SOS IVR vendor wrappers. Both vendors are
+  // optional at config time; the `sos_test_mode` flag (Redis-backed,
+  // default true) is the runtime gate that suppresses real calls
+  // regardless of credentials. When `sos_test_mode=false` AND a
+  // matching vendor is unset, the dispatcher pages Sentry with
+  // `SOS_IVR_NO_VENDOR` and falls through to the SMS-all-contacts
+  // path (CLAUDE.md "Phase 4 Invariants" + phase4.md §D'.1).
+  //
+  //   Exotel — India E.164 (+91*). Primary.
+  //   Twilio — international fallback.
+  EXOTEL_ACCOUNT_SID: z.string().optional(),
+  EXOTEL_API_KEY: z.string().optional(),
+  EXOTEL_API_TOKEN: z.string().optional(),
+  EXOTEL_CALLER_ID: z.string().optional(),
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_FROM_NUMBER: z.string().optional(),
 });
 
 // Production-only required keys — these are nominally optional at the type

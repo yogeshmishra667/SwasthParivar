@@ -21,6 +21,7 @@ const statusFor = (code: ErrorCode): number => {
     case "ADMIN_ACCOUNT_DISABLED":
     case "ADMIN_CSRF_INVALID":
     case "USER_DEACTIVATED":
+    case "SOS_FORBIDDEN":
       return 403;
     case "MED_SCHEDULE_NOT_FOUND":
     case "READING_NOT_FOUND":
@@ -29,6 +30,7 @@ const statusFor = (code: ErrorCode): number => {
     case "FAMILY_LINK_NOT_FOUND":
     case "GUARDIAN_ALERT_NOT_FOUND":
     case "ADMIN_NOT_FOUND":
+    case "SOS_NOT_FOUND":
       return 404;
     case "FAMILY_INVITE_INVALID":
       return 400;
@@ -50,6 +52,7 @@ const statusFor = (code: ErrorCode): number => {
     case "CHAT_CIRCUIT_OPEN":
     case "CHAT_SPEND_CAP_REACHED":
     case "MAINTENANCE_MODE": // CC.12.7 #1 — global maintenance window, retry later
+    case "SOS_DISABLED": // sos_enabled=false — call emergency services directly
       return 503;
     case "CHAT_UPSTREAM_TIMEOUT":
       return 504;
