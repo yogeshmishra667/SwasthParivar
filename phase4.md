@@ -33,11 +33,29 @@ Before any new Phase 4 feature lands, the items below — un-shipped from earlie
 
 ### Pending from Phase 2 (per CLAUDE.md scope)
 
-| Item                              | Why deferred                                         | Phase 4 home                                          | Blocker for                                |
-|-----------------------------------|-----------------------------------------------------|-------------------------------------------------------|--------------------------------------------|
-| `HealthCheckSchedule` model        | not built in Phase 2 — slipped                       | Week 13 schema migration `20260601000000_*`           | `SCHEDULE_COMPLIANCE_CHECK` cron, doctor portal adherence display |
-| `HealthCheckCompliance` model      | depends on `HealthCheckSchedule`                     | Same migration as above                                | Same                                       |
-| `schedule-compliance/` pure module | depends on schema                                    | Week 13                                                | `SCHEDULE_COMPLIANCE_CHECK` job logic       |
+| Item                              | Why deferred                                         | Phase 4 home                                          | Blocker for                                | Status |
+|-----------------------------------|-----------------------------------------------------|-------------------------------------------------------|--------------------------------------------|--------|
+| `HealthCheckSchedule` model        | not built in Phase 2 — slipped                       | Week 13 schema migration `20260601000000_*`           | `SCHEDULE_COMPLIANCE_CHECK` cron, doctor portal adherence display | **Landed PR #92 (2026-05-28)** |
+| `HealthCheckCompliance` model      | depends on `HealthCheckSchedule`                     | Same migration as above                                | Same                                       | **Landed PR #92** |
+| `schedule-compliance/` pure module | depends on schema                                    | Week 13                                                | `SCHEDULE_COMPLIANCE_CHECK` job logic       | **Landed PR #92** |
+
+**Phase 2 carry-over — what shipped in PR #92:**
+
+- `HealthCheckSchedule` + `HealthCheckCompliance` Prisma models with three new enums (`HealthCheckType`, `HealthCheckFrequency`, `HealthCheckComplianceStatus`). Migration `20260601000000_health_check_schedules` is squawk-clean and byte-matches `prisma migrate diff` against the prior schema. Compliance rows uniquely keyed on `(schedule_id, expected_at)` so the future cron UPSERTs idempotently.
+- Pure module `packages/domain-logic/src/schedule-compliance/`:
+  - `evaluateCompliance(input)` → per-slot verdicts + `nextDueAtIso` + aggregate counts. No `Date.now()`, no I/O.
+  - User-local slot expansion via `userTzOffsetMinutes` (same convention as `streak-engine`).
+  - Greedy slot-first matcher with constants exported: `COMPLIANCE_ON_TIME_WINDOW_MINUTES = 60`, `COMPLIANCE_LATE_WINDOW_MINUTES = 180`, `COMPLIANCE_MISSED_AFTER_MINUTES = 180`.
+  - 36 test cases; coverage 100% lines / 100% functions / 98.7% statements / 94.8% branches. Ratchet pinned in `vitest.config.ts`.
+
+**Still deferred to Week 17** (per the schema-first sequencing principle — the worker, HTTP routes and UI all land together with the doctor-portal adherence display in Feature G):
+
+- `SCHEDULE_COMPLIANCE_CHECK` cron in `apps/server/src/workers/`.
+- HTTP routes: `GET /api/v1/schedules`, `POST /api/v1/schedules`, `PUT /api/v1/schedules/:id` (CLAUDE.md "API Routes → Schedules").
+- Mobile schedule editor + adherence widget.
+- Doctor portal adherence column.
+
+Cardiac + respiratory `checkType` values are in the enum for forward compatibility; the reading tables themselves ship in Week 14 (Feature E.1).
 
 **Phase 2 items verified shipped (no carry-over):** `BPReading`, `MealLog`, `InsightEvent`, `HealthScore`, dashboard Hindi summary (`packages/domain-logic/src/dashboard-summary/`), HbA1c estimate (`modules/hba1c/`), guardian read-only view (`FamilyLink`, PR #38), spike + trend detectors.
 
@@ -139,10 +157,10 @@ Each feature lands in the same shape as Phase 3 Feature A/B/C — see `phase3.md
 
 **SOS:** reuse `phase3.md` §579–§720 verbatim. Nothing to redesign.
 
-**Phase 2 carry-over (newly identified):** `HealthCheckSchedule` + `HealthCheckCompliance` were specced for Phase 2 (CLAUDE.md "Scheduling" section) but never shipped. They block the `SCHEDULE_COMPLIANCE_CHECK` cron and the doctor portal's adherence display. **Land them in Week 13 alongside the SOS schema** — same migration window, additive, no patient-facing change until the cron + UI ship in Week 17.
+**Phase 2 carry-over — landed in PR #92 (2026-05-28):** `HealthCheckSchedule` + `HealthCheckCompliance` were specced for Phase 2 (CLAUDE.md "Scheduling" section) but never shipped. They block the `SCHEDULE_COMPLIANCE_CHECK` cron and the doctor portal's adherence display. Landed in Week 13 alongside the SOS schema window — additive, no patient-facing change until the cron + UI ship in Week 17.
 
-- Schema: `HealthCheckSchedule { user_id, check_type (glucose|bp|cardiac|respiratory), frequency, scheduled_times JSONB, reminder_enabled, active }` + `HealthCheckCompliance { schedule_id, user_id, expected_at, completed_at?, reading_id?, status (on_time|late|missed), reminder_count, guardian_notified }`. Migration `20260601000000_health_check_schedules/`.
-- Pure module `packages/domain-logic/src/schedule-compliance/` — `evaluateCompliance(schedule, readings, now)` returning the next due slot + the missed-slot list. 95%+ coverage.
+- Schema: `HealthCheckSchedule { user_id, check_type (glucose|bp|cardiac|respiratory), frequency, scheduled_times JSONB, reminder_enabled, active }` + `HealthCheckCompliance { schedule_id, user_id, expected_at, completed_at?, reading_id?, status (on_time|late|missed|pending), reminder_count, guardian_notified }`. Migration `20260601000000_health_check_schedules/` — squawk-clean, byte-matches `prisma migrate diff`. Compliance rows uniquely keyed on `(schedule_id, expected_at)` so the future cron UPSERTs idempotently.
+- Pure module `packages/domain-logic/src/schedule-compliance/` — `evaluateCompliance(input)` returns per-slot verdicts, `nextDueAtIso`, and aggregate counts. User-local slot expansion via `userTzOffsetMinutes`; greedy slot-first matcher with windows exported as constants (`COMPLIANCE_ON_TIME_WINDOW_MINUTES = 60`, `COMPLIANCE_LATE_WINDOW_MINUTES = 180`). 36 cases, 100% lines / 100% functions / 98.7% statements / 94.8% branches. Ratchet pinned in `vitest.config.ts`.
 
 - **Gate to Week 14:** SOS state machine 100% branch coverage; full escalation chain integration test passes in test mode; `sos_enabled=true` + `sos_test_mode=true` rolled to 10 internal users for 7 consecutive days with zero false-alarm bypass-SMS sends. `HealthCheckSchedule` schema migration squawk-clean.
 

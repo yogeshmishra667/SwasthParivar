@@ -14,3 +14,4 @@ export * from "./chat-cold-start/index.js";
 export * from "./chat-intent-classifier/index.js";
 export * from "./feature-rollout/index.js";
 export * from "./silent-guardian/index.js";
+export * from "./schedule-compliance/index.js";

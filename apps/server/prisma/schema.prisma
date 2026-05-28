@@ -173,6 +173,38 @@ enum AlertChannel {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Phase 2 carry-over — HealthCheckSchedule (CLAUDE.md "Scheduling")
+// ─────────────────────────────────────────────────────────────
+
+// What kind of reading a schedule expects. Mirrors the four health
+// log surfaces; cardiac/respiratory are forward-compatible (Phase 4
+// Feature E ships the readings themselves).
+enum HealthCheckType {
+  glucose
+  bp
+  cardiac
+  respiratory
+}
+
+// How often the schedule repeats. `daily` honours every entry in
+// `scheduledTimes` for every day. `weekly` requires each entry to
+// carry a `dayOfWeek` (0=Sun..6=Sat) so the pure compliance evaluator
+// can filter slots per weekday.
+enum HealthCheckFrequency {
+  daily
+  weekly
+}
+
+// Per-slot compliance verdict. `pending` is the only non-terminal
+// state — the slot is in the future or still inside its grace window.
+enum HealthCheckComplianceStatus {
+  on_time
+  late
+  missed
+  pending
+}
+
+// ─────────────────────────────────────────────────────────────
 // Users & Household (Phase 1)
 // ─────────────────────────────────────────────────────────────
 
@@ -201,7 +233,7 @@ model User {
   createdAt          DateTime    @default(now()) @map("created_at")
   updatedAt          DateTime    @updatedAt @map("updated_at")
 
-  household              Household              @relation(fields: [householdId], references: [id])
+  household              Household               @relation(fields: [householdId], references: [id])
   glucoseReadings        GlucoseReading[]
   bpReadings             BPReading[]
   mealLogs               MealLog[]
@@ -217,15 +249,19 @@ model User {
   // Family links — a user can be the patient on some rows and the
   // guardian on others. Phase 2 ships the read-only dashboard; alerts
   // arrive in Phase 3.
-  patientFamilyLinks     FamilyLink[]           @relation("PatientLinks")
-  guardianFamilyLinks    FamilyLink[]           @relation("GuardianLinks")
+  patientFamilyLinks     FamilyLink[]            @relation("PatientLinks")
+  guardianFamilyLinks    FamilyLink[]            @relation("GuardianLinks")
   chatSessions           ChatSession[]
   chatMessages           ChatMessage[]
   // Silent Guardian (Phase 3 — Feature C). Signals are detected about a
   // patient; alerts have a patient side and a guardian side.
   silentGuardianSignals  SilentGuardianSignal[]
-  patientGuardianAlerts  GuardianAlert[]        @relation("PatientAlerts")
-  guardianGuardianAlerts GuardianAlert[]        @relation("GuardianAlerts")
+  patientGuardianAlerts  GuardianAlert[]         @relation("PatientAlerts")
+  guardianGuardianAlerts GuardianAlert[]         @relation("GuardianAlerts")
+  // Phase 2 carry-over — per-user check schedules + their evaluated
+  // compliance rows. Both cascade-delete with the user.
+  healthCheckSchedules   HealthCheckSchedule[]
+  healthCheckCompliances HealthCheckCompliance[]
 
   @@index([householdId])
   @@map("users")
@@ -715,6 +751,71 @@ model GuardianAlert {
   // on (guardianId, severity, createdAt).
   @@index([guardianId, severity, createdAt(sort: Desc)])
   @@map("guardian_alerts")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Phase 2 carry-over — Health-check schedules + compliance
+//
+// CLAUDE.md "Scheduling" specced these in Phase 2; they slipped and
+// land in Week 13 of Phase 4 as the additive schema half of the
+// carry-over. The cron + UI that consume these tables ship in Week 17.
+// Pure compliance evaluation lives in
+// `packages/domain-logic/src/schedule-compliance/`.
+// ─────────────────────────────────────────────────────────────
+
+model HealthCheckSchedule {
+  id              String               @id @default(uuid()) @db.Uuid
+  userId          String               @map("user_id") @db.Uuid
+  checkType       HealthCheckType      @map("check_type")
+  frequency       HealthCheckFrequency
+  // Slot list. Daily entries: `{ hour: 0-23, minute: 0-59 }`. Weekly
+  // entries additionally carry `dayOfWeek: 0-6` (0=Sun..6=Sat). Stored
+  // as JSON so the slot vocabulary can extend (e.g. interval-based)
+  // without a migration; the pure evaluator validates shape on read.
+  scheduledTimes  Json                 @map("scheduled_times")
+  reminderEnabled Boolean              @default(true) @map("reminder_enabled")
+  active          Boolean              @default(true)
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  user        User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  compliances HealthCheckCompliance[]
+
+  @@index([userId, active])
+  @@index([userId, checkType, active])
+  @@map("health_check_schedules")
+}
+
+model HealthCheckCompliance {
+  id               String                      @id @default(uuid()) @db.Uuid
+  scheduleId       String                      @map("schedule_id") @db.Uuid
+  userId           String                      @map("user_id") @db.Uuid
+  // Absolute UTC timestamp the slot was due. The pure evaluator
+  // expands the schedule's recurrence rule into these absolute slots;
+  // the compliance worker persists one row per expanded slot.
+  expectedAt       DateTime                    @map("expected_at")
+  completedAt      DateTime?                   @map("completed_at")
+  // ID of the reading that satisfied the slot, if any. Free-form
+  // string (the reading tables use composite keys + UUIDs that vary
+  // by type) — the consuming UI joins per `checkType` to dereference.
+  readingId        String?                     @map("reading_id")
+  status           HealthCheckComplianceStatus
+  reminderCount    Int                         @default(0) @map("reminder_count")
+  guardianNotified Boolean                     @default(false) @map("guardian_notified")
+  createdAt        DateTime                    @default(now()) @map("created_at")
+  updatedAt        DateTime                    @updatedAt @map("updated_at")
+
+  schedule HealthCheckSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Idempotent re-evaluation — a slot is uniquely identified by its
+  // (schedule, expectedAt) tuple. The compliance worker UPSERTs on
+  // this key so re-runs never duplicate rows.
+  @@unique([scheduleId, expectedAt])
+  @@index([userId, expectedAt(sort: Desc)])
+  @@index([scheduleId, status])
+  @@index([userId, status, expectedAt])
+  @@map("health_check_compliance")
 }
 
 // ─────────────────────────────────────────────────────────────
