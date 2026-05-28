@@ -217,21 +217,34 @@ model Household {
 }
 
 model User {
-  id                 String      @id @default(uuid()) @db.Uuid
-  name               String
-  phone              String      @unique
-  age                Int
-  gender             Gender?
-  preferredLanguage  Language    @default(hi) @map("preferred_language")
-  conditions         Condition[]
-  timezone           String      @default("Asia/Kolkata")
-  householdId        String      @map("household_id") @db.Uuid
-  onboardingComplete Boolean     @default(false) @map("onboarding_complete")
-  onboardingStep     Int         @default(0) @map("onboarding_step")
-  tier               Tier        @default(free)
-  timeAnomalyCount   Int         @default(0) @map("time_anomaly_count")
-  createdAt          DateTime    @default(now()) @map("created_at")
-  updatedAt          DateTime    @updatedAt @map("updated_at")
+  id                   String      @id @default(uuid()) @db.Uuid
+  name                 String
+  phone                String      @unique
+  age                  Int
+  gender               Gender?
+  preferredLanguage    Language    @default(hi) @map("preferred_language")
+  conditions           Condition[]
+  timezone             String      @default("Asia/Kolkata")
+  householdId          String      @map("household_id") @db.Uuid
+  onboardingComplete   Boolean     @default(false) @map("onboarding_complete")
+  onboardingStep       Int         @default(0) @map("onboarding_step")
+  tier                 Tier        @default(free)
+  timeAnomalyCount     Int         @default(0) @map("time_anomaly_count")
+  // Admin soft-disable. `active=false` blocks the auth surface
+  // (send-otp, verify-otp, refresh) so a deactivated patient cannot
+  // start a new session. Existing access tokens stay valid until they
+  // expire (≤1h) — full medical history is retained per DPDP and the
+  // tier-downgrade retention rule. Toggled only by super_admin / ops
+  // via /admin/users/:id/(deactivate|reactivate); every flip is audited
+  // in `AdminAuditLog`. `deactivatedByAdminId` is a plain string (no
+  // FK) because `User` and `AdminUser` live in disjoint auth domains
+  // by design (CLAUDE.md "Admin / Ops console").
+  active               Boolean     @default(true)
+  deactivatedAt        DateTime?   @map("deactivated_at")
+  deactivationReason   String?     @map("deactivation_reason")
+  deactivatedByAdminId String?     @map("deactivated_by_admin_id") @db.Uuid
+  createdAt            DateTime    @default(now()) @map("created_at")
+  updatedAt            DateTime    @updatedAt @map("updated_at")
 
   household              Household               @relation(fields: [householdId], references: [id])
   glucoseReadings        GlucoseReading[]
@@ -264,6 +277,11 @@ model User {
   healthCheckCompliances HealthCheckCompliance[]
 
   @@index([householdId])
+  // Admin "show deactivated users" filter — partial-like coverage via
+  // a regular b-tree on `active`. The selectivity is fine: > 99% of
+  // rows are `active=true`, so the index pays off for the rare
+  // `active=false` scan and is cheap on writes.
+  @@index([active])
   @@map("users")
 }
 

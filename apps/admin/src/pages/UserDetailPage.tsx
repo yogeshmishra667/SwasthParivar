@@ -1,8 +1,23 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { AlertCircle, ArrowLeft, Lock, Phone, User as UserIcon } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  Ban,
+  Lock,
+  Phone,
+  ShieldCheck,
+  User as UserIcon,
+} from "lucide-react";
 import type { AdminPatientListItem, AdminResourcePanelMeta, AdminTier } from "@swasth/shared-types";
-import { useChangeUserTier, useUser, useUserFeatureMap, useUserResource } from "@/api/queries";
+import {
+  useChangeUserTier,
+  useDeactivateUser,
+  useReactivateUser,
+  useUser,
+  useUserFeatureMap,
+  useUserResource,
+} from "@/api/queries";
 import { humanizeApiError } from "@/lib/errorMessage";
 import { cn } from "@/lib/cn";
 import { userDetailRoute } from "@/router/router";
@@ -12,6 +27,15 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -91,6 +115,131 @@ function TierChange({ userId, currentTier }: TierChangeProps) {
         }}
       />
     </div>
+  );
+}
+
+// ── Account state — soft-disable (Phase 4 Week 13 admin carry-over) ─
+
+interface AccountStateProps {
+  userId: string;
+  active: boolean;
+}
+
+function AccountState({ userId, active }: AccountStateProps) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [confirmReactivate, setConfirmReactivate] = useState(false);
+  const [reason, setReason] = useState("");
+  const deactivate = useDeactivateUser(userId);
+  const reactivate = useReactivateUser(userId);
+
+  // 3 chars is the server-side floor (admin-users.validation). Mirror
+  // it client-side so the Confirm button only enables on valid input.
+  const trimmed = reason.trim();
+  const canSubmit = trimmed.length >= 3 && trimmed.length <= 280;
+
+  if (active) {
+    return (
+      <>
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={() => {
+            setReason("");
+            setDialogOpen(true);
+          }}
+        >
+          <Ban className="mr-1.5 h-4 w-4" />
+          Deactivate
+        </Button>
+        <Dialog
+          open={dialogOpen}
+          onOpenChange={(o) => {
+            if (!deactivate.isPending) setDialogOpen(o);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Deactivate this account?</DialogTitle>
+              <DialogDescription>
+                Blocks future logins (send-otp / verify / refresh) for this patient. Existing access
+                tokens stay valid until they expire (≤1 hour). No medical data is deleted — full
+                history reappears on reactivation. This is audit-logged.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="deactivate-reason">Reason</Label>
+              <textarea
+                id="deactivate-reason"
+                value={reason}
+                onChange={(e) => {
+                  setReason(e.target.value);
+                }}
+                disabled={deactivate.isPending}
+                placeholder="e.g. Repeated rate-limit abuse on free tier"
+                rows={3}
+                maxLength={280}
+                className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              <p className="text-xs text-muted-foreground">
+                {trimmed.length}/280 characters · minimum 3 · recorded verbatim in the audit log.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="ghost"
+                disabled={deactivate.isPending}
+                onClick={() => {
+                  setDialogOpen(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={!canSubmit || deactivate.isPending}
+                onClick={() => {
+                  deactivate.mutate(trimmed, {
+                    onSuccess: () => {
+                      setDialogOpen(false);
+                    },
+                  });
+                }}
+              >
+                {deactivate.isPending ? "Deactivating…" : "Yes, deactivate"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        className="text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950"
+        disabled={reactivate.isPending}
+        onClick={() => {
+          setConfirmReactivate(true);
+        }}
+      >
+        <ShieldCheck className="mr-1.5 h-4 w-4" />
+        {reactivate.isPending ? "Reactivating…" : "Reactivate"}
+      </Button>
+      <ConfirmDialog
+        open={confirmReactivate}
+        onOpenChange={setConfirmReactivate}
+        title="Reactivate this account?"
+        description="Restores normal access immediately. Audit-logged. Full medical history is unchanged."
+        confirmLabel="Yes, reactivate"
+        onConfirm={async () => {
+          await reactivate.mutateAsync();
+        }}
+      />
+    </>
   );
 }
 
@@ -319,9 +468,27 @@ export function UserDetailPage() {
             </div>
           </div>
           <RoleGate allow={["super_admin", "ops"]}>
-            <TierChange userId={user.id} currentTier={user.tier} />
+            <div className="flex items-center gap-2">
+              <TierChange userId={user.id} currentTier={user.tier} />
+              <AccountState userId={user.id} active={user.active} />
+            </div>
           </RoleGate>
         </div>
+
+        {!user.active ? (
+          <Alert variant="destructive" className="mt-4">
+            <Ban className="h-4 w-4" />
+            <AlertTitle>Account deactivated</AlertTitle>
+            <AlertDescription>
+              Auth surface (send-otp, verify-otp, refresh) is blocked for this patient.
+              {user.deactivationReason ? ` Reason: ${user.deactivationReason}.` : null}
+              {user.deactivatedAt
+                ? ` Disabled ${new Date(user.deactivatedAt).toLocaleString()}.`
+                : null}{" "}
+              Existing access tokens stay valid until expiry. No medical data has been deleted.
+            </AlertDescription>
+          </Alert>
+        ) : null}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

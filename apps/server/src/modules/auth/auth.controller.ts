@@ -25,9 +25,9 @@ export const postVerifyFirebase = async (req: Request, res: Response): Promise<v
   ok(res, result);
 };
 
-export const postRefresh = (req: Request, res: Response): void => {
+export const postRefresh = async (req: Request, res: Response): Promise<void> => {
   const { refreshToken } = req.body as { refreshToken: string };
-  const result = service.refreshTokens(refreshToken);
+  const result = await service.refreshTokens(refreshToken);
   ok(res, result);
 };
 

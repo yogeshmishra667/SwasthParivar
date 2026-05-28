@@ -3,6 +3,7 @@ import { validateBody, validateParams, validateQuery } from "../../../shared/val
 import { requireAdminRole } from "../../../shared/middleware/admin-rbac.js";
 import {
   changeTierSchema,
+  deactivateUserSchema,
   listUsersQuerySchema,
   resourcePageQuerySchema,
   userIdParamSchema,
@@ -41,4 +42,23 @@ adminUsersRouter.patch(
   validateParams(userIdParamSchema),
   validateBody(changeTierSchema),
   controller.changeUserTier,
+);
+
+// Phase 4 Week 13 admin carry-over — soft-disable / restore a patient.
+// super_admin + ops only (matches the tier-change boundary). Both
+// endpoints idempotently coerce to the desired state and audit only
+// on real transitions.
+adminUsersRouter.post(
+  "/:id/deactivate",
+  requireAdminRole("super_admin", "ops"),
+  validateParams(userIdParamSchema),
+  validateBody(deactivateUserSchema),
+  controller.deactivateUser,
+);
+
+adminUsersRouter.post(
+  "/:id/reactivate",
+  requireAdminRole("super_admin", "ops"),
+  validateParams(userIdParamSchema),
+  controller.reactivateUser,
 );

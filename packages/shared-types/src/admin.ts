@@ -68,6 +68,10 @@ export interface AdminPatientListItem {
   onboardingComplete: boolean;
   householdId: string;
   createdAt: string;
+  // Phase 4 Week 13 admin carry-over — soft-disable surface.
+  active: boolean;
+  deactivatedAt: string | null;
+  deactivationReason: string | null;
 }
 
 /** A page of patient users. Offset pagination — admin grids want page jumps. */
@@ -128,4 +132,15 @@ export interface AdminTierChangeResult {
   id: string;
   previousTier: AdminTier;
   tier: AdminTier;
+}
+
+/** Result of a patient (de)activation toggle. `previouslyActive` lets the
+ *  UI render an idempotent "already deactivated" toast without a second
+ *  round-trip; the audit log only carries a row on a real transition. */
+export interface AdminUserActivationResult {
+  id: string;
+  active: boolean;
+  previouslyActive: boolean;
+  deactivatedAt: string | null;
+  deactivationReason: string | null;
 }

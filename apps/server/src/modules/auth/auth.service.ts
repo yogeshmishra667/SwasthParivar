@@ -62,6 +62,18 @@ export interface SendOtpResult {
 export const sendOtp = async (phone: string): Promise<SendOtpResult> => {
   const provider = await readOtpProvider();
 
+  // Block OTP dispatch for soft-disabled accounts. We resolve by phone
+  // because the request has no user context yet; first-time users
+  // (phone unseen) sail through — the lookup intentionally returns
+  // null for unknown phones, no enumeration leak.
+  const existing = await prisma.user.findUnique({
+    where: { phone },
+    select: { active: true },
+  });
+  if (existing && !existing.active) {
+    throw new DomainError("USER_DEACTIVATED", "this account has been deactivated; contact support");
+  }
+
   // Firebase: mobile SDK handles delivery, server has nothing to send.
   // Reply with provider so the client knows which verify endpoint to
   // call (the validate-otp endpoint would be the wrong one here).
@@ -156,6 +168,13 @@ const upsertUserAndIssueTokens = async (phone: string): Promise<IssuedTokens> =>
     isNew = true;
   }
 
+  // Belt-and-suspenders: `sendOtp` already gates this, but firebase-mode
+  // skips `sendOtp` entirely (mobile SDK delivers the OTP), so this is
+  // the only checkpoint before a deactivated user gets fresh tokens.
+  if (!user.active) {
+    throw new DomainError("USER_DEACTIVATED", "this account has been deactivated; contact support");
+  }
+
   const accessToken = jwt.sign({ sub: user.id, householdId: user.householdId }, env.JWT_SECRET, {
     expiresIn: "1h",
   });
@@ -234,9 +253,9 @@ export const upsertPushToken = async (params: {
   return { id: row.id };
 };
 
-export const refreshTokens = (
+export const refreshTokens = async (
   refreshToken: string,
-): { accessToken: string; refreshToken: string } => {
+): Promise<{ accessToken: string; refreshToken: string }> => {
   let payload: { sub: string; householdId: string; type: string };
   try {
     payload = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as typeof payload;
@@ -245,6 +264,20 @@ export const refreshTokens = (
   }
   if (payload.type !== "refresh") {
     throw new DomainError("AUTH_TOKEN_EXPIRED", "not a refresh token");
+  }
+
+  // Block refresh for soft-disabled accounts (Phase 4 Week 13 admin
+  // carry-over). The existing access token stays valid until it
+  // expires; this endpoint is the chokepoint that ends the session
+  // for good. Unknown user id (deleted between issue and refresh) →
+  // same 403 — refusing to mint a token for "no such patient" is the
+  // safer behaviour.
+  const user = await prisma.user.findUnique({
+    where: { id: payload.sub },
+    select: { active: true },
+  });
+  if (!user?.active) {
+    throw new DomainError("USER_DEACTIVATED", "this account has been deactivated; contact support");
   }
 
   const accessToken = jwt.sign(

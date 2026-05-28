@@ -199,6 +199,38 @@ export function useChangeUserTier(userId: string) {
   });
 }
 
+/**
+ * Phase 4 Week 13 admin carry-over — soft-disable a patient account.
+ *
+ * Idempotent server-side; on success invalidates the user detail and
+ * the users list so the activation badge updates everywhere. Also
+ * invalidates the audit timeline because a real transition writes a
+ * row that the timeline panel renders next to the patient.
+ */
+export function useDeactivateUser(userId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (reason: string) => adminApi.deactivateUser(userId, reason),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.user(userId) });
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
+  });
+}
+
+export function useReactivateUser(userId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => adminApi.reactivateUser(userId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.user(userId) });
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
+  });
+}
+
 // Flags — audit + rollout preview reads.
 
 export function useFlagAudit(key: string | null, options: { enabled?: boolean } = {}) {

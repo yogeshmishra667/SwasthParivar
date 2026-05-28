@@ -76,11 +76,20 @@ Cardiac + respiratory `checkType` values are in the enum for forward compatibili
 
 ### Pending from Admin Console M0–M4 (per `admin-dashboard-progress.md` "Deferred")
 
-| Item                                                  | Why deferred                                                                  | Phase 4 home                                | Blocker for                                       |
-|-------------------------------------------------------|-------------------------------------------------------------------------------|---------------------------------------------|---------------------------------------------------|
-| `User.active` / `deactivatedAt` (suspend a patient)    | patient-facing change, beyond additive admin API                              | Week 13 admin carry-over (new schema field) | **Payments** — can't suspend abusive paying users |
-| Runtime-adjustable rate limits                         | hardcoded in `shared/middleware/rate-limit.ts`; console shows read-only        | §T.2 (folded into tier-aware infra)         | Premium ramp incident playbook                     |
-| TOTP recovery codes + email-based admin password reset | admin operability only; no patient/revenue impact                              | **Stays deferred → Phase 5**                | Admin self-service recovery (low priority)         |
+| Item                                                  | Why deferred                                                                  | Phase 4 home                                | Blocker for                                       | Status |
+|-------------------------------------------------------|-------------------------------------------------------------------------------|---------------------------------------------|---------------------------------------------------|--------|
+| `User.active` / `deactivatedAt` (suspend a patient)    | patient-facing change, beyond additive admin API                              | Week 13 admin carry-over (new schema field) | **Payments** — can't suspend abusive paying users | **Landed (2026-05-28)** — server + admin UI |
+| Runtime-adjustable rate limits                         | hardcoded in `shared/middleware/rate-limit.ts`; console shows read-only        | §T.2 (folded into tier-aware infra)         | Premium ramp incident playbook                     | |
+| TOTP recovery codes + email-based admin password reset | admin operability only; no patient/revenue impact                              | **Stays deferred → Phase 5**                | Admin self-service recovery (low priority)         | |
+
+**`User.active` admin carry-over — what shipped:**
+
+- Schema: `users.active BOOLEAN NOT NULL DEFAULT true` + `deactivated_at` + `deactivation_reason` + `deactivated_by_admin_id` (UUID, no FK — `users` and `admin_users` are disjoint auth domains). Migration `20260601100000_user_active_field` is squawk-clean and byte-matches `prisma migrate diff`. Index on `(active)` keeps the admin list scan for deactivated rows cheap.
+- New error code `USER_DEACTIVATED` → 403, mapped in `error-handler.ts`.
+- Auth perimeter checks: `sendOtp` (DB lookup by phone — unknown phones still 200 so there is no user-enumeration leak), `upsertUserAndIssueTokens` (belt-and-suspenders for the Firebase path that skips `sendOtp`), and `refreshTokens` (now async, blocks both deactivated users AND unknown ids). Existing access tokens stay valid until they expire (≤1h) per the spec's explicit trade-off — no per-request DB check on `requireAuth`.
+- Admin endpoints: `POST /admin/users/:id/deactivate { reason }` + `POST /admin/users/:id/reactivate`. super_admin + ops only. Idempotent: re-applying the same state returns 200 with `previouslyActive=false` and does NOT write a duplicate audit row, keeping `AdminAuditLog` a clean record of real transitions.
+- Admin console UI: deactivate button (red, opens a dialog with a required `reason` textarea, 3–280 chars) + reactivate button (green, confirm dialog). When `user.active=false` a destructive Alert renders at the top of `UserDetailPage` with the reason + timestamp. Both buttons gated by `RoleGate allow={['super_admin','ops']}`.
+- 11 integration test cases in `admin-users.test.ts` covering RBAC, idempotency, audit semantics, validation, 404, list-payload shape, plus the entire auth perimeter (send-otp blocked for deactivated phone; unknown phone still 200; refresh blocked with stale token; reactivate-then-refresh succeeds; unknown user id → 403).
 
 **Admin items verified shipped:** PostHog query client (Session 3), Error Boundary at app root (Session 4), Feature-map viewer (Session 4), all of M0–M4 (RBAC, Users, Analytics, App Control, Ops, Audit, Admin Users, Billing scaffold).
 
@@ -152,6 +161,8 @@ Each feature lands in the same shape as Phase 3 Feature A/B/C — see `phase3.md
 - Admin endpoint: `POST /admin/users/:id/deactivate { reason }` + `POST /admin/users/:id/reactivate`. Both audited via `AdminAuditLog`. super_admin or ops role only.
 - **No data deletion on deactivation** — same retention rules as tier downgrade. Reactivation restores full access.
 - Integration tests: deactivated patient cannot send-otp/verify-otp/refresh; deactivated guardian alerts still fire (medical safety > admin policy).
+
+**Landed shape (2026-05-28) — see top-of-file carry-over table for the full summary.** One deliberate divergence from the spec line above: `requireAuth` does NOT do a per-request DB check (the spec was ambiguous; the "≤15min until expiry" clause was the right read). Existing access tokens stay valid until they expire (≤1h) and the auth perimeter — `sendOtp`, `upsertUserAndIssueTokens` (Firebase path), and the new async `refreshTokens` — is the chokepoint that ends the session for good. The trade-off is documented inline in `auth.service.ts`. Also added: the admin console UI (`UserDetailPage` deactivate/reactivate buttons + destructive banner when `active=false`).
 
 
 
