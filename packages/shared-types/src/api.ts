@@ -53,6 +53,10 @@ export type ErrorCode =
   | "CHAT_UPSTREAM_TIMEOUT"
   | "CHAT_SPEND_CAP_REACHED"
   | "SOS_ALREADY_ACTIVE"
+  // Phase 4 Feature D' — SOS kill-switch + access guards.
+  | "SOS_DISABLED"
+  | "SOS_NOT_FOUND"
+  | "SOS_FORBIDDEN"
   | "REPORT_GENERATING"
   | "VALIDATION_ERROR"
   | "RATE_LIMITED"

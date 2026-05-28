@@ -136,6 +136,37 @@ export interface EventPropsMap {
     rollout_kind: "boolean" | "cohort" | "percentage" | "cohort_or_percentage" | "other";
     by: string;
   };
+  // Phase 4 Feature D' — SOS scaffold events. distinctId is the
+  // patient. `test_mode` is the snapshot read off the SOSEvent row at
+  // emit time so dashboards can pivot test-mode vs real-call traffic.
+  sos_triggered: {
+    sos_event_id: string;
+    source: "patient_manual" | "critical_bypass_escalation" | "guardian_initiated";
+    has_location: boolean;
+    location_accuracy_m: number | null;
+    test_mode: boolean;
+  };
+  sos_stage_transition: {
+    sos_event_id: string;
+    from: string;
+    to: string;
+    reason: string;
+    elapsed_seconds: number;
+    test_mode: boolean;
+    contacts_in_stage: number;
+  };
+  sos_cancelled: {
+    sos_event_id: string;
+    stage: string;
+    by: "patient" | "guardian";
+    elapsed_seconds: number;
+  };
+  sos_resolved: {
+    sos_event_id: string;
+    by: "patient" | "guardian" | "admin";
+    elapsed_seconds: number;
+    false_alarm: boolean;
+  };
 }
 
 export type EventName = keyof EventPropsMap;

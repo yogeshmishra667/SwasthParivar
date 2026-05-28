@@ -24,6 +24,7 @@ import {
   dailyGuardianSummaryWorker,
   bootstrapDailyGuardianSummaryCron,
 } from "./daily-guardian-summary.worker.js";
+import { sosEscalationWorker } from "./sos-escalation.worker.js";
 import { logger } from "../shared/logger.js";
 
 const workers = [
@@ -39,6 +40,7 @@ const workers = [
   silentGuardianAnalyzeWorker,
   guardianAlertDispatchWorker,
   dailyGuardianSummaryWorker,
+  sosEscalationWorker,
 ];
 
 export const workerNames = [
@@ -54,6 +56,7 @@ export const workerNames = [
   "silent-guardian-analyze",
   "guardian-alert-dispatch",
   "daily-guardian-summary",
+  "sos-escalation",
 ];
 
 export const startWorkers = (): void => {

@@ -30,6 +30,12 @@ export const QUEUE_NAMES = {
   // SMS (fallback) delivery of one alert, after the weekly-orange cap +
   // critical-bypass dedup. Gated by `silent_guardian_alerts_dispatch`.
   GUARDIAN_ALERT_DISPATCH: "guardian-alert-dispatch",
+  // Phase 4 Feature D' — SOS escalation tick. Self-rescheduling job;
+  // each run reads the SOSEvent row, calls `nextSOSStage`, and writes
+  // back. Exits the loop when the state machine reaches `resolved` /
+  // `cancelled`. Gated by `sos_enabled`; side effects gated by
+  // `sos_test_mode`.
+  SOS_ESCALATION: "sos-escalation",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

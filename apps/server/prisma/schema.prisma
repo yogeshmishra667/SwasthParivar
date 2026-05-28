@@ -172,7 +172,6 @@ enum AlertChannel {
   in_app
 }
 
-// ─────────────────────────────────────────────────────────────
 // Phase 2 carry-over — HealthCheckSchedule (CLAUDE.md "Scheduling")
 // ─────────────────────────────────────────────────────────────
 
@@ -202,6 +201,36 @@ enum HealthCheckComplianceStatus {
   late
   missed
   pending
+}
+
+// ─────────────────────────────────────────────────────────────
+// Phase 4 Feature D' — SOS (carry-over from Phase 3)
+// ─────────────────────────────────────────────────────────────
+
+// What triggered the SOS. `critical_bypass_escalation` is reserved for
+// the auto-escalation path (Phase 4 §D'.2 — wired from CRITICAL_ALERT
+// when no contact responds in 5min); `guardian_initiated` is the
+// "remote panic" pull from a guardian device, also Phase 4 §D'.2.
+// Patient-manual is the only path enabled on ship; the others require
+// their own flag flip.
+enum SOSTriggerSource {
+  patient_manual
+  critical_bypass_escalation
+  guardian_initiated
+}
+
+// SOS escalation state machine. Monotonic — the state machine never
+// regresses to an earlier stage except via the cancel / resolve
+// terminal states. `stage_3_all_contacts` is the dead-mans-switch
+// fallback when IVR (stage 2) reaches no one. See
+// `packages/domain-logic/src/sos-escalation/state-machine.ts`.
+enum SOSEscalationStage {
+  stage_0_fullscreen
+  stage_1_auto_dial
+  stage_2_ivr_call
+  stage_3_all_contacts
+  resolved
+  cancelled
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -275,6 +304,9 @@ model User {
   // compliance rows. Both cascade-delete with the user.
   healthCheckSchedules   HealthCheckSchedule[]
   healthCheckCompliances HealthCheckCompliance[]
+  // Phase 4 Feature D' — SOS events. Always patient-side; the
+  // guardian is reached via EmergencyContact / FamilyLink dispatch.
+  sosEvents              SOSEvent[]
 
   @@index([householdId])
   // Admin "show deactivated users" filter — partial-like coverage via
@@ -771,7 +803,6 @@ model GuardianAlert {
   @@map("guardian_alerts")
 }
 
-// ─────────────────────────────────────────────────────────────
 // Phase 2 carry-over — Health-check schedules + compliance
 //
 // CLAUDE.md "Scheduling" specced these in Phase 2; they slipped and
@@ -834,6 +865,76 @@ model HealthCheckCompliance {
   @@index([scheduleId, status])
   @@index([userId, status, expectedAt])
   @@map("health_check_compliance")
+}
+
+// ─────────────────────────────────────────────────────────────
+// SOS Event (Phase 4 Feature D' — carry-over from Phase 3 §579)
+//
+// One row per SOS press. The escalation cron walks the state machine
+// — pure logic in `packages/domain-logic/src/sos-escalation/` — and
+// mutates `escalationStage` / `contactsNotified`. Ship-default is
+// `testMode=true` (read from the `sos_test_mode` flag at create time)
+// so the call/SMS/IVR side effects log-only until ops promotes the
+// account by flipping the flag. See `docs/runbooks/sos-drill.md`.
+//
+// Data is retained per DPDP: the row stays after `resolvedAt` for the
+// medical / forensic trail. Soft-delete is via `resolvedAt` +
+// `falseAlarm` — never a row-delete.
+// ─────────────────────────────────────────────────────────────
+
+model SOSEvent {
+  id                String             @id @default(uuid()) @db.Uuid
+  // Mobile-side dedup. Same press fired twice (e.g. flaky network
+  // retry) collapses to the same row.
+  clientUuid        String             @unique @map("client_uuid") @db.Uuid
+  userId            String             @map("user_id") @db.Uuid
+  triggeredAt       DateTime           @default(now()) @map("triggered_at")
+  triggerSource     SOSTriggerSource   @map("trigger_source")
+  // Snapshot at trigger time. Lat/lng nullable — a degraded GPS fix
+  // must NEVER block the SOS chain.
+  locationLat       Float?             @map("location_lat")
+  locationLng       Float?             @map("location_lng")
+  locationAccuracyM Int?               @map("location_accuracy_m")
+  // Last reading per condition the patient tracks. Free-form JSON so
+  // Phase 4 cardiac / respiratory rollouts add keys without a
+  // migration. The dispatcher includes a one-line summary in the SMS
+  // copy so the guardian sees context, not just "ALERT".
+  lastReadings      Json               @default("{}") @map("last_readings")
+  // Per-contact dispatch log. Append-only array of
+  // `{contactId, channel: 'push'|'sms'|'ivr', sent, delivered, at,
+  //   stage}` rows. Same audit philosophy as PaymentEvent.rawPayload
+  // — ops can replay exactly who got reached when.
+  contactsNotified  Json               @default("[]") @map("contacts_notified")
+  escalationStage   SOSEscalationStage @default(stage_0_fullscreen) @map("escalation_stage")
+  cancelledAt       DateTime?          @map("cancelled_at")
+  // 'patient' | 'guardian' | 'admin'. Free-form for now — the SOS
+  // module enforces values; column stays open in case Phase 4
+  // adds 'auto_resolved' or similar.
+  cancelledBy       String?            @map("cancelled_by")
+  resolvedAt        DateTime?          @map("resolved_at")
+  resolvedBy        String?            @map("resolved_by")
+  // `falseAlarm=true` is set by the patient/guardian on the After-
+  // Action card. Distinct from `cancelled` — a cancelled SOS may
+  // still have been genuine.
+  falseAlarm        Boolean            @default(false) @map("false_alarm")
+  // Snapshotted at create time from the `sos_test_mode` flag. Once
+  // set, immutable for the lifetime of the row — flipping the flag
+  // mid-escalation must NOT retroactively make a log-only event into
+  // a real-call event.
+  testMode          Boolean            @default(true) @map("test_mode")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Most-recent-SOS-per-user is the dominant read pattern (active
+  // event lookup, after-action card list).
+  @@index([userId, triggeredAt(sort: Desc)])
+  // Worker pulls "still-active" events to step the state machine.
+  @@index([resolvedAt, escalationStage])
+  // Test-mode audit — ops grep "what fired in test mode this week".
+  @@index([testMode, triggeredAt(sort: Desc)])
+  @@map("sos_events")
 }
 
 // ─────────────────────────────────────────────────────────────
