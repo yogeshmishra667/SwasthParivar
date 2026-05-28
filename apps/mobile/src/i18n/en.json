@@ -352,6 +352,17 @@
     "callButton": "Call now",
     "close": "Close"
   },
+  "household": {
+    "cap": {
+      "reached": "You're at the {{count}}-profile limit for your plan.",
+      "upgradeTo": {
+        "premium": "Premium plan supports up to 4 profiles.",
+        "family": "Family plan supports up to 10 profiles."
+      },
+      "maxTier": "You're already on the largest plan.",
+      "upgradeCta": "Upgrade plan"
+    }
+  },
   "family": {
     "title": "Family",
     "subtitle": "Connect with a guardian or your patients.",

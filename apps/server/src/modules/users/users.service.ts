@@ -16,10 +16,14 @@ export const getProfile = async (userId: string) => {
       householdId: true,
       onboardingComplete: true,
       onboardingStep: true,
-      tier: true,
       timeAnomalyCount: true,
       createdAt: true,
-      household: { select: { primaryUserId: true } },
+      // PR 2: tier moved to Household. We still expose `tier` at the
+      // top level so mobile + admin clients don't need a shape change,
+      // but the value comes from the household row. `memberLimit` is
+      // new and powers the "Add profile" / "Upgrade for more profiles"
+      // CTA on the mobile settings screen.
+      household: { select: { primaryUserId: true, tier: true, memberLimit: true } },
     },
   });
 
@@ -33,7 +37,13 @@ export const getProfile = async (userId: string) => {
   // guardian-only UI. CLAUDE.md: "Guardian role requires login → a
   // guardian is ALWAYS a primary account."
   const { household, ...rest } = user;
-  return { ...rest, primaryUserId: household?.primaryUserId ?? null, householdProfiles };
+  return {
+    ...rest,
+    primaryUserId: household?.primaryUserId ?? null,
+    tier: household.tier,
+    memberLimit: household.memberLimit,
+    householdProfiles,
+  };
 };
 
 export const updateProfile = async (userId: string, input: UpdateProfileInput) => {

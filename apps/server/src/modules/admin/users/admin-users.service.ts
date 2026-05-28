@@ -7,6 +7,7 @@
 // role-gated here and audit-logged by the controller.
 
 import type { Prisma, User } from "@prisma/client";
+import { setHouseholdTier } from "../../household/household.tier.service.js";
 import {
   DomainError,
   type AdminPatientDetail,
@@ -23,12 +24,18 @@ import { resolveFeatures } from "../../config/config.service.js";
 import { adminResources, getAdminResource } from "../registry/admin-resource.registry.js";
 import { roleAtLeast } from "../registry/admin-resource.types.js";
 
-const toListItem = (u: User): AdminPatientListItem => ({
+type UserWithHouseholdTier = User & { household: { tier: User["tier"] } };
+
+const toListItem = (u: UserWithHouseholdTier): AdminPatientListItem => ({
   id: u.id,
   name: u.name,
   phone: u.phone,
   age: u.age,
-  tier: u.tier,
+  // PR 2: surface the household's effective tier — that's the value
+  // that actually gates access (chat rate limit, member cap, etc.).
+  // `User.tier` is kept on the row for the migration window but is
+  // no longer the source of truth.
+  tier: u.household.tier,
   conditions: u.conditions,
   onboardingComplete: u.onboardingComplete,
   householdId: u.householdId,
@@ -55,7 +62,13 @@ export const listUsers = async (params: {
       : {};
 
   const [rows, total] = await Promise.all([
-    prisma.user.findMany({ where, orderBy: { createdAt: "desc" }, take: limit, skip: offset }),
+    prisma.user.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      skip: offset,
+      include: { household: { select: { tier: true } } },
+    }),
     prisma.user.count({ where }),
   ]);
 
@@ -69,7 +82,10 @@ export const listUsers = async (params: {
 };
 
 export const getUserDetail = async (userId: string): Promise<AdminPatientDetail> => {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { household: { select: { tier: true } } },
+  });
   if (!user) throw new DomainError("ADMIN_NOT_FOUND", "patient user not found");
 
   const [coProfiles, streak, notificationState] = await Promise.all([
@@ -77,6 +93,7 @@ export const getUserDetail = async (userId: string): Promise<AdminPatientDetail>
       where: { householdId: user.householdId, id: { not: user.id } },
       orderBy: { createdAt: "asc" },
       take: 20,
+      include: { household: { select: { tier: true } } },
     }),
     prisma.userStreak.findUnique({ where: { userId } }),
     prisma.notificationState.findUnique({ where: { userId } }),
@@ -256,21 +273,45 @@ export const reactivateUser = async (userId: string): Promise<AdminUserActivatio
   };
 };
 
+/**
+ * Admin "change patient tier" mutation. PR 2 moved tier from User to
+ * Household: the URL (`/admin/users/:id/tier`) still references a user
+ * id for admin-UI stability, but the mutation now targets the user's
+ * household. All sub-profiles in that household pick up the new tier
+ * + member cap together.
+ *
+ * Downgrade behaviour: if the household is now over its new cap, the
+ * shared `setHouseholdTier` service logs a warning and surfaces
+ * `overCap` in the result — but no profiles are ever deleted (CLAUDE.md
+ * "Tier Downgrade Data-Retention Rule"). The admin UI uses `overCap` to
+ * render a "this household has more members than the new cap allows"
+ * banner.
+ */
 export const changeUserTier = async (params: {
   userId: string;
   tier: AdminTier;
+  adminUserId: string;
 }): Promise<AdminTierChangeResult> => {
-  const user = await prisma.user.findUnique({ where: { id: params.userId } });
+  const user = await prisma.user.findUnique({
+    where: { id: params.userId },
+    select: { id: true, householdId: true },
+  });
   if (!user) throw new DomainError("ADMIN_NOT_FOUND", "patient user not found");
 
-  const previousTier: AdminTier = user.tier;
-  if (previousTier === params.tier) {
-    return { id: user.id, previousTier, tier: params.tier };
-  }
-
-  const updated = await prisma.user.update({
-    where: { id: params.userId },
-    data: { tier: params.tier },
+  const result = await setHouseholdTier({
+    householdId: user.householdId,
+    tier: params.tier,
+    actor: { kind: "admin", adminUserId: params.adminUserId },
   });
-  return { id: updated.id, previousTier, tier: updated.tier };
+
+  return {
+    id: user.id,
+    householdId: result.householdId,
+    previousTier: result.previousTier,
+    previousMemberLimit: result.previousMemberLimit,
+    tier: result.tier,
+    memberLimit: result.memberLimit,
+    memberCount: result.memberCount,
+    overCap: result.overCap,
+  };
 };

@@ -36,11 +36,13 @@ export default function ProfileScreen(): JSX.Element {
       // Seed the profile store so the next screen (first-reading) can
       // show the user's name in the confirmation card. The onboarded
       // user is — by construction — the household primary; only the
-      // primary has a JWT and onboarding runs against that JWT.
+      // primary has a JWT and onboarding runs against that JWT. Tier
+      // is null here: onboarding doesn't fetch /users/me, so we leave
+      // the cap CTA dormant until the dashboard refresh runs.
       const hId = res?.data?.householdId ?? userId ?? "onboarding";
-      setHousehold(
-        hId,
-        [
+      setHousehold({
+        householdId: hId,
+        profiles: [
           {
             id: userId ?? "self",
             name: name.trim(),
@@ -48,16 +50,18 @@ export default function ProfileScreen(): JSX.Element {
             conditions: [],
           },
         ],
-        userId ?? null,
-      );
+        primaryUserId: userId ?? null,
+        tier: null,
+        memberLimit: null,
+      });
     } catch (e) {
       logError("onboarding/profile", e);
       // Still seed the store locally so the name is visible even if
       // the API call failed (offline-first).
       const hId = userId ?? "onboarding";
-      setHousehold(
-        hId,
-        [
+      setHousehold({
+        householdId: hId,
+        profiles: [
           {
             id: userId ?? "self",
             name: name.trim(),
@@ -65,8 +69,10 @@ export default function ProfileScreen(): JSX.Element {
             conditions: [],
           },
         ],
-        userId ?? null,
-      );
+        primaryUserId: userId ?? null,
+        tier: null,
+        memberLimit: null,
+      });
     }
     setSaving(false);
     router.push("/(onboarding)/first-reading");

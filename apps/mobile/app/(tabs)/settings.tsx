@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import { AddProfileModal } from "@/components/profile/AddProfileModal";
 import { useAuthStore } from "@/stores/auth.store";
-import { useProfileStore, type Profile } from "@/stores/profile.store";
+import { isAtMemberCap, nextTier, useProfileStore, type Profile } from "@/stores/profile.store";
 import { usePreferencesStore } from "@/stores/preferences.store";
 import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
@@ -24,9 +24,14 @@ export default function SettingsScreen(): JSX.Element {
   const profiles = useProfileStore((s) => s.profiles);
   const householdId = useProfileStore((s) => s.householdId);
   const primaryUserId = useProfileStore((s) => s.primaryUserId);
+  const tier = useProfileStore((s) => s.tier);
+  const memberLimit = useProfileStore((s) => s.memberLimit);
+  const atCap = useProfileStore(isAtMemberCap);
   const setHousehold = useProfileStore((s) => s.setHousehold);
   const switchProfile = useProfileStore((s) => s.switchProfile);
   const [showAddProfile, setShowAddProfile] = useState(false);
+
+  const upgradeTo = nextTier(tier);
 
   const onProfileAdded = (created: {
     id: string;
@@ -43,7 +48,13 @@ export default function SettingsScreen(): JSX.Element {
       avatarColor: AVATAR_COLORS[profiles.length % AVATAR_COLORS.length] ?? "#6B7280",
       conditions: created.conditions,
     };
-    setHousehold(householdId, [...profiles, next], primaryUserId);
+    setHousehold({
+      householdId,
+      profiles: [...profiles, next],
+      primaryUserId,
+      tier,
+      memberLimit,
+    });
     switchProfile(created.id);
     setShowAddProfile(false);
   };
@@ -82,11 +93,47 @@ export default function SettingsScreen(): JSX.Element {
             defaultValue: `${profiles.length} profile${profiles.length === 1 ? "" : "s"}`,
           })}
         </Text>
-        <Button
-          label={`+ ${t("settings.addProfile", { defaultValue: "Add another profile" })}`}
-          variant="secondary"
-          onPress={() => setShowAddProfile(true)}
-        />
+        {atCap ? (
+          <View className="gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
+            <Text className="text-body font-semibold text-amber-900">
+              {t("household.cap.reached", {
+                count: memberLimit ?? 0,
+                defaultValue: `Aap ${memberLimit ?? 0} profile ke maximum tak pahunch gaye hain.`,
+              })}
+            </Text>
+            {upgradeTo !== null ? (
+              <>
+                <Text className="text-body text-amber-800">
+                  {t(`household.cap.upgradeTo.${upgradeTo}`, {
+                    defaultValue:
+                      upgradeTo === "premium"
+                        ? "Premium plan mein 4 profile add kar sakte hain."
+                        : "Family plan mein 10 profile add kar sakte hain.",
+                  })}
+                </Text>
+                <Button
+                  label={t("household.cap.upgradeCta", {
+                    defaultValue: "Upgrade plan",
+                  })}
+                  variant="secondary"
+                  onPress={() => router.push("/(tabs)/settings")}
+                />
+              </>
+            ) : (
+              <Text className="text-body text-amber-800">
+                {t("household.cap.maxTier", {
+                  defaultValue: "Aap pehle hi sabse bade plan par hain.",
+                })}
+              </Text>
+            )}
+          </View>
+        ) : (
+          <Button
+            label={`+ ${t("settings.addProfile", { defaultValue: "Add another profile" })}`}
+            variant="secondary"
+            onPress={() => setShowAddProfile(true)}
+          />
+        )}
       </View>
 
       <View className="mt-6">

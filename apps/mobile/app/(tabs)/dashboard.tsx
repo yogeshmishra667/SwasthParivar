@@ -130,6 +130,8 @@ export default function DashboardScreen(): JSX.Element {
           data: {
             householdId: string;
             primaryUserId: string | null;
+            tier: "free" | "premium" | "family";
+            memberLimit: number;
             householdProfiles: { id: string; name: string; age: number; conditions: string[] }[];
             timeAnomalyCount?: number;
             createdAt?: string;
@@ -138,16 +140,18 @@ export default function DashboardScreen(): JSX.Element {
       ]);
       const fresh = dashRes.data;
       setData(fresh);
-      setHousehold(
-        userRes.data.householdId,
-        userRes.data.householdProfiles.map((p, i) => ({
+      setHousehold({
+        householdId: userRes.data.householdId,
+        profiles: userRes.data.householdProfiles.map((p, i) => ({
           id: p.id,
           name: p.name || "User",
           avatarColor: AVATAR_COLORS[i % AVATAR_COLORS.length] ?? "#6B7280",
           conditions: p.conditions,
         })),
-        userRes.data.primaryUserId,
-      );
+        primaryUserId: userRes.data.primaryUserId,
+        tier: userRes.data.tier,
+        memberLimit: userRes.data.memberLimit,
+      });
       setTimeAnomaly((userRes.data.timeAnomalyCount ?? 0) >= 2);
 
       if (userRes.data.createdAt !== undefined) {

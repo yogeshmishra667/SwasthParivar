@@ -352,6 +352,17 @@
     "callButton": "Abhi call karein",
     "close": "Close"
   },
+  "household": {
+    "cap": {
+      "reached": "Aap {{count}} profile ke maximum tak pahunch gaye hain.",
+      "upgradeTo": {
+        "premium": "Premium plan mein 4 profile add kar sakte hain.",
+        "family": "Family plan mein 10 profile add kar sakte hain."
+      },
+      "maxTier": "Aap pehle hi sabse bade plan par hain.",
+      "upgradeCta": "Plan upgrade karein"
+    }
+  },
   "family": {
     "title": "Parivar",
     "subtitle": "Apne guardian ya patient ke saath connect karein.",

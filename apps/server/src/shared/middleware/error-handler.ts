@@ -31,6 +31,7 @@ const statusFor = (code: ErrorCode): number => {
     case "GUARDIAN_ALERT_NOT_FOUND":
     case "ADMIN_NOT_FOUND":
     case "SOS_NOT_FOUND":
+    case "HOUSEHOLD_NOT_FOUND":
       return 404;
     case "FAMILY_INVITE_INVALID":
       return 400;
@@ -39,6 +40,7 @@ const statusFor = (code: ErrorCode): number => {
     case "READING_STALE_VERSION":
     case "MEAL_STALE_VERSION":
     case "HOUSEHOLD_PROFILE_LIMIT":
+    case "HOUSEHOLD_MEMBER_LIMIT":
       return 409;
     case "CHAT_RATE_LIMITED":
     case "RATE_LIMITED":

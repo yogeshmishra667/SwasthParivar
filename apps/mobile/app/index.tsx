@@ -38,6 +38,8 @@ interface UserMeResponse {
     onboardingStep: number;
     householdId: string;
     primaryUserId: string | null;
+    tier: "free" | "premium" | "family";
+    memberLimit: number;
     householdProfiles: HouseholdProfile[];
   };
 }
@@ -65,19 +67,23 @@ export default function Index(): JSX.Element | null {
           onboardingStep,
           householdId,
           primaryUserId,
+          tier,
+          memberLimit,
           householdProfiles,
         } = res.data;
 
-        setHousehold(
+        setHousehold({
           householdId,
-          householdProfiles.map((p, i) => ({
+          profiles: householdProfiles.map((p, i) => ({
             id: p.id,
             name: p.name || "User",
             avatarColor: AVATAR_COLORS[i % AVATAR_COLORS.length] ?? "#6B7280",
             conditions: p.conditions,
           })),
           primaryUserId,
-        );
+          tier,
+          memberLimit,
+        });
 
         if (onboardingComplete) {
           setRoute("/(tabs)/dashboard");

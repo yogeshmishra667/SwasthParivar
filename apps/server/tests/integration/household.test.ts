@@ -65,10 +65,13 @@ beforeAll(async () => {
   primaryUserId = user.id;
   // Mirror real signup: household primary is the first User created.
   // Production sets this inside the signup transaction; tests bypass
-  // the auth flow and seed directly, so set it explicitly.
+  // the auth flow and seed directly, so set it explicitly. Tier is
+  // set to `family` (cap=10) so the legacy "creates a profile" test
+  // can add a second profile without tripping the new per-tier cap.
+  // Per-tier cap behaviour is covered by dedicated tests below.
   await prisma.household.update({
     where: { id: household.id },
-    data: { primaryUserId: user.id },
+    data: { primaryUserId: user.id, tier: "family", memberLimit: 10 },
   });
   primaryToken = jwt.sign({ sub: user.id, householdId: user.householdId }, process.env.JWT_SECRET, {
     expiresIn: "1h",
@@ -125,43 +128,78 @@ describe("POST /api/v1/household/profiles", () => {
     expect(newProfile.phone.startsWith("household:")).toBe(true);
   });
 
-  it("rejects when over the 8-profile cap with HOUSEHOLD_PROFILE_LIMIT", async () => {
-    // Create a fresh household so the previous test doesn't pollute the count.
-    const cap = await prisma.household.create({ data: {} });
+  // PR 2: per-tier member cap. The owner row already counts toward the
+  // cap, so a `free` household (cap 1) rejects the FIRST add, `premium`
+  // (cap 4) rejects the FOURTH add, and `family` (cap 10) rejects the
+  // TENTH add.
+  const seedHousehold = async (
+    tier: "free" | "premium" | "family",
+    memberLimit: number,
+  ): Promise<{ token: string; householdId: string }> => {
+    const household = await prisma.household.create({ data: {} });
     const owner = await prisma.user.create({
       data: {
         phone: `+9198${Math.floor(10_000_000 + Math.random() * 89_999_999)}`,
-        name: "Cap Owner",
+        name: `${tier} Owner`,
         age: 60,
-        householdId: cap.id,
+        householdId: household.id,
         onboardingComplete: true,
       },
     });
     await prisma.household.update({
-      where: { id: cap.id },
-      data: { primaryUserId: owner.id },
+      where: { id: household.id },
+      data: { primaryUserId: owner.id, tier, memberLimit },
     });
     const token = jwt.sign(
       { sub: owner.id, householdId: owner.householdId },
       process.env.JWT_SECRET!,
       { expiresIn: "1h" },
     );
+    return { token, householdId: household.id };
+  };
 
-    // Pre-populate up to the cap (cap is 8; owner already counts as 1).
-    for (let i = 0; i < 7; i++) {
+  it("free tier rejects the 1st add with HOUSEHOLD_MEMBER_LIMIT (cap=1, owner already counts)", async () => {
+    const { token } = await seedHousehold("free", 1);
+    const res = await request(app)
+      .post("/api/v1/household/profiles")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Overflow", age: 30, conditions: ["diabetes"] });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("HOUSEHOLD_MEMBER_LIMIT");
+  });
+
+  it("premium tier accepts 3 adds and rejects the 4th (cap=4)", async () => {
+    const { token } = await seedHousehold("premium", 4);
+    for (let i = 0; i < 3; i++) {
       const res = await request(app)
         .post("/api/v1/household/profiles")
         .set("Authorization", `Bearer ${token}`)
         .send({ name: `Member ${i}`, age: 30, conditions: ["diabetes"] });
       expect(res.status).toBe(201);
     }
-
-    const ninth = await request(app)
+    const overflow = await request(app)
       .post("/api/v1/household/profiles")
       .set("Authorization", `Bearer ${token}`)
       .send({ name: "Overflow", age: 30, conditions: ["diabetes"] });
-    expect(ninth.status).toBe(409);
-    expect(ninth.body.error.code).toBe("HOUSEHOLD_PROFILE_LIMIT");
+    expect(overflow.status).toBe(409);
+    expect(overflow.body.error.code).toBe("HOUSEHOLD_MEMBER_LIMIT");
+  });
+
+  it("family tier accepts 9 adds and rejects the 10th (cap=10)", async () => {
+    const { token } = await seedHousehold("family", 10);
+    for (let i = 0; i < 9; i++) {
+      const res = await request(app)
+        .post("/api/v1/household/profiles")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ name: `Member ${i}`, age: 30, conditions: ["diabetes"] });
+      expect(res.status).toBe(201);
+    }
+    const overflow = await request(app)
+      .post("/api/v1/household/profiles")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Overflow", age: 30, conditions: ["diabetes"] });
+    expect(overflow.status).toBe(409);
+    expect(overflow.body.error.code).toBe("HOUSEHOLD_MEMBER_LIMIT");
   });
 
   it("rejects unauthenticated requests with 401", async () => {
@@ -213,5 +251,90 @@ describe("POST /api/v1/household/profiles", () => {
   // on the setup variables when this test alone is filtered.
   it("primary user id is set in setup", () => {
     expect(typeof primaryUserId).toBe("string");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// PR 2 — setHouseholdTier service: actor-discriminator + over-cap
+// ─────────────────────────────────────────────────────────────
+
+describe("setHouseholdTier service", () => {
+  it("idempotent re-apply returns previousTier === tier with no DB write", async () => {
+    const { setHouseholdTier } =
+      await import("../../src/modules/household/household.tier.service.js");
+    const household = await prisma.household.create({
+      data: { tier: "premium", memberLimit: 4 },
+    });
+    const result = await setHouseholdTier({
+      householdId: household.id,
+      tier: "premium",
+      actor: { kind: "admin", adminUserId: "00000000-0000-0000-0000-000000000000" },
+    });
+    expect(result.previousTier).toBe("premium");
+    expect(result.tier).toBe("premium");
+    expect(result.memberLimit).toBe(4);
+    expect(result.overCap).toBe(false);
+  });
+
+  it("downgrade leaves over-cap household intact (no profiles deleted)", async () => {
+    const { setHouseholdTier } =
+      await import("../../src/modules/household/household.tier.service.js");
+    const household = await prisma.household.create({
+      data: { tier: "family", memberLimit: 10 },
+    });
+    // Seed 5 members to put the household above premium's cap of 4.
+    for (let i = 0; i < 5; i++) {
+      await prisma.user.create({
+        data: {
+          phone: `household:${household.id}:cap-${i}`,
+          name: `Member ${i}`,
+          age: 30,
+          householdId: household.id,
+          onboardingComplete: true,
+        },
+      });
+    }
+
+    const result = await setHouseholdTier({
+      householdId: household.id,
+      tier: "premium",
+      actor: { kind: "admin", adminUserId: "00000000-0000-0000-0000-000000000000" },
+    });
+    expect(result.previousTier).toBe("family");
+    expect(result.tier).toBe("premium");
+    expect(result.memberLimit).toBe(4);
+    expect(result.memberCount).toBe(5);
+    expect(result.overCap).toBe(true);
+
+    // CLAUDE.md "Tier Downgrade Data-Retention Rule" — every member row
+    // must survive.
+    const stillThere = await prisma.user.count({ where: { householdId: household.id } });
+    expect(stillThere).toBe(5);
+  });
+
+  it("webhook actor is accepted as a first-class caller", async () => {
+    const { setHouseholdTier } =
+      await import("../../src/modules/household/household.tier.service.js");
+    const household = await prisma.household.create({ data: { tier: "free", memberLimit: 1 } });
+    const result = await setHouseholdTier({
+      householdId: household.id,
+      tier: "premium",
+      actor: { kind: "webhook", provider: "razorpay", eventId: "evt_test_001" },
+    });
+    expect(result.previousTier).toBe("free");
+    expect(result.tier).toBe("premium");
+    expect(result.memberLimit).toBe(4);
+  });
+});
+
+describe("GET /api/v1/users/me — tier sourced from household", () => {
+  it("returns household.tier + memberLimit at top level", async () => {
+    const res = await request(app)
+      .get("/api/v1/users/me")
+      .set("Authorization", `Bearer ${primaryToken}`);
+    expect(res.status).toBe(200);
+    // Test setup pinned the household to `family` (see beforeAll).
+    expect(res.body.data.tier).toBe("family");
+    expect(res.body.data.memberLimit).toBe(10);
   });
 });
