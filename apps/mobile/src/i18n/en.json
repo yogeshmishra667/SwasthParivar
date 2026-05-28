@@ -350,7 +350,47 @@
     "title": "Emergency",
     "subtitle": "Call {{name}}",
     "callButton": "Call now",
-    "close": "Close"
+    "close": "Close",
+    "button": {
+      "label": "SOS — Emergency",
+      "hint": "Press and hold 3 seconds to start SOS",
+      "longPressHelp": "Hold for 1 more second…"
+    },
+    "confirm": {
+      "title": "Sending SOS",
+      "description": "Your guardian and emergency contacts will be alerted in {{seconds}} seconds.",
+      "cancelButton": "No, cancel",
+      "confirmButton": "Yes, send now",
+      "testMode": "Test mode — no real calls or SMS will be sent."
+    },
+    "active": {
+      "title": "SOS is active",
+      "subtitle": "Your guardian and emergency contacts have been alerted.",
+      "stageFullscreen": "Stage 1: alert on your device.",
+      "stageAutoDial": "Stage 2: calling your primary contact.",
+      "stageIvr": "Stage 3: automated call to all guardians.",
+      "stageAll": "Stage 4: broadcast to all emergency contacts.",
+      "callPrimaryButton": "Call {{name}} now",
+      "callGenericButton": "Call an emergency contact",
+      "cancelButton": "I'm OK — cancel SOS",
+      "cancelLocked": "Cancel available in {{seconds}} seconds",
+      "testModeBadge": "Test mode — no real call will be placed",
+      "openDialerInfo": "The dialer will open in {{seconds}} seconds.",
+      "openDialerNow": "Opening dialer…"
+    },
+    "after": {
+      "title": "Are you OK?",
+      "subtitle": "Your SOS was resolved. Tell us a little.",
+      "falseAlarmLabel": "I pressed SOS by mistake",
+      "genuineLabel": "I really needed help",
+      "noteLabel": "Note for your guardian (optional)",
+      "notePlaceholder": "What happened, what's OK now…",
+      "submitButton": "Done",
+      "skipButton": "Skip for now"
+    },
+    "error": {
+      "unavailable": "SOS is currently unavailable. Please dial the emergency number directly."
+    }
   },
   "family": {
     "title": "Family",
