@@ -15,10 +15,12 @@ import { useAccessibility } from "@/hooks/useAccessibility";
 import { useProfileInactivity } from "@/hooks/useProfileInactivity";
 import { useSyncDrain } from "@/hooks/useSyncDrain";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
+import { MaintenanceBanner } from "@/components/shared/MaintenanceBanner";
 import { FontScaleProvider } from "@/components/shared/FontScaleProvider";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { ProfileSelectorModal } from "@/components/profile/ProfileSelectorModal";
 import { isExpoGo } from "@/utils/runtime";
+import { setOnMaintenanceMode } from "@/services/api";
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -26,9 +28,15 @@ export default function RootLayout(): JSX.Element | null {
   const hydrate = useAuthStore((s) => s.hydrate);
   const accessToken = useAuthStore((s) => s.accessToken);
   const [ready, setReady] = useState(false);
+  const [maintenanceActive, setMaintenanceActive] = useState(false);
   useAccessibility();
   useProfileInactivity();
   useSyncDrain();
+
+  useEffect(() => {
+    setOnMaintenanceMode(setMaintenanceActive);
+    return () => setOnMaintenanceMode(null);
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -65,6 +73,7 @@ export default function RootLayout(): JSX.Element | null {
           <FontScaleProvider>
             <StatusBar style="dark" />
             <OfflineBanner />
+            <MaintenanceBanner active={maintenanceActive} />
             <ProfileSelectorModal />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="index" />

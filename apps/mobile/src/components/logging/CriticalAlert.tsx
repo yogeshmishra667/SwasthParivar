@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Modal, View, Text, Linking, BackHandler } from "react-native";
+import { useTranslation } from "react-i18next";
 import { CRITICAL_FULLSCREEN_LOCK_MS } from "@/utils/constants";
 import { sanitizePhoneForTelUri } from "@/utils/phone";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +28,7 @@ export const CriticalAlert = ({
   contactPhone,
   onDismiss,
 }: CriticalAlertProps): JSX.Element => {
+  const { t } = useTranslation();
   const [secondsLeft, setSecondsLeft] = useState(LOCK_SECONDS);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hapticRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -85,18 +87,24 @@ export const CriticalAlert = ({
       <View className="flex-1 items-center justify-center bg-critical px-6">
         <Icon name="warning" size={72} color="#FFFFFF" accessibilityLabel="Critical alert" />
         <Text className="mt-4 text-hero font-bold text-white text-center">
-          Sugar bahut {direction === "low" ? "kam" : "zyada"}
+          {direction === "low" ? t("critical.alertTitleLow") : t("critical.alertTitleHigh")}
         </Text>
         <Text className="mt-2 text-hero text-white">{value} mg/dL</Text>
         <Text className="mt-4 text-center text-important text-white">
-          {direction === "low"
-            ? "Abhi kuch meetha khayein — juice, glucose, mithai."
-            : "Paani peeyein. Dawai li hai check karein."}
+          {direction === "low" ? t("critical.alertBodyLow") : t("critical.alertBodyHigh")}
         </Text>
         <View className="mt-6 w-full gap-3">
-          <Button label={`${contactName} ko call karein`} variant="primary" onPress={handleCall} />
           <Button
-            label={dismissible ? "Close" : `Wait ${secondsLeft}s...`}
+            label={t("critical.callContact", { name: contactName })}
+            variant="primary"
+            onPress={handleCall}
+          />
+          <Button
+            label={
+              dismissible
+                ? t("critical.close")
+                : t("critical.waitDismiss", { seconds: secondsLeft })
+            }
             variant="ghost"
             disabled={!dismissible}
             onPress={onDismiss}

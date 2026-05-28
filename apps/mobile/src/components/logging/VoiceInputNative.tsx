@@ -6,6 +6,7 @@ import {
   type ExpoSpeechRecognitionErrorCode,
 } from "expo-speech-recognition";
 import { parseVoiceTranscript, type VoiceParseResult } from "@swasth/domain-logic";
+import { useTranslation } from "react-i18next";
 import { usePreferencesStore } from "@/stores/preferences.store";
 import { useProfileStore } from "@/stores/profile.store";
 import { Icon } from "@/components/ui/Icon";
@@ -23,6 +24,7 @@ const FAIL_THRESHOLD = 2;
 type StatusKey = "tap" | "listen" | "noPermission" | "error";
 
 const VoiceInputNative = ({ onParsed, onFail }: Props): JSX.Element => {
+  const { t } = useTranslation();
   const [recording, setRecording] = useState(false);
   const [statusKey, setStatusKey] = useState<StatusKey>("tap");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -173,14 +175,14 @@ const VoiceInputNative = ({ onParsed, onFail }: Props): JSX.Element => {
   const status = (() => {
     switch (statusKey) {
       case "listen":
-        return "Suna ja raha hai...";
+        return t("voice.statusListen");
       case "noPermission":
-        return "Microphone permission chahiye — settings me allow karein.";
+        return t("voice.statusNoPermission");
       case "error":
-        return errorMsg ?? "Voice mein dikkat hai — numpad use karein.";
+        return errorMsg ?? t("voice.statusError");
       case "tap":
       default:
-        return "Bolne ke liye tap karein";
+        return t("voice.statusTap");
     }
   })();
 
@@ -210,7 +212,7 @@ const VoiceInputNative = ({ onParsed, onFail }: Props): JSX.Element => {
       <Text className="text-important text-center px-4">{status}</Text>
       {(statusKey === "tap" || statusKey === "listen") && (
         <Text className="text-center px-4 text-gray-500" style={{ fontSize: 13 }}>
-          Boliye: &quot;sugar 120&quot; ya &quot;meri sugar ek sau bees hai&quot;
+          {t("voice.exampleHint")}
         </Text>
       )}
     </View>

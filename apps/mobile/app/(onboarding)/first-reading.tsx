@@ -77,9 +77,7 @@ export default function FirstReadingScreen(): JSX.Element {
             {t("onboarding.celebrate")}
           </Text>
           <Text className="mt-3 text-center text-body text-gray-500">
-            {t("onboarding.celebrateSubtitle", {
-              defaultValue: "Bahut acche! Aapne apni pehli reading log kar li. 🎉",
-            })}
+            {t("onboarding.celebrateSubtitle")}
           </Text>
           {savedOffline && (
             <View className="mt-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
@@ -116,9 +114,7 @@ export default function FirstReadingScreen(): JSX.Element {
               {t("onboarding.firstReading")}
             </Text>
             <Text className="mt-2 text-center text-body text-gray-500">
-              {t("onboarding.firstReadingSubtitle", {
-                defaultValue: "Apne glucometer se reading dekhein aur neeche type karein.",
-              })}
+              {t("onboarding.firstReadingSubtitle")}
             </Text>
           </View>
 

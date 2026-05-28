@@ -40,14 +40,21 @@ Only after Phase 1 retention proven
 Add: ChatMessage, correlation + cross-condition detectors
 Add: AI chat (Claude API) with cold start handling
 Add: SilentGuardianSignal, GuardianAlert (basic: med adherence + trend only)
-Add: SOS (only after 4+ weeks system stability)
+Add: SOS (only after 4+ weeks system stability) — **deferred to Phase 4 §D' (gate landed but unshipped)**
 
 ### PHASE 4+ (Weeks 13+) — "Does it scale?"
 
+Build phases below documented in `phase4.md`. Hard sequencing: SOS (carry-over) first, monetization last.
+
+Add: SOSEvent + escalation chain (carry-over from Phase 3)
 Add: CardiacLog, RespiratoryLog, Prescription, PrescriptionItem, MedicinePhoto
 Add: DoctorProfile, DoctorAppointment, ActivityDaily, SleepLog
-Add: prescription OCR, advanced Silent Guardian, cross-condition detector
-Add: regional languages, festival nudging, wearable integration
+Add: IndianFoodItem (seeded, 200+ rows, cited GI/GL)
+Add: prescription OCR (Claude Vision, human approval mandatory), advanced Silent Guardian
+Add: regional languages (Marathi first, then Tamil/Bengali/Telugu/Gujarati/Punjabi behind per-language flags)
+Add: festival nudging (festive tag pre-select + max-2/week, never overrides critical-bypass)
+Add: wearable integration (HealthKit / Google Fit passive; Omron BP + Accu-Chek BLE active; "evidence not truth" rule)
+Add: Subscription + PaymentEvent (Razorpay + Apple IAP)
 
 ## Voice Logging (Phase 1)
 
@@ -197,6 +204,71 @@ NEVER show infinite spinner (max 10s timeout). NEVER show raw error messages. Lo
 ## Medication (Phase 1 — Minimal)
 
 In onboarding: AFTER first reading celebration. Skip prominent. Name + time ONLY. No dosage/frequency/condition fields. Guardian can set up remotely → syncs to patient.
+
+## Phase 4 Invariants (enforce — ZERO tolerance)
+
+**Multi-condition Critical-Bypass Dispatch** — the `critical-alert` chain (push + SMS + fullscreen + call, all four in parallel) is reused, not re-implemented, for every category. Thresholds (HARDCODED):
+
+| Category    | Critical-low              | Critical-high                           |
+| ----------- | ------------------------- | --------------------------------------- |
+| glucose     | < 65                      | > 315                                   |
+| bp          | sys < 90 OR dia < 60      | sys > 180 OR dia > 110                  |
+| cardiac     | HR < 40                   | HR > 150 OR (chestPain && severity ≥ 7) |
+| respiratory | peakFlow < baseline × 0.5 | symptomSeverity === "severe"            |
+
+Cooldown is **per-category, not global** — glucose-low followed by BP-high 5min later both fire.
+
+**Wearable Trust Model** — device-sourced data is **evidence, not truth**:
+
+- Manual reading within ± 60s of a device reading **always wins** for the same timestamp.
+- Device readings are _displayed_ immediately but **excluded from detectors** for first 30 days (`wearable_trust:${userId}:until`). User/admin must explicitly promote via `wearable_trust:${userId}:promoted=1`.
+- Critical-bypass STILL fires on device readings — only trend/correlation suppress.
+- Source tag (`source: "device"`) is mandatory in every payload; missing source → 400.
+
+**Prescription OCR Approval Flow** — OCR is _suggestion-only_. No automatic creation of `MedicationSchedule`. The whole flow is designed around one assumption: **AI will misread some prescriptions, and elderly patients will tap "yes" through anything. Wrong medication kills. So the guardian — not the patient — approves.**
+
+- **Approval authority: guardian-primary.** If the patient has any accepted `FamilyLink` with relationship `child|spouse|caregiver`, the guardian is the canonical approver. `Prescription.requiresGuardianApproval` is resolved at upload, immutable afterwards. Patient device shows the prescription read-only until guardian approves. Server enforces `req.user.id === resolveApprover(...).approverUserId`; any other caller → 403 `APPROVAL_REQUIRES_GUARDIAN`.
+- **Solo patient (no guardian):** self-approval allowed but with explicit friction — 3-second activation delay on Approve, re-confirm modal, post-approval nudge to add a family member.
+- **Paired upload at first capture.** The upload screen asks for prescription photo(s) AND medicine bottle photo(s) in ONE step. OCR runs two Vision passes (Pass A = prescription text, Pass B = bottle text) and reconciles. **GREEN is impossible without a matching bottle photo** — single-source-of-truth is capped at YELLOW.
+- **Classification (revised):** RED (< 60% conf with paired bottle hint, OR photo cross-check mismatch); YELLOW (60–85%, or ≥ 85% but no bottle photo); GREEN (≥ 85% AND bottle matches); **`need_clarification` (NEW)** (< 60% AND no usable bottle photo — AI explicitly couldn't read it).
+- **`need_clarification` items are PARKED, not silently dropped.** The approver gets a CTA: "Take a medicine photo" or "Type the name." Either fires `POST /prescriptions/:id/items/:itemId/clarify` → fresh Vision pass → item moves back to RED/YELLOW/GREEN. Up to 3 clarification attempts; further failure → terminal `needs_doctor` state (no auto-schedule, patient/guardian must add by hand via the standard medication flow).
+- **The patient can miss material; the guardian can extend.** Three append routes exist before approval is locked: (1) `POST /clarify` for correcting an existing item; (2) `POST /prescriptions/:id/photos` for adding missed prescription pages or bottle photos (runs `PRESCRIPTION_OCR_DELTA` job, may create new items OR promote existing items to GREEN if the new bottle matches); (3) `POST /prescriptions/:id/items` for the approver to manually add a medicine they know was prescribed but isn't on the photos (always YELLOW — single source, no AI corroboration, `source: "approver_added"` in `aiSuggestionHistory`). Once `/approve` lands, the prescription locks — further additions require a new prescription upload.
+- **All approvals leave an audit trail.** `PrescriptionItem.aiSuggestionHistory` is an append-only JSON array: every Vision call, every approver correction, every clarification pass. Same audit philosophy as `PaymentEvent.rawPayload` — if a wrong med ends up in a cabinet 3 months later, ops can replay exactly which photo and which AI pass produced it.
+- **GREEN still requires explicit POST `/approve`** with verified fields. `prescription_auto_approve_green=false` is the ship-default and stays false.
+- **Photo cross-check mismatch overrides any color to RED** regardless of OCR confidence.
+- Items with dosage > 99% percentile or frequency > 6×/day → flagged `needs_doctor` regardless of color.
+
+**Tier Downgrade Data-Retention Rule** — downgrading premium → free **NEVER deletes patient health data**:
+
+- `GlucoseReading`, `BPReading`, `CardiacLog`, `RespiratoryLog`, `MedicationLog`, `Prescription`, `MedicinePhoto`, `ActivityDaily`, `SleepLog` all retained per DPDP.
+- UI hides premium history (e.g., 90d truncated to 30d view); on re-upgrade, full history reappears.
+- Premium endpoints + BullMQ jobs check `requireTier("premium")`.
+- Rate limits revert to free.
+- Family link visibility unchanged — guardians retain read access (medical safety).
+- Refund webhook reverts tier without data loss.
+- Integration test MUST assert row counts unchanged across downgrade.
+
+**Payment Webhook Safety**:
+
+- Razorpay: `X-Razorpay-Signature` HMAC-SHA256 verified against `RAZORPAY_WEBHOOK_SECRET`. Failure → 401, no state change.
+- Apple IAP: V2 notification JWS verified against Apple's rotating public keys (24h cache). Receipt validation server-side ONLY — never trust client.
+- Idempotency: same event ID twice → second is no-op (Redis dedup key, 24h TTL).
+- Race: parallel webhooks for same subscription → Redis mutex `lock:subscription:${userId}` (5s lease).
+- All webhook payloads stored verbatim in `PaymentEvent` with `signatureValid` flag — audit trail.
+
+**SOS Test-Mode Default** — `sos_test_mode=true` ships by default. Real outgoing calls/SMS/IVR require explicit ops flag flip after 7 internal-user days with zero false alarms + at least one successful drill logged in `docs/runbooks/sos-drill.md`. IVR primary: Exotel (India E.164 `+91*`); fallback: Twilio (international guardians).
+
+**Spend-Cap Parity Across AI Surfaces** — separate Redis daily caps per surface, each auto-flips its enabling flag and pages Sentry:
+
+- `CLAUDE_DAILY_SPEND_CAP_USD` → `ai_chat_tier3_enabled` (existing).
+- `CLAUDE_VISION_DAILY_SPEND_CAP_USD` → `prescription_ocr_enabled` (new).
+- `CLAUDE_REPORT_DAILY_SPEND_CAP_USD` → `weekly_report_enabled` (new).
+
+No combined cap — separation lets ops kill the expensive surface without breaking the cheap one.
+
+**Regional Language Launch Bar** — a new language ships ONLY when all four exist: (1) full `i18n/<lang>.json`, (2) voice-parser colloquial dictionary + past-tense indicators + uncertainty keywords + time keywords, (3) ≥ 30 voice fixtures with 100% test coverage, (4) two native-speaker sign-offs recorded in `docs/i18n-signoff.md`.
+
+**Festival Nudging Guardrails** — festive copy NEVER suppresses critical-bypass. Festive tag MAX 2 per week per user (CLAUDE.md existing rule preserved). Festive nudges (24h before, day-of, day-after) count toward the same daily push budget as other notifications and obey the same fatigue/cooldown rules.
 
 ## Metrics
 

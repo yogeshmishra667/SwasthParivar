@@ -4,15 +4,20 @@ import { useRouter } from "expo-router";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { usePreferencesStore, type Language } from "@/stores/preferences.store";
-import { i18n } from "@/i18n/config";
+import { api } from "@/services/api";
+import { logError } from "@/services/analytics";
 
 export default function LanguageScreen(): JSX.Element {
   const router = useRouter();
   const setLanguage = usePreferencesStore((s) => s.setLanguage);
 
   const choose = (lang: Language): void => {
-    setLanguage(lang);
-    void i18n.changeLanguage(lang);
+    setLanguage(lang); // also calls i18n.changeLanguage internally
+    // Best-effort sync to server — user may not have an account yet
+    // (guest / re-onboarding), so failures are silently swallowed.
+    void api.patch("/users/me", { preferredLanguage: lang }).catch((err) => {
+      logError("onboarding.language", err);
+    });
     router.push("/(onboarding)/condition");
   };
 

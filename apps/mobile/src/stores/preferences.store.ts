@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { i18n } from "@/i18n/config";
 
 export type Language = "hi" | "en";
 export type Theme = "light" | "dark" | "high-contrast";
@@ -25,7 +26,10 @@ export const usePreferencesStore = create<PreferencesState>()(
       largeText: false,
       reduceMotion: false,
       hydrated: false,
-      setLanguage: (language) => set({ language }),
+      setLanguage: (language) => {
+        set({ language });
+        void i18n.changeLanguage(language);
+      },
       setTheme: (theme) => set({ theme }),
       setLargeText: (largeText) => set({ largeText }),
       setReduceMotion: (reduceMotion) => set({ reduceMotion }),
@@ -40,7 +44,12 @@ export const usePreferencesStore = create<PreferencesState>()(
         reduceMotion: state.reduceMotion,
       }),
       onRehydrateStorage: () => (state) => {
-        if (state) state.hydrated = true;
+        if (state) {
+          state.hydrated = true;
+          // Apply the persisted language to i18n so a cold-start after
+          // the user chose English doesn't fall back to device locale.
+          void i18n.changeLanguage(state.language);
+        }
       },
     },
   ),

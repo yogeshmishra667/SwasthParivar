@@ -49,7 +49,7 @@ export default function VerifyScreen(): JSX.Element {
 
   const verify = async (otpToSend: string = otp): Promise<void> => {
     if (otpToSend.length !== 6) {
-      Alert.alert("6 digit OTP dalein");
+      Alert.alert(t("auth.otpLengthError"));
       return;
     }
     if (submittedRef.current || loading) return;
@@ -80,7 +80,7 @@ export default function VerifyScreen(): JSX.Element {
     } catch (err) {
       submittedRef.current = false;
       logError("verify.submit", err);
-      Alert.alert("OTP galat hai");
+      Alert.alert(t("auth.otpInvalid"));
     } finally {
       setLoading(false);
     }

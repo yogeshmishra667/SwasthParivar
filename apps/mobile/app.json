@@ -68,7 +68,7 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiBaseUrl": "http://10.254.69.196:4000/api/v1",
+      "apiBaseUrl": "http://10.157.159.196:4000/api/v1",
       "router": {},
       "eas": {
         "projectId": "7c1ee25d-2bf0-4f69-a9a0-a93301707631"

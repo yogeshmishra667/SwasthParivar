@@ -90,9 +90,7 @@ export const AddProfileModal = ({ visible, onClose, onSuccess }: Props): JSX.Ele
       onSuccess(res.data);
     } catch (err) {
       logError("AddProfileModal.submit", err);
-      setError(
-        t("settings.addProfileFailed", { defaultValue: "Save nahi hua. Dobara try karein." }),
-      );
+      setError(t("settings.addProfileFailed", { defaultValue: t("auth.errorRetry") }));
       setSaving(false);
     }
   };
