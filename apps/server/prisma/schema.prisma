@@ -238,9 +238,15 @@ enum SOSEscalationStage {
 // ─────────────────────────────────────────────────────────────
 
 model Household {
-  id        String   @id @default(uuid()) @db.Uuid
-  createdAt DateTime @default(now()) @map("created_at")
-  users     User[]
+  id            String   @id @default(uuid()) @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+  // The household primary is the only User in the household that has a
+  // real phone + JWT. Sub-profiles added via POST /household/profiles
+  // are passive data owned by this primary. Nullable for the duration
+  // of the backfill migration; a follow-up migration tightens to NOT
+  // NULL once production rows are confirmed populated.
+  primaryUserId String?  @map("primary_user_id") @db.Uuid
+  users         User[]
 
   @@map("households")
 }
