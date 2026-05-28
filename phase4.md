@@ -121,6 +121,21 @@ Cardiac + respiratory `checkType` values are in the enum for forward compatibili
 
 **Admin items verified shipped:** PostHog query client (Session 3), Error Boundary at app root (Session 4), Feature-map viewer (Session 4), all of M0–M4 (RBAC, Users, Analytics, App Control, Ops, Audit, Admin Users, Billing scaffold).
 
+### Family-system design review carry-over (May 2026)
+
+| Item | Why surfaced | Phase 4 home | Blocker for | Status |
+|------|--------------|--------------|-------------|--------|
+| `Household.primaryUserId` + guardian-route guards (Scenarios 1 + 3) | design review found the schema had no mechanical "who is primary" marker → mobile Family tab leaked guardian view to sub-profiles; also closed same-household FamilyLink gap | Carry-over before Feature K (Week 22) | Tier-per-household refactor needs `primaryUserId` to backfill from | **Landed PR #96** — server middleware + mobile gating + same-household invite guardrail + integration tests |
+| `Household.tier` + `Household.memberLimit` + `setHouseholdTier(actor: admin\|webhook)` (Scenario 2) | tier was per-User → upgrading the household primary left sub-profiles on free, contradicting the shared-phone product premise | Carry-over before Feature K (Week 22) | **Razorpay/IAP webhook** — needed a webhook-shaped mutation entry point before the controller can land | **Landed PR #97** — schema + backfill + per-tier cap (free=1, premium=4, family=10) + admin path repointed at household + analytics groups by household + mobile cap-aware CTA |
+
+**Family-system review — what shipped (PRs #96 + #97):**
+
+- Schema: `households.primary_user_id` (nullable, backfilled by `DISTINCT ON household_id ORDER BY created_at ASC` — first user in each household is primary by construction); `households.tier` (default `free`, backfilled from primary's `User.tier`); `households.member_limit` (default 1, derived from tier via `CASE` in the migration). Both columns have follow-up migrations queued for one prod cycle later (tighten `primary_user_id` to NOT NULL + FK; drop `User.tier`).
+- Server: new `requirePrimary` middleware mounted on the whole family router + `POST /household/profiles`; `setHouseholdTier` is the single canonical mutation, accepts `actor: admin|webhook` so the Phase 4 Razorpay/IAP controller wires straight to it without another schema move; new error codes `HOUSEHOLD_MEMBER_LIMIT(409)` + `HOUSEHOLD_NOT_FOUND(404)`; admin audit action renamed `user.tier_changed` → `household.tier_changed` (historical rows still readable).
+- Chat free-tier rate limit + `/users/me` + admin patient list + `tier_distribution` analytics all switched to read `household.tier`. `User.tier` retained for one cycle, no longer the source of truth.
+- Mobile: `profile.store` tracks `primaryUserId`, `tier`, `memberLimit`; Family tab hidden via `href: null` + screen-level `<Redirect />` when active profile is a sub-profile; Settings shows "Upgrade for more profiles" amber CTA when at cap. i18n strings under `household.cap.*` (hi + en).
+- Tests: per-tier cap rejection (free/premium/family), over-cap downgrade leaves rows intact (DPDP), idempotent re-apply, webhook actor accepted, `/users/me` returns household tier, admin tier-change targets household.
+
 ### Pending from audit-progress.md long-term bucket
 
 | Item                                                          | Why deferred                                                                | Phase 4 home                  |
@@ -239,6 +254,7 @@ Each feature lands in the same shape as Phase 3 Feature A/B/C — see `phase3.md
 
 ### Week 22 — Feature K (Razorpay + Apple IAP + tier transitions)
 
+- **Prereqs already shipped (PR #97):** `Household.tier` + `Household.memberLimit` + `setHouseholdTier({actor: webhook, provider: "razorpay"|"iap", eventId})`. The Razorpay + Apple IAP webhook controllers wire straight to that service — no additional schema move required. Per-tier member cap is already enforced at `POST /household/profiles`. `User.tier` is still on the row for one cycle but is no longer read; the K-week migration drops it.
 - **Gate to launch:** Razorpay webhook signature verification 100% branch covered; tier-downgrade integration test asserts zero `delete` calls against any patient health table; IAP receipt validation verified server-side (never trusted from client); refund webhook restores tier without data loss.
 
 ### Week 23 — Hardening, DR drill, beta ramp, Phase 4 close
