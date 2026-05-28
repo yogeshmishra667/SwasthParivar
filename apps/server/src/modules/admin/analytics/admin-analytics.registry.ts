@@ -83,10 +83,13 @@ const METRICS: readonly AdminMetric[] = [
   {
     key: "tier_distribution",
     label: "Tier distribution",
-    description: "Patient users by subscription tier (monetization view).",
+    description: "Households by subscription tier (monetization view).",
     source: "database",
     compute: async () => {
-      const grouped = await prisma.user.groupBy({
+      // PR 2: tier moved to Household. The unit of billing is the
+      // household, so the count is households, not users. Sub-profiles
+      // on a shared phone all roll up into one household row.
+      const grouped = await prisma.household.groupBy({
         by: ["tier"],
         _count: { _all: true },
         orderBy: { tier: "asc" },

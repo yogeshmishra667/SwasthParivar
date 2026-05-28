@@ -50,15 +50,31 @@ export const changeUserTier = async (req: Request, res: Response): Promise<void>
   const { tier } = req.body as { tier: "free" | "premium" | "family" };
   const admin = req.admin!;
 
-  const result = await service.changeUserTier({ userId: id, tier });
-  await recordAdminAction({
-    adminUserId: admin.id,
-    action: "user.tier_changed",
-    targetType: "user",
-    targetId: id,
-    metadata: { from: result.previousTier, to: result.tier },
-    ip: req.ip,
-  });
+  const result = await service.changeUserTier({ userId: id, tier, adminUserId: admin.id });
+  // PR 2: tier moved from User to Household. The audit action key
+  // moves with it (`household.tier_changed`). Historical
+  // `user.tier_changed` rows remain readable in the audit timeline —
+  // the reader treats both as the same logical event for one cycle.
+  // Idempotent re-apply (previousTier === tier) skips the audit write
+  // so the table only records actual changes.
+  if (result.previousTier !== result.tier) {
+    await recordAdminAction({
+      adminUserId: admin.id,
+      action: "household.tier_changed",
+      targetType: "household",
+      targetId: result.householdId,
+      metadata: {
+        userId: id,
+        from: result.previousTier,
+        to: result.tier,
+        previousMemberLimit: result.previousMemberLimit,
+        memberLimit: result.memberLimit,
+        memberCount: result.memberCount,
+        overCap: result.overCap,
+      },
+      ip: req.ip,
+    });
+  }
   ok(res, result);
 };
 

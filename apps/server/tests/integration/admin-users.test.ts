@@ -150,7 +150,11 @@ describe("Admin Users Service", () => {
     expect(res.body.data.panels).toBeInstanceOf(Array);
   });
 
-  it("updates user tier and logs audit correctly (ops only)", async () => {
+  it("updates household tier (via user URL) and logs audit correctly (ops only)", async () => {
+    // PR 2: the URL still references a user id for admin-UI stability,
+    // but the mutation targets the user's household. Default household
+    // tier is `free`; the User.tier column is kept for one migration
+    // cycle but is no longer the source of truth.
     const household = await prisma.household.create({ data: {} });
     const user = await prisma.user.create({
       data: {
@@ -159,7 +163,6 @@ describe("Admin Users Service", () => {
         age: 25,
         householdId: household.id,
         onboardingComplete: true,
-        tier: "free",
       },
     });
 
@@ -181,16 +184,27 @@ describe("Admin Users Service", () => {
 
     expect(opsRes.status).toBe(200);
     expect(opsRes.body.data.tier).toBe("premium");
+    expect(opsRes.body.data.memberLimit).toBe(4);
+    expect(opsRes.body.data.householdId).toBe(household.id);
 
+    // The household row itself should reflect the change.
+    const after = await prisma.household.findUnique({ where: { id: household.id } });
+    expect(after?.tier).toBe("premium");
+    expect(after?.memberLimit).toBe(4);
+
+    // Audit action key moved to `household.tier_changed` (PR 2).
     const audit = await request(app)
-      .get("/admin/audit?action=user.tier_changed")
+      .get("/admin/audit?action=household.tier_changed")
       .set("Authorization", `Bearer ${operatorToken}`);
 
     expect(audit.status).toBe(200);
-    const log = audit.body.data.records.find((r: any) => r.targetId === user.id);
+    // Audit row targets the household, not the user — but the user id
+    // is preserved in metadata so the admin UI can link back.
+    const log = audit.body.data.records.find((r: any) => r.targetId === household.id);
     expect(log).toBeDefined();
     expect(log.adminEmail).toBe("operator@example.com");
     expect(log.metadata.to).toBe("premium");
+    expect(log.metadata.userId).toBe(user.id);
   });
 });
 

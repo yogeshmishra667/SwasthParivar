@@ -24,11 +24,11 @@ import type { AddHouseholdProfileInput } from "./household.validation.js";
  *   shared-device model.
  *
  * Cap:
- *   Up to MAX_PROFILES per household (defensive against runaway client
- *   loops; CLAUDE.md doesn't specify a cap so we pick a generous one).
+ *   `household.memberLimit` — derived from the household's tier
+ *   (free=1, premium=4, family=10). The cap is stored on the household
+ *   so admin/billing can query/audit it directly; the source of truth
+ *   for tier → cap is `shared/billing/tier-caps.ts`.
  */
-
-const MAX_PROFILES = 8;
 
 const synthesizedPhoneFor = (ownerId: string): string =>
   `household:${ownerId}:${randomBytes(8).toString("hex")}`;
@@ -48,16 +48,21 @@ export const addHouseholdProfile = async (
 ): Promise<ProfileRow> => {
   const caller = await prisma.user.findUniqueOrThrow({
     where: { id: callerUserId },
-    select: { householdId: true, timezone: true, preferredLanguage: true },
+    select: {
+      householdId: true,
+      timezone: true,
+      preferredLanguage: true,
+      household: { select: { tier: true, memberLimit: true } },
+    },
   });
 
   const existingCount = await prisma.user.count({
     where: { householdId: caller.householdId },
   });
-  if (existingCount >= MAX_PROFILES) {
+  if (existingCount >= caller.household.memberLimit) {
     throw new DomainError(
-      "HOUSEHOLD_PROFILE_LIMIT",
-      `household already has ${MAX_PROFILES} profiles`,
+      "HOUSEHOLD_MEMBER_LIMIT",
+      `household at ${caller.household.tier} cap (${caller.household.memberLimit} members) — upgrade to add more`,
     );
   }
 

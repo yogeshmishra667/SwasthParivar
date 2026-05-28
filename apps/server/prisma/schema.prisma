@@ -246,8 +246,17 @@ model Household {
   // of the backfill migration; a follow-up migration tightens to NOT
   // NULL once production rows are confirmed populated.
   primaryUserId String?  @map("primary_user_id") @db.Uuid
+  // Billing tier moved here from User: the shared phone is one
+  // household, the billing entity is one household. Sub-profiles
+  // inherit. `memberLimit` is stored (not derived in code) so admin
+  // analytics + ops queries can filter on it cheaply and so an audit
+  // trail exists for any hand-tuned cap bump. PR 2 follow-up:
+  // drop User.tier once the migration window is clear.
+  tier          Tier     @default(free)
+  memberLimit   Int      @default(1) @map("member_limit")
   users         User[]
 
+  @@index([tier])
   @@map("households")
 }
 

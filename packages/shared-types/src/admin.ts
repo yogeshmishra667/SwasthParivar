@@ -127,11 +127,22 @@ export interface AdminResourcePanelData {
   hasMore: boolean;
 }
 
-/** Result of a patient tier change. */
+/** Result of a patient tier change. PR 2 moves tier to the household,
+ *  so the change is scoped to the household (the user id is just the
+ *  one the admin clicked through). `householdId` + `memberLimit` are
+ *  added so the admin UI can show the cap that came with the new tier
+ *  without an extra fetch. `overCap` is true when the downgrade left
+ *  the household over its new member cap — the UI should surface a
+ *  warning, but no profiles are ever deleted. */
 export interface AdminTierChangeResult {
   id: string;
+  householdId: string;
   previousTier: AdminTier;
+  previousMemberLimit: number;
   tier: AdminTier;
+  memberLimit: number;
+  memberCount: number;
+  overCap: boolean;
 }
 
 /** Result of a patient (de)activation toggle. `previouslyActive` lets the

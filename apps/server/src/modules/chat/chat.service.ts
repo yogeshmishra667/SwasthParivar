@@ -114,15 +114,17 @@ export const sendMessage = async (input: SendMessageInput): Promise<SendMessageR
         age: true,
         conditions: true,
         preferredLanguage: true,
-        tier: true,
         createdAt: true,
+        // PR 2: tier moved to Household. Sub-profiles share the
+        // household's billing tier on a shared phone.
+        household: { select: { tier: true } },
       },
     }),
     incrementDailyRateCounter(input.userId),
   ]);
 
   // 3. Rate limit — free tier only.
-  if (user.tier === "free" && dailyCount > env.CHAT_DAILY_FREE_LIMIT) {
+  if (user.household.tier === "free" && dailyCount > env.CHAT_DAILY_FREE_LIMIT) {
     throw new DomainError(
       "CHAT_RATE_LIMITED",
       `Daily chat limit (${env.CHAT_DAILY_FREE_LIMIT}) reached. Try again tomorrow.`,

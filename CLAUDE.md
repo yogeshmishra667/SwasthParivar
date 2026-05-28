@@ -98,13 +98,13 @@ Thresholds HARDCODED. Not configurable. Medical safety.
 
 ## Shared Phone Profile Switcher (Phase 1)
 
-Home screen: profile avatars at top (like Netflix). Tap to switch. Each profile: separate data. Active profile shown on ALL screens: "👤 Ramesh ji". User table: household_id groups profiles. Device stores active_user_id.
+Home screen: profile avatars at top (like Netflix). Tap to switch. Each profile: separate data. Active profile shown on ALL screens: "👤 Ramesh ji". User table: household_id groups profiles. Device stores active_user_id. `Household.primaryUserId` names the only User in the household with a real phone + JWT — sub-profiles are passive data owned by that primary. `requirePrimary` middleware (`shared/middleware/require-primary.ts`) enforces this on every guardian-side family route and on `POST /household/profiles`.
 
 **Data Corruption Prevention:** Confirmation screen ALWAYS shows: "👤 Ramesh ji ke liye save kar rahe hain — sahi hai?" Wrong profile → tap avatar to switch BEFORE saving. App open after 30+ min inactive → show profile selector.
 
 **Notification Delivery (household-scoped — ENFORCE):** A shared device registers ONE Expo push token, always under the household primary (`POST /auth/push-token` keys the token to the JWT subject). Non-primary profiles own NO token row. Every patient-facing push job (med reminders, contextual reminders, critical-bypass patient device) MUST resolve recipients via `resolveHouseholdDelivery()` / `householdUserIds()` in `shared/notifications/household-delivery.ts` — NEVER `pushToken.findMany({ where: { userId } })`. On a multi-profile household the notification copy is prefixed with the profile name ("Maa ji: …") and the payload carries `data.targetUserId` so a tap switches the app to that profile. Single-profile households are byte-identical to a plain `userId` query — no behaviour change.
 
-**Family/Guardian (profile-aware):** Guardian role requires login → a guardian is ALWAYS a primary account. Patient role = ANY household profile. `POST /family/invite` carries optional `targetUserId` (the active profile); the controller resolves + household-authorises it via `resolveHouseholdMember`. `updatePrivacy`/revoke authz treats any member of the patient's household as the patient side (the primary operates the shared device on every profile's behalf). Guardian-side endpoints stay keyed on the JWT subject.
+**Family/Guardian (profile-aware):** Guardian role requires login → a guardian is ALWAYS a primary account. Patient role = ANY household profile. `POST /family/invite` carries optional `targetUserId` (the active profile); the controller resolves + household-authorises it via `resolveHouseholdMember`. `updatePrivacy`/revoke authz treats any member of the patient's household as the patient side (the primary operates the shared device on every profile's behalf). Guardian-side endpoints stay keyed on the JWT subject. `createInvite` rejects `guardian.householdId === patient.householdId` — same-household relationships flow through the household-scoped notification path (`household-delivery.ts`), not FamilyLink.
 
 ## Habit Loop (Trigger → Action → Reward)
 
@@ -238,15 +238,17 @@ Cooldown is **per-category, not global** — glucose-low followed by BP-high 5mi
 - **Photo cross-check mismatch overrides any color to RED** regardless of OCR confidence.
 - Items with dosage > 99% percentile or frequency > 6×/day → flagged `needs_doctor` regardless of color.
 
-**Tier Downgrade Data-Retention Rule** — downgrading premium → free **NEVER deletes patient health data**:
+**Tier Downgrade Data-Retention Rule** — downgrading premium → free **NEVER deletes patient health data**, and **never deletes household sub-profiles** even when downgrade leaves the household over its new member cap:
 
+- Tier lives on `Household` (PR #97). The canonical write path is `setHouseholdTier({householdId, tier, actor: admin|webhook})` — admin controller + Razorpay/IAP webhook both call it. Tier + `memberLimit` move atomically in one Prisma transaction.
 - `GlucoseReading`, `BPReading`, `CardiacLog`, `RespiratoryLog`, `MedicationLog`, `Prescription`, `MedicinePhoto`, `ActivityDaily`, `SleepLog` all retained per DPDP.
 - UI hides premium history (e.g., 90d truncated to 30d view); on re-upgrade, full history reappears.
-- Premium endpoints + BullMQ jobs check `requireTier("premium")`.
+- Premium endpoints + BullMQ jobs check `requireTier("premium")` reading from `req.user.household.tier` — NEVER `User.tier` (deprecated, dropping next cycle).
 - Rate limits revert to free.
 - Family link visibility unchanged — guardians retain read access (medical safety).
+- Over-cap downgrade (e.g. household has 6 members, new tier caps at 4): `setHouseholdTier` logs a warning + returns `overCap=true`; sub-profiles are never deleted. Adding a NEW profile while over cap is blocked by `HOUSEHOLD_MEMBER_LIMIT` (409).
 - Refund webhook reverts tier without data loss.
-- Integration test MUST assert row counts unchanged across downgrade.
+- Integration test MUST assert row counts unchanged across downgrade (`household.test.ts > setHouseholdTier > downgrade leaves over-cap household intact`).
 
 **Payment Webhook Safety**:
 
@@ -308,8 +310,9 @@ swasth-parivar/
 
 ### Users
 
-- **User:** id, name, age, gender, preferred_language, conditions[], timezone(pinned at onboarding), household_id, onboarding_complete, onboarding_step, tier(free|premium|family), time_anomaly_count(int default 0), created_at
-- **FamilyLink:** patient_id, guardian_id, relationship, alert_enabled, visible_conditions[], alert_sensitivity, status
+- **Household:** id, primary_user_id(uuid, the only User with phone+JWT), tier(free|premium|family), member_limit(int, derived from tier — free=1, premium=4, family=10), created_at. `tier` and `member_limit` move atomically via `setHouseholdTier` (`modules/household/household.tier.service.ts`); never write either column directly.
+- **User:** id, name, age, gender, preferred_language, conditions[], timezone(pinned at onboarding), household_id, onboarding_complete, onboarding_step, time_anomaly_count(int default 0), created_at. `User.tier` exists for one migration cycle but is NO LONGER the source of truth — `household.tier` gates access. Drop scheduled in a follow-up migration.
+- **FamilyLink:** patient_id, guardian_id, relationship, alert_enabled, visible_conditions[], alert_sensitivity, status. Invariant: `patient.householdId !== guardian.householdId` — same-household relationships use the household-scoped notification path, not FamilyLink.
 - **EmergencyContact:** user_id, name, phone, relationship, priority, is_guardian
 
 ### Streaks & Retention
@@ -497,7 +500,7 @@ Health: GET /health, /health/deep. Winston: requestId, method, path, status, dur
 
 ## Rate Limiting
 
-Free: 3 chats/day, 20 readings/day, 100 req/min. Premium: unlimited. Family: premium × patients.
+Free: 3 chats/day, 20 readings/day, 100 req/min. Premium: unlimited. Family: premium × patients. Tier is resolved per-household (`req.user.household.tier`), not per-User — all sub-profiles on a shared phone share the household's limits.
 
 ## Caching (Redis)
 
@@ -505,7 +508,7 @@ dashboard 15min. health-score 24hr. hba1c 1hr. food:search 7d. insights 30min. s
 
 ## Error Codes
 
-AUTH_OTP_EXPIRED(401), AUTH_OTP_INVALID(401), AUTH_TOKEN_EXPIRED(401), AUTH_UNAUTHORIZED(403), READING_INVALID_VALUE(400), READING_CONFIRMATION_NEEDED(400), MED_SCHEDULE_NOT_FOUND(404), RX_PENDING_APPROVAL(400), FAMILY_LINK_EXISTS(409), FAMILY_NO_ACCESS(403), CHAT_RATE_LIMITED(429), SOS_ALREADY_ACTIVE(409), REPORT_GENERATING(202), INTERNAL_ERROR(500)
+AUTH_OTP_EXPIRED(401), AUTH_OTP_INVALID(401), AUTH_TOKEN_EXPIRED(401), AUTH_UNAUTHORIZED(403), READING_INVALID_VALUE(400), READING_CONFIRMATION_NEEDED(400), MED_SCHEDULE_NOT_FOUND(404), RX_PENDING_APPROVAL(400), FAMILY_LINK_EXISTS(409), FAMILY_INVITE_INVALID(400), FAMILY_NO_ACCESS(403), HOUSEHOLD_NOT_FOUND(404), HOUSEHOLD_MEMBER_LIMIT(409), HOUSEHOLD_PROFILE_LIMIT(409, deprecated alias for HOUSEHOLD_MEMBER_LIMIT — drops next cycle), CHAT_RATE_LIMITED(429), SOS_ALREADY_ACTIVE(409), REPORT_GENERATING(202), INTERNAL_ERROR(500)
 
 ## File Upload
 

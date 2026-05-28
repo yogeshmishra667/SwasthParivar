@@ -7,6 +7,8 @@ export interface Profile {
   conditions: string[];
 }
 
+export type Tier = "free" | "premium" | "family";
+
 interface ProfileState {
   householdId: string | null;
   // The household primary — the only User in the household with a real
@@ -14,13 +16,25 @@ interface ProfileState {
   // is ALWAYS a primary account." Guardian UI (Family tab, invites,
   // patient dashboards) is hidden when `activeProfileId !== primaryUserId`.
   primaryUserId: string | null;
+  // Billing tier + max profiles allowed on this household. Sub-profiles
+  // share the household's tier (PR 2). `tier`/`memberLimit` null during
+  // pre-login / pre-hydrate; the Settings "Add profile" CTA degrades
+  // gracefully (no nudge shown) until `/users/me` resolves.
+  tier: Tier | null;
+  memberLimit: number | null;
   profiles: Profile[];
   activeProfileId: string | null;
   lastSwitchedAt: number | null;
   lastActiveAt: number | null;
   profileLockedForLogging: boolean;
   selectorRequired: boolean;
-  setHousehold: (id: string, profiles: Profile[], primaryUserId: string | null) => void;
+  setHousehold: (params: {
+    householdId: string;
+    profiles: Profile[];
+    primaryUserId: string | null;
+    tier: Tier | null;
+    memberLimit: number | null;
+  }) => void;
   switchProfile: (id: string) => void;
   lockForLogging: () => void;
   unlock: () => void;
@@ -33,6 +47,8 @@ interface ProfileState {
 const INITIAL = {
   householdId: null,
   primaryUserId: null,
+  tier: null,
+  memberLimit: null,
   profiles: [],
   activeProfileId: null,
   lastSwitchedAt: null,
@@ -43,10 +59,12 @@ const INITIAL = {
 
 export const useProfileStore = create<ProfileState>((set) => ({
   ...INITIAL,
-  setHousehold: (id, profiles, primaryUserId) =>
+  setHousehold: ({ householdId, profiles, primaryUserId, tier, memberLimit }) =>
     set((s) => ({
-      householdId: id,
+      householdId,
       primaryUserId,
+      tier,
+      memberLimit,
       profiles,
       activeProfileId: s.activeProfileId ?? profiles[0]?.id ?? null,
     })),
@@ -79,3 +97,18 @@ export const isRecentSwitch = (s: ProfileState, withinMs = 30_000): boolean =>
 // false, which keeps the tab hidden until the household is hydrated.
 export const isActiveProfilePrimary = (s: ProfileState): boolean =>
   s.primaryUserId !== null && s.activeProfileId === s.primaryUserId;
+
+// True when the household is at its member-cap. Used by the Settings
+// screen to swap the "Add profile" button for an "Upgrade for more
+// profiles" CTA. Conservative when not hydrated yet (returns false so
+// the button stays in its enabled default).
+export const isAtMemberCap = (s: ProfileState): boolean =>
+  s.memberLimit !== null && s.profiles.length >= s.memberLimit;
+
+// Suggested upgrade target for the cap CTA. Mirrors the server's
+// NEXT_TIER table — keep them in sync if the tier ladder ever changes.
+export const nextTier = (tier: Tier | null): Tier | null => {
+  if (tier === "free") return "premium";
+  if (tier === "premium") return "family";
+  return null;
+};
