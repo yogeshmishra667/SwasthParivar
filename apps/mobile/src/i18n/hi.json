@@ -350,7 +350,47 @@
     "title": "Emergency",
     "subtitle": "{{name}} ko call karein",
     "callButton": "Abhi call karein",
-    "close": "Close"
+    "close": "Close",
+    "button": {
+      "label": "SOS — Emergency",
+      "hint": "Dabaye rakhein 3 second SOS shuru karne ke liye",
+      "longPressHelp": "1 second aur dabaye rakhein…"
+    },
+    "confirm": {
+      "title": "SOS bhej rahe hain",
+      "description": "{{seconds}} second me guardian + emergency contacts ko alert jaayega.",
+      "cancelButton": "Nahi, cancel karein",
+      "confirmButton": "Haan, abhi bhejein",
+      "testMode": "Test mode — koi real call/SMS nahi jaayega."
+    },
+    "active": {
+      "title": "SOS active hai",
+      "subtitle": "Guardian + emergency contacts ko alert bheja gaya hai.",
+      "stageFullscreen": "Stage 1: Aapke device par alert.",
+      "stageAutoDial": "Stage 2: Pehle contact ko call jaa rahi hai.",
+      "stageIvr": "Stage 3: Sabhi guardians ko automated call jaa rahi hai.",
+      "stageAll": "Stage 4: Sabhi emergency contacts ko broadcast.",
+      "callPrimaryButton": "{{name}} ko abhi call karein",
+      "callGenericButton": "Emergency contact ko call karein",
+      "cancelButton": "Main theek hoon — cancel karein",
+      "cancelLocked": "Cancel {{seconds}} second me available hoga",
+      "testModeBadge": "Test mode — koi real call nahi jaayegi",
+      "openDialerInfo": "{{seconds}} second me dialer apne aap khulega.",
+      "openDialerNow": "Dialer khol rahe hain…"
+    },
+    "after": {
+      "title": "Aap theek hain?",
+      "subtitle": "SOS resolve ho gaya. Hume thoda batayein.",
+      "falseAlarmLabel": "Galti se SOS dabaya tha",
+      "genuineLabel": "Sach me madad chahiye thi",
+      "noteLabel": "Guardian ke liye note (optional)",
+      "notePlaceholder": "Kya hua, kya theek hai…",
+      "submitButton": "Done",
+      "skipButton": "Baad me batayenge"
+    },
+    "error": {
+      "unavailable": "SOS abhi available nahi hai. Seedhe emergency number par call karein."
+    }
   },
   "family": {
     "title": "Parivar",
