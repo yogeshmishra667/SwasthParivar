@@ -34,3 +34,11 @@ export const resourcePageQuerySchema = z.object({
 export const changeTierSchema = z.object({
   tier: z.enum(["free", "premium", "family"]),
 });
+
+// Phase 4 Week 13 admin carry-over — soft-disable a patient.
+// `reason` is mandatory so the audit log always carries the WHY.
+// Capped at 280 chars — operationally one-line justifications, not
+// essays; longer notes live in the ops ticket tracker.
+export const deactivateUserSchema = z.object({
+  reason: z.string().trim().min(3).max(280),
+});

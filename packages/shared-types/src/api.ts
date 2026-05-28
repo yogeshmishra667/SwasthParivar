@@ -25,6 +25,11 @@ export type ErrorCode =
   | "AUTH_OTP_INVALID"
   | "AUTH_TOKEN_EXPIRED"
   | "AUTH_UNAUTHORIZED"
+  // Patient account soft-disabled by admin (Phase 4 Week 13 admin
+  // carry-over). Surfaces only on the auth perimeter: send-otp,
+  // verify-otp / verify-firebase, and refresh. Existing access tokens
+  // remain valid until they expire (≤1h).
+  | "USER_DEACTIVATED"
   | "READING_INVALID_VALUE"
   | "READING_CONFIRMATION_NEEDED"
   | "READING_STALE_VERSION"

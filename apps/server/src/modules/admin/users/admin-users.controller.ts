@@ -61,3 +61,51 @@ export const changeUserTier = async (req: Request, res: Response): Promise<void>
   });
   ok(res, result);
 };
+
+// ── Soft-disable (Phase 4 Week 13 admin carry-over) ─────────────────
+//
+// Both endpoints write to AdminAuditLog ONLY on a real transition.
+// Reapplying the same state is a no-op and skips the audit row — the
+// audit table stays a clean list of "what actually changed when".
+
+export const deactivateUser = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const { reason } = req.body as { reason: string };
+  const admin = req.admin!;
+
+  const result = await service.deactivateUser({
+    userId: id,
+    reason,
+    adminUserId: admin.id,
+  });
+
+  if (result.previouslyActive) {
+    await recordAdminAction({
+      adminUserId: admin.id,
+      action: "user.deactivated",
+      targetType: "user",
+      targetId: id,
+      metadata: { reason },
+      ip: req.ip,
+    });
+  }
+  ok(res, result);
+};
+
+export const reactivateUser = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const admin = req.admin!;
+
+  const result = await service.reactivateUser(id);
+
+  if (!result.previouslyActive) {
+    await recordAdminAction({
+      adminUserId: admin.id,
+      action: "user.reactivated",
+      targetType: "user",
+      targetId: id,
+      ip: req.ip,
+    });
+  }
+  ok(res, result);
+};

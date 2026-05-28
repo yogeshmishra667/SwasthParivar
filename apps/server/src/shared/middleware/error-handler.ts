@@ -20,6 +20,7 @@ const statusFor = (code: ErrorCode): number => {
     case "ADMIN_FORBIDDEN":
     case "ADMIN_ACCOUNT_DISABLED":
     case "ADMIN_CSRF_INVALID":
+    case "USER_DEACTIVATED":
       return 403;
     case "MED_SCHEDULE_NOT_FOUND":
     case "READING_NOT_FOUND":

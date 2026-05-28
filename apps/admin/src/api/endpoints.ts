@@ -12,6 +12,7 @@ import type {
   AdminTier,
   AdminTierChangeResult,
   AdminTotpEnrollment,
+  AdminUserActivationResult,
   AdminUserDto,
 } from "@swasth/shared-types";
 import { request } from "./client";
@@ -125,6 +126,20 @@ export const adminApi = {
     request<AdminTierChangeResult>(`/admin/users/${enc(id)}/tier`, {
       method: "PATCH",
       json: { tier },
+    }),
+
+  // Phase 4 Week 13 admin carry-over — soft-disable a patient account.
+  // Idempotent: the server returns 200 with `previouslyActive=false`
+  // when called twice.
+  deactivateUser: (id: string, reason: string) =>
+    request<AdminUserActivationResult>(`/admin/users/${enc(id)}/deactivate`, {
+      method: "POST",
+      json: { reason },
+    }),
+
+  reactivateUser: (id: string) =>
+    request<AdminUserActivationResult>(`/admin/users/${enc(id)}/reactivate`, {
+      method: "POST",
     }),
 
   // ── Analytics ────────────────────────────────────────────────
