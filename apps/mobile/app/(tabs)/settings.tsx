@@ -23,6 +23,7 @@ export default function SettingsScreen(): JSX.Element {
   const setLanguage = usePreferencesStore((s) => s.setLanguage);
   const profiles = useProfileStore((s) => s.profiles);
   const householdId = useProfileStore((s) => s.householdId);
+  const primaryUserId = useProfileStore((s) => s.primaryUserId);
   const setHousehold = useProfileStore((s) => s.setHousehold);
   const switchProfile = useProfileStore((s) => s.switchProfile);
   const [showAddProfile, setShowAddProfile] = useState(false);
@@ -42,7 +43,7 @@ export default function SettingsScreen(): JSX.Element {
       avatarColor: AVATAR_COLORS[profiles.length % AVATAR_COLORS.length] ?? "#6B7280",
       conditions: created.conditions,
     };
-    setHousehold(householdId, [...profiles, next]);
+    setHousehold(householdId, [...profiles, next], primaryUserId);
     switchProfile(created.id);
     setShowAddProfile(false);
   };

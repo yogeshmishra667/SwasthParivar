@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { View, Text, ScrollView, RefreshControl, Pressable, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
@@ -29,11 +29,20 @@ import {
   type PatientLinkSummary,
   type PendingInviteSummary,
 } from "@/services/family";
+import { isActiveProfilePrimary, useProfileStore } from "@/stores/profile.store";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 
 export default function FamilyScreen(): JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
+  // Sub-profiles never see the Family/guardian surface (CLAUDE.md:
+  // "guardian = ALWAYS a primary account"). The tab is already hidden
+  // from the bar by the layout's `href: null`, but if anything pushes
+  // here programmatically — deep link, stale route, mid-session
+  // profile switch — bounce out. The check must come *after* all
+  // other hooks so React's rules-of-hooks invariant holds across
+  // primary↔sub-profile re-renders.
+  const isPrimary = useProfileStore(isActiveProfilePrimary);
   const [patients, setPatients] = useState<readonly PatientLinkSummary[]>([]);
   const [invites, setInvites] = useState<readonly PendingInviteSummary[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -87,6 +96,8 @@ export default function FamilyScreen(): JSX.Element {
       },
     ]);
   };
+
+  if (!isPrimary) return <Redirect href="/(tabs)/dashboard" />;
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">

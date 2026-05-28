@@ -63,6 +63,13 @@ beforeAll(async () => {
     },
   });
   primaryUserId = user.id;
+  // Mirror real signup: household primary is the first User created.
+  // Production sets this inside the signup transaction; tests bypass
+  // the auth flow and seed directly, so set it explicitly.
+  await prisma.household.update({
+    where: { id: household.id },
+    data: { primaryUserId: user.id },
+  });
   primaryToken = jwt.sign({ sub: user.id, householdId: user.householdId }, process.env.JWT_SECRET, {
     expiresIn: "1h",
   });
@@ -130,6 +137,10 @@ describe("POST /api/v1/household/profiles", () => {
         onboardingComplete: true,
       },
     });
+    await prisma.household.update({
+      where: { id: cap.id },
+      data: { primaryUserId: owner.id },
+    });
     const token = jwt.sign(
       { sub: owner.id, householdId: owner.householdId },
       process.env.JWT_SECRET!,
@@ -158,6 +169,36 @@ describe("POST /api/v1/household/profiles", () => {
       .post("/api/v1/household/profiles")
       .send({ name: "Anon", age: 40, conditions: ["diabetes"] });
     expect(res.status).toBe(401);
+  });
+
+  it("rejects a non-primary household member with 403", async () => {
+    // Add a sub-profile and mint a token for it directly. In production
+    // sub-profiles have no JWT path; this simulates a hypothetical
+    // future refactor that grants one — the guard must still hold.
+    const subProfile = await prisma.user.create({
+      data: {
+        phone: `household:${primaryUserId}:test-sub`,
+        name: "SubProfile",
+        age: 55,
+        householdId: primaryHouseholdId,
+        onboardingComplete: true,
+      },
+    });
+    const subToken = jwt.sign(
+      { sub: subProfile.id, householdId: primaryHouseholdId },
+      process.env.JWT_SECRET!,
+      { expiresIn: "1h" },
+    );
+    try {
+      const res = await request(app)
+        .post("/api/v1/household/profiles")
+        .set("Authorization", `Bearer ${subToken}`)
+        .send({ name: "Forbidden", age: 30, conditions: ["diabetes"] });
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe("FAMILY_NO_ACCESS");
+    } finally {
+      await prisma.user.delete({ where: { id: subProfile.id } });
+    }
   });
 
   it("rejects malformed body via Zod (400)", async () => {

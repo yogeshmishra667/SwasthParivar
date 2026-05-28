@@ -34,29 +34,39 @@ export default function ProfileScreen(): JSX.Element {
         },
       );
       // Seed the profile store so the next screen (first-reading) can
-      // show the user's name in the confirmation card.
+      // show the user's name in the confirmation card. The onboarded
+      // user is — by construction — the household primary; only the
+      // primary has a JWT and onboarding runs against that JWT.
       const hId = res?.data?.householdId ?? userId ?? "onboarding";
-      setHousehold(hId, [
-        {
-          id: userId ?? "self",
-          name: name.trim(),
-          avatarColor: "#2563EB",
-          conditions: [],
-        },
-      ]);
+      setHousehold(
+        hId,
+        [
+          {
+            id: userId ?? "self",
+            name: name.trim(),
+            avatarColor: "#2563EB",
+            conditions: [],
+          },
+        ],
+        userId ?? null,
+      );
     } catch (e) {
       logError("onboarding/profile", e);
       // Still seed the store locally so the name is visible even if
       // the API call failed (offline-first).
       const hId = userId ?? "onboarding";
-      setHousehold(hId, [
-        {
-          id: userId ?? "self",
-          name: name.trim(),
-          avatarColor: "#2563EB",
-          conditions: [],
-        },
-      ]);
+      setHousehold(
+        hId,
+        [
+          {
+            id: userId ?? "self",
+            name: name.trim(),
+            avatarColor: "#2563EB",
+            conditions: [],
+          },
+        ],
+        userId ?? null,
+      );
     }
     setSaving(false);
     router.push("/(onboarding)/first-reading");

@@ -155,15 +155,25 @@ const upsertUserAndIssueTokens = async (phone: string): Promise<IssuedTokens> =>
   let user = await prisma.user.findUnique({ where: { phone } });
   let isNew = false;
   if (!user) {
-    const household = await prisma.household.create({ data: {} });
-    user = await prisma.user.create({
-      data: {
-        phone,
-        name: "",
-        age: 0,
-        householdId: household.id,
-        onboardingComplete: false,
-      },
+    // Household + primary User are created together. The freshly-minted
+    // User is the household primary — sub-profiles added later via
+    // POST /household/profiles can never claim that slot.
+    user = await prisma.$transaction(async (tx) => {
+      const household = await tx.household.create({ data: {} });
+      const created = await tx.user.create({
+        data: {
+          phone,
+          name: "",
+          age: 0,
+          householdId: household.id,
+          onboardingComplete: false,
+        },
+      });
+      await tx.household.update({
+        where: { id: household.id },
+        data: { primaryUserId: created.id },
+      });
+      return created;
     });
     isNew = true;
   }

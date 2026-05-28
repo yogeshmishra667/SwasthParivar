@@ -129,6 +129,7 @@ export default function DashboardScreen(): JSX.Element {
           success: boolean;
           data: {
             householdId: string;
+            primaryUserId: string | null;
             householdProfiles: { id: string; name: string; age: number; conditions: string[] }[];
             timeAnomalyCount?: number;
             createdAt?: string;
@@ -145,6 +146,7 @@ export default function DashboardScreen(): JSX.Element {
           avatarColor: AVATAR_COLORS[i % AVATAR_COLORS.length] ?? "#6B7280",
           conditions: p.conditions,
         })),
+        userRes.data.primaryUserId,
       );
       setTimeAnomaly((userRes.data.timeAnomalyCount ?? 0) >= 2);
 

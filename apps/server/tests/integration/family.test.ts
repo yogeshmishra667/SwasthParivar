@@ -107,6 +107,23 @@ beforeAll(async () => {
   patientId = patient.id;
   guardianId = guardian.id;
   outsiderId = outsider.id;
+
+  // Mirror real signup: each household's primary is the first User
+  // created in it. Production sets this inside the signup transaction;
+  // tests bypass the auth flow and seed users directly, so set it
+  // explicitly here.
+  await prisma.household.update({
+    where: { id: patientHousehold.id },
+    data: { primaryUserId: patient.id },
+  });
+  await prisma.household.update({
+    where: { id: guardianHousehold.id },
+    data: { primaryUserId: guardian.id },
+  });
+  await prisma.household.update({
+    where: { id: outsiderHousehold.id },
+    data: { primaryUserId: outsider.id },
+  });
   patientToken = jwt.sign(
     { sub: patientId, householdId: patientHousehold.id },
     process.env.JWT_SECRET,
@@ -164,6 +181,37 @@ describe("POST /api/v1/family/invite", () => {
       .send({ guardianPhone: PATIENT_PHONE });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe("FAMILY_INVITE_INVALID");
+  });
+
+  it("rejects a guardian in the same household as the patient", async () => {
+    // Same-household FamilyLinks are semantically wrong — that's what
+    // the household-scoped notification path is for, not FamilyLink.
+    const sibling = await prisma.user.create({
+      data: {
+        phone: "+919812345799",
+        name: "Sibling",
+        age: 30,
+        // Use the patient's household so the guardian-side phone resolves
+        // to a user already inside the patient's household.
+        householdId: (
+          await prisma.user.findUniqueOrThrow({
+            where: { id: patientId },
+            select: { householdId: true },
+          })
+        ).householdId,
+        onboardingComplete: true,
+      },
+    });
+    try {
+      const res = await request(app)
+        .post("/api/v1/family/invite")
+        .set("Authorization", `Bearer ${patientToken}`)
+        .send({ guardianPhone: sibling.phone });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("FAMILY_INVITE_INVALID");
+    } finally {
+      await prisma.user.delete({ where: { id: sibling.id } });
+    }
   });
 
   it("creates a pending invite and echoes the guardian summary", async () => {
@@ -486,6 +534,10 @@ describe("profile-aware invites (shared-phone household)", () => {
       },
     });
     secondGuardianId = guardian.id;
+    await prisma.household.update({
+      where: { id: guardianHousehold.id },
+      data: { primaryUserId: guardian.id },
+    });
   });
 
   it("links the invite to the non-primary profile named by targetUserId", async () => {

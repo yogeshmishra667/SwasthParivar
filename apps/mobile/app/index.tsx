@@ -37,6 +37,7 @@ interface UserMeResponse {
     onboardingComplete: boolean;
     onboardingStep: number;
     householdId: string;
+    primaryUserId: string | null;
     householdProfiles: HouseholdProfile[];
   };
 }
@@ -59,7 +60,13 @@ export default function Index(): JSX.Element | null {
     void (async () => {
       try {
         const res = await api.get<UserMeResponse>("/users/me");
-        const { onboardingComplete, onboardingStep, householdId, householdProfiles } = res.data;
+        const {
+          onboardingComplete,
+          onboardingStep,
+          householdId,
+          primaryUserId,
+          householdProfiles,
+        } = res.data;
 
         setHousehold(
           householdId,
@@ -69,6 +76,7 @@ export default function Index(): JSX.Element | null {
             avatarColor: AVATAR_COLORS[i % AVATAR_COLORS.length] ?? "#6B7280",
             conditions: p.conditions,
           })),
+          primaryUserId,
         );
 
         if (onboardingComplete) {
