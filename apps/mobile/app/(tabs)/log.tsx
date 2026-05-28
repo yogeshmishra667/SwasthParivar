@@ -320,9 +320,7 @@ export default function LogScreen(): JSX.Element {
     return (
       <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-row items-center justify-between px-4 py-3">
-          <Text className="text-hero font-bold">
-            {t("logging.savedTitle", { defaultValue: t("logging.saved") })}
-          </Text>
+          <Text className="text-hero font-bold">{t("logging.saved")}</Text>
           <ActiveProfileBadge />
         </View>
 
@@ -363,7 +361,7 @@ export default function LogScreen(): JSX.Element {
             <Button
               label={
                 mode === "glucose"
-                  ? t("logging.logAnother", { defaultValue: "Ek aur reading log karein" })
+                  ? t("logging.logAnother")
                   : mode === "bp"
                     ? t("bp.title")
                     : t("meals.logMore")

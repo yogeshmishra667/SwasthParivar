@@ -27,7 +27,7 @@ export default function LoginScreen(): JSX.Element {
 
   const sendOtp = async (): Promise<void> => {
     if (phone.length !== 10) {
-      Alert.alert("Galat number", "10 digit ka phone number dalein.");
+      Alert.alert(t("auth.invalidPhoneTitle"), t("auth.invalidPhoneDesc"));
       return;
     }
     setLoading(true);
@@ -47,7 +47,7 @@ export default function LoginScreen(): JSX.Element {
       router.push({ pathname: "/(auth)/verify", params: { phone, provider } });
     } catch (err) {
       logError("login.sendOtp", err);
-      Alert.alert("Dikkat hui", "Kripya thodi der baad try karein.");
+      Alert.alert(t("auth.errorTitle"), t("auth.errorRetry"));
     } finally {
       setLoading(false);
     }
@@ -75,9 +75,7 @@ export default function LoginScreen(): JSX.Element {
             </View>
             <Text className="text-3xl font-bold text-gray-900 tracking-tight">SwasthParivar</Text>
             <Text className="mt-2 text-center text-body text-gray-500">
-              {t("auth.subtitle", {
-                defaultValue: "Apni family ki health ka dhyan rakhein, asani se.",
-              })}
+              {t("auth.subtitle", { defaultValue: "" })}
             </Text>
           </View>
 

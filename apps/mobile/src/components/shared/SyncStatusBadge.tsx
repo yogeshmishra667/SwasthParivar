@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { View, Text } from "react-native";
+import { useTranslation } from "react-i18next";
 import { Icon } from "@/components/ui/Icon";
 import { useSyncStore } from "@/stores/sync.store";
 
@@ -14,6 +15,7 @@ import { useSyncStore } from "@/stores/sync.store";
 const SYNCED_VISIBLE_MS = 3000;
 
 export const SyncStatusBadge = (): JSX.Element | null => {
+  const { t } = useTranslation();
   const phase = useSyncStore((s) => s.phase);
   const pendingCount = useSyncStore((s) => s.pendingCount);
   const lastSyncedAt = useSyncStore((s) => s.lastSyncedAt);
@@ -47,7 +49,7 @@ export const SyncStatusBadge = (): JSX.Element | null => {
         className="flex-row items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1"
       >
         <Icon name="sync" size={14} color="#1E40AF" />
-        <Text className="text-body text-blue-900">Sync ho raha hai...</Text>
+        <Text className="text-body text-blue-900">{t("sync.draining")}</Text>
       </View>
     );
   }

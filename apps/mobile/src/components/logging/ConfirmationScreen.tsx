@@ -25,23 +25,26 @@ interface ConfirmationProps {
 
 const TYPE_OPTIONS: readonly GlucoseReadingType[] = ["fasting", "post_meal", "random"] as const;
 
-const TYPE_LABELS: Record<GlucoseReadingType, string> = {
-  fasting: "Fasting",
-  pre_meal: "Khane se pehle",
-  post_meal: "Post-meal",
-  random: "Random",
-  bedtime: "Sone se pehle",
-};
-
-const TYPE_HINTS: Record<GlucoseReadingType, string> = {
-  fasting: "Subah, khaali pet",
-  pre_meal: "Khane se pehle",
-  post_meal: "Khane ke 2hr baad",
-  random: "Kisi bhi time",
-  bedtime: "Sone se pehle",
-};
+// Type labels and hints are resolved via i18n at render time — see
+// getTypeLabel / getTypeHint helpers below. These constants are removed.
 
 const EXTREME_CONFIRM_DELAY_MS = 3000;
+
+const getTypeLabel = (
+  t: ReturnType<typeof useTranslation>["t"],
+  opt: GlucoseReadingType,
+): string => {
+  const key = opt === "pre_meal" ? "preMeal" : opt === "post_meal" ? "postMeal" : opt;
+  return t(`logging.typeLabels.${key}`, { defaultValue: opt });
+};
+
+const getTypeHint = (
+  t: ReturnType<typeof useTranslation>["t"],
+  opt: GlucoseReadingType,
+): string => {
+  const key = opt === "pre_meal" ? "preMeal" : opt === "post_meal" ? "postMeal" : opt;
+  return t(`logging.typeHints.${key}`, { defaultValue: "" });
+};
 
 export const ConfirmationScreen = ({
   value,
@@ -60,11 +63,23 @@ export const ConfirmationScreen = ({
   const recordFestiveUse = useFestiveStore((s) => s.recordUse);
   const isCritical = isCriticalGlucose(value);
   const [confirmReady, setConfirmReady] = useState(!isCritical);
+  const [secondsLeft, setSecondsLeft] = useState(
+    isCritical ? Math.ceil(EXTREME_CONFIRM_DELAY_MS / 1000) : 0,
+  );
 
   useEffect(() => {
     if (!isCritical) return;
-    const id = setTimeout(() => setConfirmReady(true), EXTREME_CONFIRM_DELAY_MS);
-    return () => clearTimeout(id);
+    const total = Math.ceil(EXTREME_CONFIRM_DELAY_MS / 1000);
+    setSecondsLeft(total);
+    const tick = setInterval(() => setSecondsLeft((s) => (s > 1 ? s - 1 : 0)), 1000);
+    const done = setTimeout(() => {
+      clearInterval(tick);
+      setConfirmReady(true);
+    }, EXTREME_CONFIRM_DELAY_MS);
+    return () => {
+      clearInterval(tick);
+      clearTimeout(done);
+    };
   }, [isCritical]);
 
   // Critical values ignore the festive toggle entirely — safety doesn't
@@ -95,19 +110,19 @@ export const ConfirmationScreen = ({
               <Icon name="person" size={16} color="#374151" />
               <Text className="text-important font-semibold">
                 {profile?.name && profile.name.trim().length > 0
-                  ? `${profile.name} ji ke liye save ho raha hai`
-                  : "Aapke liye save ho raha hai"}
+                  ? t("logging.savingForProfile", { name: profile.name })
+                  : t("logging.savingDefault")}
               </Text>
             </View>
             {recentSwitch && (
               <Text className="mt-1 text-body text-warning">
-                Abhi-abhi profile switch kiya — sahi profile hai na?
+                {t("logging.recentSwitchWarning")}
               </Text>
             )}
           </Card>
 
           <Card>
-            <Text className="text-body text-neutral">Glucose reading</Text>
+            <Text className="text-body text-neutral">{t("logging.glucoseReadingTag")}</Text>
             <View className="mt-1 flex-row items-baseline gap-2">
               <Text
                 className={`text-5xl font-bold tracking-tight ${
@@ -122,7 +137,7 @@ export const ConfirmationScreen = ({
               <View className="mt-3 flex-row items-center gap-2 rounded-lg bg-red-50 px-3 py-2">
                 <Icon name="warning" size={20} color="#DC2626" />
                 <Text className="flex-1 text-important font-bold text-critical">
-                  Yeh bahut {value > 315 ? "zyada" : "kam"} hai. Kya sahi hai?
+                  {value > 315 ? t("logging.extremeBannerHigh") : t("logging.extremeBannerLow")}
                 </Text>
               </View>
             )}
@@ -130,7 +145,7 @@ export const ConfirmationScreen = ({
 
           <Card>
             <Text className="mb-3 text-body text-neutral">
-              {uncertainType ? "Fasting ya post-meal? Tap karein:" : "Reading type"}
+              {uncertainType ? t("logging.typeChoosePrompt") : t("logging.typeLabel")}
             </Text>
             <View className="gap-2">
               {TYPE_OPTIONS.map((opt) => {
@@ -152,9 +167,9 @@ export const ConfirmationScreen = ({
                           active ? "text-blue-700" : "text-gray-900"
                         }`}
                       >
-                        {TYPE_LABELS[opt] ?? opt}
+                        {getTypeLabel(t, opt)}
                       </Text>
-                      <Text className="mt-0.5 text-body text-neutral">{TYPE_HINTS[opt] ?? ""}</Text>
+                      <Text className="mt-0.5 text-body text-neutral">{getTypeHint(t, opt)}</Text>
                     </View>
                     <View
                       className={`h-5 w-5 items-center justify-center rounded-full border-2 ${
@@ -192,16 +207,13 @@ export const ConfirmationScreen = ({
                   </Text>
                   {!festiveCanUse ? (
                     <Text className="mt-1 text-body text-neutral">
-                      {t("logging.festiveLimitReached", {
-                        defaultValue: "Is hafte 2 baar use ho chuka. Kal se phir.",
-                      })}
+                      {t("logging.festiveLimitReached")}
                     </Text>
                   ) : (
                     <Text className="mt-1 text-body text-neutral">
-                      {t("logging.festiveHint", {
+                      {t("logging.festiveAvailableHint", {
                         used: festiveUsedThisWeek,
                         max: FESTIVE_MAX_PER_WEEK,
-                        defaultValue: `Festival ho to enable karein (${festiveUsedThisWeek}/${FESTIVE_MAX_PER_WEEK} this week)`,
                       })}
                     </Text>
                   )}
@@ -219,11 +231,17 @@ export const ConfirmationScreen = ({
 
           <View className="flex-row gap-3">
             <View className="flex-1">
-              <Button label="Edit" variant="ghost" onPress={onEdit} />
+              <Button label={t("common.edit")} variant="ghost" onPress={onEdit} />
             </View>
             <View className="flex-[2]">
               <Button
-                label={confirmReady ? "Haan, save" : "Wait..."}
+                label={
+                  confirmReady
+                    ? t("logging.confirmYes")
+                    : t("logging.confirmWait", {
+                        seconds: secondsLeft,
+                      })
+                }
                 variant={isCritical ? "critical" : "primary"}
                 disabled={!confirmReady}
                 onPress={handleConfirm}

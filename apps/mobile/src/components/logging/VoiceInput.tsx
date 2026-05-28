@@ -1,5 +1,6 @@
 import { useEffect, useState, type ComponentType } from "react";
 import { View, Text, Pressable, Platform } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { VoiceParseResult } from "@swasth/domain-logic";
 import { Icon } from "@/components/ui/Icon";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
@@ -17,6 +18,7 @@ interface VoiceInputProps {
 const voiceUnavailable = isExpoGo && Platform.OS === "android";
 
 const VoiceUnavailable = ({ onFail }: VoiceInputProps): JSX.Element => {
+  const { t } = useTranslation();
   // Auto-fall back so the screen lands on numpad without an extra tap.
   useEffect(() => {
     onFail();
@@ -28,7 +30,7 @@ const VoiceUnavailable = ({ onFail }: VoiceInputProps): JSX.Element => {
         disabled
         accessibilityRole="button"
         accessibilityState={{ disabled: true }}
-        accessibilityLabel="Voice unavailable in Expo Go on Android"
+        accessibilityLabel={t("voice.devBuildRequired")}
         className="items-center justify-center rounded-full bg-gray-300"
         style={{
           width: TOUCH_TARGET_MIN * 2.5,
@@ -37,9 +39,7 @@ const VoiceUnavailable = ({ onFail }: VoiceInputProps): JSX.Element => {
       >
         <Icon name="mic-off" size={48} color="#FFFFFF" />
       </Pressable>
-      <Text className="text-important text-center px-4">
-        Voice ke liye dev build chahiye — abhi numpad use karein.
-      </Text>
+      <Text className="text-important text-center px-4">{t("voice.devBuildRequired")}</Text>
     </View>
   );
 };

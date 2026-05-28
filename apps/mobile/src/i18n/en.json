@@ -21,7 +21,14 @@
     "enterPhone": "Enter your phone number",
     "sendOtp": "Send OTP",
     "enterOtp": "Enter OTP",
-    "verify": "Verify"
+    "verify": "Verify",
+    "invalidPhoneTitle": "Invalid number",
+    "invalidPhoneDesc": "Enter a 10-digit phone number.",
+    "errorTitle": "Something went wrong",
+    "errorRetry": "Please try again in a moment.",
+    "otpInvalid": "Incorrect OTP",
+    "otpLengthError": "Enter the 6-digit OTP",
+    "subtitle": "Keep your family's health on track, easily."
   },
   "onboarding": {
     "chooseLanguage": "Choose your language",
@@ -33,7 +40,10 @@
     "namePlaceholder": "Name",
     "agePlaceholder": "Age",
     "addMedicines": "Want to add medicines?",
-    "addMedicinesLater": "You can add them later too."
+    "addMedicinesLater": "You can add them later too.",
+    "conditionSubtitle": "Choose your condition so we can set up the right tracking.",
+    "firstReadingSubtitle": "Check your glucometer and type the reading below.",
+    "celebrateSubtitle": "Great job! You logged your first reading. 🎉"
   },
   "tabs": {
     "home": "Home",
@@ -78,7 +88,33 @@
     "readingSaved": "Reading saved",
     "festiveToggle": "Special day?",
     "festiveHint": "Festival? Tag this reading. This week: {{used}}/{{max}}",
-    "festiveLimitReached": "Used twice this week — toggle returns next week."
+    "festiveLimitReached": "Used twice this week — toggle returns next week.",
+    "logAnother": "Log another reading",
+    "savingForProfile": "Saving for {{name}}",
+    "savingDefault": "Saving for you",
+    "recentSwitchWarning": "Just switched profile — is this the right one?",
+    "glucoseReadingTag": "Glucose reading",
+    "extremeBannerHigh": "This is very high. Is it correct?",
+    "extremeBannerLow": "This is very low. Is it correct?",
+    "typeChoosePrompt": "Fasting or post-meal? Tap to choose:",
+    "typeLabel": "Reading type",
+    "confirmYes": "Yes, save",
+    "confirmWait": "Wait {{seconds}}s...",
+    "typeLabels": {
+      "fasting": "Fasting",
+      "preMeal": "Pre-meal",
+      "postMeal": "Post-meal",
+      "random": "Random",
+      "bedtime": "Bedtime"
+    },
+    "typeHints": {
+      "fasting": "Morning, empty stomach",
+      "preMeal": "Before a meal",
+      "postMeal": "2 hours after eating",
+      "random": "Any time",
+      "bedtime": "Before bed"
+    },
+    "festiveAvailableHint": "Tag as a festival day ({{used}}/{{max}} this week)"
   },
   "feedback": {
     "first_ever": "First reading saved!",
@@ -128,7 +164,14 @@
     "lowBody": "Eat something sweet now — juice, glucose, mithai. If dizzy, call {{contact}}.",
     "highTitle": "Sugar is very high ({{value}})",
     "highBody": "Drink water. Check if medication was taken. Call {{contact}}.",
-    "callNow": "Call now"
+    "callNow": "Call now",
+    "alertTitleLow": "Sugar is very low",
+    "alertTitleHigh": "Sugar is very high",
+    "alertBodyLow": "Eat something sweet now — juice, glucose, mithai.",
+    "alertBodyHigh": "Drink water. Check if you took your medicine.",
+    "callContact": "Call {{name}}",
+    "close": "Close",
+    "waitDismiss": "Wait {{seconds}}s..."
   },
   "offline": {
     "banner": "Offline mode — readings are safe, will sync later",
@@ -282,6 +325,32 @@
     "insufficient": "Need 30+ readings before an estimate is available.",
     "asOf": "Based on last 90 days",
     "learnMore": "This is only an estimate — ask your doctor for a lab test to confirm."
+  },
+  "voice": {
+    "statusTap": "Tap to speak",
+    "statusListen": "Listening...",
+    "statusNoPermission": "Microphone permission needed — allow in Settings.",
+    "statusError": "Voice is having trouble — use numpad instead.",
+    "exampleHint": "Try: \"sugar 120\" or \"my sugar is 120\"",
+    "devBuildRequired": "Voice needs a dev build — use numpad for now."
+  },
+  "sync": {
+    "draining": "Syncing..."
+  },
+  "errorBoundary": {
+    "title": "Something went wrong 😔",
+    "body": "There was a technical issue. Your data is safe — nothing is lost.",
+    "restart": "Open app again",
+    "hint": "If this keeps happening, restart your phone."
+  },
+  "profile": {
+    "suffix": ""
+  },
+  "sos": {
+    "title": "Emergency",
+    "subtitle": "Call {{name}}",
+    "callButton": "Call now",
+    "close": "Close"
   },
   "family": {
     "title": "Family",

@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { View, Text, Pressable } from "react-native";
 import { captureError } from "@/services/sentry";
+import { i18n } from "@/i18n/config";
 
 interface Props {
   children: ReactNode;
@@ -48,26 +49,25 @@ export class ErrorBoundary extends Component<Props, State> {
   override render(): ReactNode {
     if (!this.state.hasError) return this.props.children;
 
+    const t = i18n.t.bind(i18n);
     return (
       <View className="flex-1 items-center justify-center bg-neutral-50 px-6">
         <Text className="text-2xl font-bold text-neutral-900 mb-3 text-center">
-          Kuch gadbad hui 😔
+          {t("errorBoundary.title")}
         </Text>
         <Text className="text-base text-neutral-700 mb-8 text-center leading-6">
-          App mein technical dikkat aayi hai. Aapka data safe hai — kuch nahi khoya.
+          {t("errorBoundary.body")}
         </Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="App phir se kholein"
+          accessibilityLabel={t("errorBoundary.restart")}
           onPress={this.handleRestart}
           className="bg-primary-600 px-8 py-4 rounded-2xl active:opacity-80"
           style={{ minHeight: 48, minWidth: 48 }}
         >
-          <Text className="text-white text-lg font-semibold">App phir se kholein</Text>
+          <Text className="text-white text-lg font-semibold">{t("errorBoundary.restart")}</Text>
         </Pressable>
-        <Text className="text-xs text-neutral-500 mt-6 text-center">
-          Agar dikkat ho rahi hai, phone restart karein.
-        </Text>
+        <Text className="text-xs text-neutral-500 mt-6 text-center">{t("errorBoundary.hint")}</Text>
       </View>
     );
   }

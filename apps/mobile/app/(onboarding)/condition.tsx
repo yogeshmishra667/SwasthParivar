@@ -39,9 +39,7 @@ export default function ConditionScreen(): JSX.Element {
             {t("onboarding.selectCondition")}
           </Text>
           <Text className="mt-2 text-center text-body text-gray-500">
-            {t("onboarding.conditionSubtitle", {
-              defaultValue: "Aapki condition chunein taaki hum sahi tracking set kar sakein.",
-            })}
+            {t("onboarding.conditionSubtitle")}
           </Text>
         </View>
 

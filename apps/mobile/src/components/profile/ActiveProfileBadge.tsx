@@ -1,10 +1,12 @@
 import { Pressable, Text } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useActiveProfile } from "@/hooks/useActiveProfile";
 import { useProfileStore } from "@/stores/profile.store";
 import { Icon } from "@/components/ui/Icon";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 
 export const ActiveProfileBadge = (): JSX.Element | null => {
+  const { t } = useTranslation();
   const profile = useActiveProfile();
   const profileCount = useProfileStore((s) => s.profiles.length);
   const requestSelector = useProfileStore((s) => s.requestSelector);
@@ -27,7 +29,10 @@ export const ActiveProfileBadge = (): JSX.Element | null => {
       className="flex-row items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5"
     >
       <Icon name="person" size={16} color="#374151" />
-      <Text className="text-important font-semibold">{profile.name} ji</Text>
+      <Text className="text-important font-semibold">
+        {profile.name}
+        {t("profile.suffix") ? ` ${t("profile.suffix")}` : ""}
+      </Text>
       {tappable && <Icon name="chevron-down" size={14} color="#6B7280" />}
     </Pressable>
   );

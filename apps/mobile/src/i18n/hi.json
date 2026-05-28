@@ -21,7 +21,14 @@
     "enterPhone": "Apna phone number dalein",
     "sendOtp": "OTP bhejein",
     "enterOtp": "OTP dalein",
-    "verify": "Verify karein"
+    "verify": "Verify karein",
+    "invalidPhoneTitle": "Galat number",
+    "invalidPhoneDesc": "10 digit ka phone number dalein.",
+    "errorTitle": "Dikkat hui",
+    "errorRetry": "Kripya thodi der baad try karein.",
+    "otpInvalid": "OTP galat hai",
+    "otpLengthError": "6 digit OTP dalein",
+    "subtitle": "Apni family ki health ka dhyan rakhein, asani se."
   },
   "onboarding": {
     "chooseLanguage": "Apni bhasha chunein",
@@ -33,7 +40,10 @@
     "namePlaceholder": "Naam",
     "agePlaceholder": "Umar",
     "addMedicines": "Dawaiyan add karni hain?",
-    "addMedicinesLater": "Baad mein bhi kar sakte hain."
+    "addMedicinesLater": "Baad mein bhi kar sakte hain.",
+    "conditionSubtitle": "Aapki condition chunein taaki hum sahi tracking set kar sakein.",
+    "firstReadingSubtitle": "Apne glucometer se reading dekhein aur neeche type karein.",
+    "celebrateSubtitle": "Bahut acche! Aapne apni pehli reading log kar li. 🎉"
   },
   "tabs": {
     "home": "Home",
@@ -78,7 +88,33 @@
     "readingSaved": "Reading save hui",
     "festiveToggle": "Special din?",
     "festiveHint": "Festival hai? Toggle karein. Is hafte: {{used}}/{{max}}",
-    "festiveLimitReached": "Is hafte 2 baar use ho chuka. Kal se phir available hoga."
+    "festiveLimitReached": "Is hafte 2 baar use ho chuka. Kal se phir available hoga.",
+    "logAnother": "Ek aur reading log karein",
+    "savingForProfile": "{{name}} ji ke liye save ho raha hai",
+    "savingDefault": "Aapke liye save ho raha hai",
+    "recentSwitchWarning": "Abhi-abhi profile switch kiya — sahi profile hai na?",
+    "glucoseReadingTag": "Glucose reading",
+    "extremeBannerHigh": "Yeh bahut zyada hai. Kya sahi hai?",
+    "extremeBannerLow": "Yeh bahut kam hai. Kya sahi hai?",
+    "typeChoosePrompt": "Fasting ya post-meal? Tap karein:",
+    "typeLabel": "Reading type",
+    "confirmYes": "Haan, save",
+    "confirmWait": "Ruko {{seconds}}s...",
+    "typeLabels": {
+      "fasting": "Fasting",
+      "preMeal": "Khane se pehle",
+      "postMeal": "Post-meal",
+      "random": "Random",
+      "bedtime": "Sone se pehle"
+    },
+    "typeHints": {
+      "fasting": "Subah, khaali pet",
+      "preMeal": "Khane se pehle",
+      "postMeal": "Khane ke 2hr baad",
+      "random": "Kisi bhi time",
+      "bedtime": "Sone se pehle"
+    },
+    "festiveAvailableHint": "Festival din tag karein ({{used}}/{{max}} is hafte)"
   },
   "feedback": {
     "first_ever": "Pehli reading save ho gayi!",
@@ -128,7 +164,14 @@
     "lowBody": "Abhi kuch meetha khayein — juice, glucose, mithai. Agar chakkar aa rahe hain to turant {{contact}} ko call karein.",
     "highTitle": "Sugar bahut zyada hai ({{value}})",
     "highBody": "Pani peeyein. Dawai li hai check karein. {{contact}} ko call karein.",
-    "callNow": "Abhi call karein"
+    "callNow": "Abhi call karein",
+    "alertTitleLow": "Sugar bahut kam",
+    "alertTitleHigh": "Sugar bahut zyada",
+    "alertBodyLow": "Abhi kuch meetha khayein — juice, glucose, mithai.",
+    "alertBodyHigh": "Paani peeyein. Dawai li hai check karein.",
+    "callContact": "{{name}} ko call karein",
+    "close": "Close",
+    "waitDismiss": "Ruko {{seconds}}s..."
   },
   "offline": {
     "banner": "Offline mode — readings safe hain, sync baad mein hoga",
@@ -282,6 +325,32 @@
     "insufficient": "30 readings ke baad estimate milega.",
     "asOf": "Last 90 din ka data",
     "learnMore": "Yeh sirf estimate hai — doctor se lab test confirm karein."
+  },
+  "voice": {
+    "statusTap": "Bolne ke liye tap karein",
+    "statusListen": "Suna ja raha hai...",
+    "statusNoPermission": "Microphone permission chahiye — settings me allow karein.",
+    "statusError": "Voice mein dikkat hai — numpad use karein.",
+    "exampleHint": "Boliye: \"sugar 120\" ya \"meri sugar ek sau bees hai\"",
+    "devBuildRequired": "Voice ke liye dev build chahiye — abhi numpad use karein."
+  },
+  "sync": {
+    "draining": "Sync ho raha hai..."
+  },
+  "errorBoundary": {
+    "title": "Kuch gadbad hui 😔",
+    "body": "App mein technical dikkat aayi hai. Aapka data safe hai — kuch nahi khoya.",
+    "restart": "App phir se kholein",
+    "hint": "Agar dikkat ho rahi hai, phone restart karein."
+  },
+  "profile": {
+    "suffix": "ji"
+  },
+  "sos": {
+    "title": "Emergency",
+    "subtitle": "{{name}} ko call karein",
+    "callButton": "Abhi call karein",
+    "close": "Close"
   },
   "family": {
     "title": "Parivar",

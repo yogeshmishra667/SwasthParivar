@@ -7,7 +7,8 @@ import { AddProfileModal } from "@/components/profile/AddProfileModal";
 import { useAuthStore } from "@/stores/auth.store";
 import { useProfileStore, type Profile } from "@/stores/profile.store";
 import { usePreferencesStore } from "@/stores/preferences.store";
-import { i18n } from "@/i18n/config";
+import { api } from "@/services/api";
+import { logError } from "@/services/analytics";
 import { useRouter } from "expo-router";
 
 const AVATAR_COLORS = ["#2563EB", "#16A34A", "#D97706", "#DC2626", "#8B5CF6"];
@@ -55,8 +56,12 @@ export default function SettingsScreen(): JSX.Element {
         variant="ghost"
         onPress={() => {
           const next = language === "hi" ? "en" : "hi";
-          setLanguage(next);
-          void i18n.changeLanguage(next);
+          setLanguage(next); // also calls i18n.changeLanguage internally
+          // Sync to server so server-composed copy (dashboard summary etc.)
+          // also switches language.
+          void api.patch("/users/me", { preferredLanguage: next }).catch((err) => {
+            logError("settings.language", err);
+          });
         }}
       />
 
