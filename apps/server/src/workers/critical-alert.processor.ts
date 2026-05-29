@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { BypassDecision } from "@swasth/domain-logic";
-import type { Job } from "bullmq";
-import { QUEUE_NAMES } from "../shared/queue.js";
+import type { Job, Queue } from "bullmq";
+import { createQueue, QUEUE_NAMES } from "../shared/queue.js";
 import { logger } from "../shared/logger.js";
 import { prisma } from "../shared/database.js";
 import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
@@ -203,5 +203,44 @@ export const processCriticalAlert = async (job: Job<CriticalAlertJob>): Promise<
     sms_triggered: smsTriggered,
     sms_success: smsSuccessCount > 0,
     within_cooldown: decision.withinCooldown,
+  });
+
+  // Phase 4 §D'.2 — schedule the SOS auto-escalation 5 minutes after
+  // dispatch. The SOS service guards on both `sos_enabled` and
+  // `sos_source_critical_bypass_enabled`, so this is a safe no-op
+  // until ops promote the feature. The delay matches phase3.md §D
+  // ("5min: if no guardian opened app AND no call connected → auto-
+  // trigger IVR call").
+  await scheduleCriticalBypassAutoEscalation({
+    userId,
+    readingId,
+    ...(requestId !== undefined ? { requestId } : {}),
+  });
+};
+
+const FIVE_MINUTES_MS = 5 * 60_000;
+
+let _autoEscalateQueue: Queue<CriticalBypassAutoEscalateJob> | null = null;
+const autoEscalateQueue = (): Queue<CriticalBypassAutoEscalateJob> => {
+  _autoEscalateQueue ??= createQueue<CriticalBypassAutoEscalateJob>(
+    QUEUE_NAMES.CRITICAL_BYPASS_AUTO_ESCALATE,
+  );
+  return _autoEscalateQueue;
+};
+
+export interface CriticalBypassAutoEscalateJob {
+  readonly userId: string;
+  readonly readingId: string;
+  readonly requestId?: string;
+}
+
+const scheduleCriticalBypassAutoEscalation = async (
+  job: CriticalBypassAutoEscalateJob,
+): Promise<void> => {
+  await autoEscalateQueue().add(QUEUE_NAMES.CRITICAL_BYPASS_AUTO_ESCALATE, job, {
+    delay: FIVE_MINUTES_MS,
+    // Idempotent: per-reading single job in flight. A duplicate
+    // critical-bypass dispatch (retries) collapses.
+    jobId: `critbypass-escalate-${job.readingId}`,
   });
 };

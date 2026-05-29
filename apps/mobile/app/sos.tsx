@@ -24,7 +24,13 @@ import { SOSDialIntegration } from "@/components/sos/SOSDialIntegration";
 import { SOSAfterActionCard } from "@/components/sos/SOSAfterActionCard";
 import { useSOSStore } from "@/stores/sos.store";
 import { useSOSPolling } from "@/hooks/useSOSPolling";
-import { cancelSOS, resolveSOS, triggerSOS } from "@/services/sos";
+import {
+  cancelSOS,
+  listEmergencyContacts,
+  resolveSOS,
+  triggerSOS,
+  type EmergencyContactDto,
+} from "@/services/sos";
 
 export default function SOSScreen(): JSX.Element | null {
   const { t } = useTranslation();
@@ -41,6 +47,22 @@ export default function SOSScreen(): JSX.Element | null {
   // the badge whenever the build flag suggests we're internal. The
   // ship-default copy is honest either way.
   const [confirmTestMode] = useState(true);
+
+  // Priority-1 contact for the "Call {name}" button. Fetched lazily
+  // when the screen mounts; failures fall back to the generic dialer
+  // (handled inside SOSActiveFullscreen).
+  const [primaryContact, setPrimaryContact] = useState<EmergencyContactDto | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const contacts = await listEmergencyContacts();
+      if (cancelled) return;
+      setPrimaryContact(contacts[0] ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useSOSPolling(phase === "active");
 
@@ -128,14 +150,23 @@ export default function SOSScreen(): JSX.Element | null {
       <View className="flex-1 bg-critical">
         <SOSActiveFullscreen
           event={active}
-          primaryContact={null}
+          // Pass the priority-1 contact (or null when the fetch
+          // hasn't returned or the patient has no configured
+          // contacts). The fullscreen renders "Call {name}" when
+          // present, the generic dialer button otherwise.
+          primaryContact={
+            primaryContact ? { name: primaryContact.name, phone: primaryContact.phone } : null
+          }
           onCancel={() => {
             void onActiveCancel();
           }}
         />
         {active.escalationStage === "stage_1_auto_dial" ? (
           <SOSDialIntegration
-            phone={undefined}
+            // Auto-dial uses the same priority-1 contact. When unknown
+            // the integration renders nothing, leaving the patient
+            // with the manual "Call now" button.
+            phone={primaryContact?.phone}
             onCancel={() => {
               void onActiveCancel();
             }}

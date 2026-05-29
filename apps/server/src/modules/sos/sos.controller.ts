@@ -45,3 +45,22 @@ export const getActive = async (req: Request, res: Response): Promise<void> => {
   const result = await service.getActiveSOS(userId);
   ok(res, { active: result });
 };
+
+export const getContacts = async (req: Request, res: Response): Promise<void> => {
+  const userId = req.auth!.sub;
+  const result = await service.listEmergencyContacts(userId);
+  ok(res, { contacts: result });
+};
+
+export const postGuardianTrigger = async (req: Request, res: Response): Promise<void> => {
+  const guardianId = req.auth!.sub;
+  const { patientId } = req.params as { patientId: string };
+  const { clientUuid } = req.body as { clientUuid: string };
+  const result = await service.triggerGuardianInitiatedSOS({
+    guardianId,
+    patientId,
+    clientUuid,
+    ...(req.requestId !== undefined ? { requestId: req.requestId } : {}),
+  });
+  ok(res, result);
+};

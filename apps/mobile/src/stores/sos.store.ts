@@ -13,6 +13,7 @@
 
 import { create } from "zustand";
 import type { SOSEventDto } from "@/services/sos";
+import { useProfileStore } from "@/stores/profile.store";
 
 export type SOSLocalPhase = "idle" | "confirming" | "active" | "after";
 
@@ -37,18 +38,29 @@ export const useSOSStore = create<SOSState>((set) => ({
   },
 
   cancelConfirming: () => {
+    // Defensive: if somehow the lock was set during confirming
+    // (rehydration race after a foreground re-show), clear it.
+    useProfileStore.getState().unlockForSOS();
     set({ phase: "idle", triggeredAtMs: null, active: null });
   },
 
   setActive: (event) => {
+    // Phase 4 §D'.2 — lock the profile switcher for the duration of
+    // the chain. A shared-device household cannot mid-SOS switch to a
+    // different patient.
+    useProfileStore.getState().lockForSOS();
     set({ active: event, phase: "active" });
   },
 
   enterAfter: () => {
+    // We stay locked through the after-action card so the resolve
+    // payload (false alarm? note?) is unambiguously tied to the
+    // patient who triggered.
     set({ phase: "after" });
   },
 
   reset: () => {
+    useProfileStore.getState().unlockForSOS();
     set({ active: null, phase: "idle", triggeredAtMs: null });
   },
 }));

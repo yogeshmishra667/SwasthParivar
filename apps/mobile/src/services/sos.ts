@@ -111,3 +111,28 @@ export const getActiveSOS = async (): Promise<SOSEventDto | null> => {
     return null;
   }
 };
+
+export interface EmergencyContactDto {
+  id: string;
+  name: string;
+  phone: string;
+  relationship: string;
+  priority: number;
+  isGuardian: boolean;
+}
+
+/**
+ * Patient's emergency contacts, sorted by priority. Read fallback:
+ * a fetch failure returns an empty list rather than throwing — the
+ * SOS screen falls back to the generic dialer button when the
+ * primary contact is unknown.
+ */
+export const listEmergencyContacts = async (): Promise<EmergencyContactDto[]> => {
+  try {
+    const res = await api.get<ApiEnvelope<{ contacts: EmergencyContactDto[] }>>("/sos/contacts");
+    return res.data.contacts;
+  } catch (err) {
+    logError("listEmergencyContacts", err);
+    return [];
+  }
+};

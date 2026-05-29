@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { SOSButton } from "@/components/sos/SOSButton";
 import { useSOSStore } from "@/stores/sos.store";
+import { useSOSForegroundRehydrate } from "@/hooks/useSOSForegroundRehydrate";
 import { useActiveProfile } from "@/hooks/useActiveProfile";
 import { useProfileStore } from "@/stores/profile.store";
 import { api } from "@/services/api";
@@ -86,6 +87,11 @@ export default function DashboardScreen(): JSX.Element {
   const router = useRouter();
   const profile = useActiveProfile();
   const setHousehold = useProfileStore((s) => s.setHousehold);
+  // Phase 4 §D'.2 — bring the patient back to the SOS fullscreen if
+  // they backgrounded mid-chain. Fires on foreground transitions and
+  // on cold start; idempotent when local state already reflects an
+  // active chain.
+  useSOSForegroundRehydrate();
   const [data, setData] = useState<DashboardData>(EMPTY);
   const [refreshing, setRefreshing] = useState(false);
   const [cacheFetchedAt, setCacheFetchedAt] = useState<string | null>(null);

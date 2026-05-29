@@ -85,15 +85,25 @@ export const triggerSOS = async (params: TriggerSOSParams): Promise<SOSEventDto>
     );
   }
 
-  // Phase 4 Week 13 ships `patient_manual` only. The two other
-  // sources are reserved enum values and stay rejected here until
-  // their dedicated rollout (§D'.2 — critical-bypass auto-escalation
-  // + guardian-initiated remote pull).
-  if (params.input.source !== "patient_manual") {
-    throw new DomainError(
-      "VALIDATION_ERROR",
-      `SOS trigger source not yet enabled: ${params.input.source}`,
-    );
+  // Each trigger source has its own flag so ops can roll them out
+  // independently (CLAUDE.md Phase 4 §D'.2 / phase4.md). All three
+  // are off by default; flipping `sos_enabled` alone does NOT
+  // re-enable critical-bypass auto-escalation or guardian-initiated
+  // remote pull. Patient-manual ships first because it's the only
+  // path with explicit consent (long-press + 3s countdown).
+  if (params.input.source === "critical_bypass_escalation") {
+    const enabled = await getFlag<boolean>("sos_source_critical_bypass_enabled", false);
+    if (!enabled) {
+      throw new DomainError(
+        "SOS_DISABLED",
+        "SOS auto-escalation from critical bypass is not enabled.",
+      );
+    }
+  } else if (params.input.source === "guardian_initiated") {
+    const enabled = await getFlag<boolean>("sos_source_guardian_initiated_enabled", false);
+    if (!enabled) {
+      throw new DomainError("SOS_DISABLED", "Guardian-initiated SOS is not enabled.");
+    }
   }
 
   // Idempotency check — same `clientUuid` from the mobile retry
@@ -224,6 +234,35 @@ export const resolveSOS = async (params: ResolveSOSParams): Promise<SOSEventDto>
   return toDto(updated);
 };
 
+/** Patient's emergency contacts, sorted by priority. Used by the
+ *  mobile active-SOS screen to render "Call {primary} now" instead
+ *  of the generic dialer button. */
+export const listEmergencyContacts = async (
+  userId: string,
+): Promise<
+  {
+    id: string;
+    name: string;
+    phone: string;
+    relationship: string;
+    priority: number;
+    isGuardian: boolean;
+  }[]
+> => {
+  const rows = await prisma.emergencyContact.findMany({
+    where: { userId },
+    orderBy: [{ priority: "asc" }, { id: "asc" }],
+  });
+  return rows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    phone: c.phone,
+    relationship: c.relationship,
+    priority: c.priority,
+    isGuardian: c.isGuardian,
+  }));
+};
+
 /** Most-recent active (non-terminal) SOS for this user. Mobile uses
  * this on app open to re-render the fullscreen alert if the app was
  * backgrounded during a live escalation. */
@@ -233,4 +272,86 @@ export const getActiveSOS = async (userId: string): Promise<SOSEventDto | null> 
     orderBy: { triggeredAt: "desc" },
   });
   return row ? toDto(row) : null;
+};
+
+/**
+ * Phase 4 §D'.2 — guardian-initiated SOS. A guardian on an accepted
+ * `FamilyLink` triggers SOS on behalf of a linked patient. Gated by
+ * `sos_source_guardian_initiated_enabled` (default false). The mobile
+ * guardian app calls this when the guardian's "panic for patient"
+ * button is pressed — useful when the guardian is alerted out-of-band
+ * (phone call from a neighbour, etc.).
+ */
+export const triggerGuardianInitiatedSOS = async (params: {
+  guardianId: string;
+  patientId: string;
+  clientUuid: string;
+  requestId?: string;
+}): Promise<SOSEventDto> => {
+  const link = await prisma.familyLink.findUnique({
+    where: { patientId_guardianId: { patientId: params.patientId, guardianId: params.guardianId } },
+  });
+  if (link?.status !== "accepted") {
+    throw new DomainError("FAMILY_NO_ACCESS", "no accepted family link with this patient");
+  }
+  return await triggerSOS({
+    userId: params.patientId,
+    input: { clientUuid: params.clientUuid, source: "guardian_initiated" },
+    ...(params.requestId !== undefined ? { requestId: params.requestId } : {}),
+  });
+};
+
+/**
+ * Server-side auto-trigger for `critical_bypass_escalation`. Invoked
+ * from the delayed `escalateCriticalBypassToSos` job 5 minutes after
+ * a critical-bypass dispatch when no contact responded.
+ *
+ * Skips silently when:
+ *   - `sos_enabled=false` (the global kill switch)
+ *   - `sos_source_critical_bypass_enabled=false` (the per-source flag)
+ *   - the patient already has an active SOS (no double-trigger)
+ *
+ * Mints a deterministic clientUuid per (userId, readingId) so the
+ * delayed job retrying does not produce a second SOSEvent.
+ */
+export const autoTriggerSOSFromCriticalBypass = async (params: {
+  userId: string;
+  readingId: string;
+  requestId?: string;
+}): Promise<SOSEventDto | null> => {
+  const sosEnabled = await getFlag<boolean>("sos_enabled", false);
+  if (!sosEnabled) return null;
+  const sourceEnabled = await getFlag<boolean>("sos_source_critical_bypass_enabled", false);
+  if (!sourceEnabled) return null;
+
+  // Skip if the patient already has a live SOS chain for any reason.
+  const active = await prisma.sOSEvent.findFirst({
+    where: { userId: params.userId, resolvedAt: null, cancelledAt: null },
+    select: { id: true },
+  });
+  if (active) {
+    logger.info(
+      { userId: params.userId, readingId: params.readingId, activeId: active.id },
+      "auto SOS skipped — active chain already exists",
+    );
+    return null;
+  }
+
+  // Deterministic UUID v5 keyed on (userId, readingId) so retries
+  // of the delayed job collapse to a single SOSEvent. We use a
+  // synthetic v5 implementation via SHA-256 to avoid the
+  // `@types/uuid` dependency drift.
+  const ns = `critical-bypass:${params.userId}:${params.readingId}`;
+  const hash = await import("node:crypto").then((c) =>
+    c.createHash("sha256").update(ns).digest("hex"),
+  );
+  // Build a v4-shaped UUID from the first 32 hex chars. Not a true
+  // v5 but deterministic, which is the property we need.
+  const clientUuid = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+
+  return await triggerSOS({
+    userId: params.userId,
+    input: { clientUuid, source: "critical_bypass_escalation" },
+    ...(params.requestId !== undefined ? { requestId: params.requestId } : {}),
+  });
 };
