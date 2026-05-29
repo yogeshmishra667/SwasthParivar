@@ -167,6 +167,31 @@ export interface EventPropsMap {
     elapsed_seconds: number;
     false_alarm: boolean;
   };
+  // Phase 2 carry-over (Week 17) — health-check schedules surface.
+  // `schedule_created` fires on POST, `schedule_updated` on PUT.
+  // `schedule_compliance_evaluated` is emitted by the hourly cron, ONE
+  // row per (user, schedule) so the dashboard can pivot adherence by
+  // check_type. distinctId is the patient.
+  schedule_created: {
+    schedule_id: string;
+    check_type: "glucose" | "bp" | "cardiac" | "respiratory";
+    frequency: "daily" | "weekly";
+    slot_count: number;
+    reminder_enabled: boolean;
+  };
+  schedule_updated: {
+    schedule_id: string;
+    active: boolean;
+    fields_changed: string[];
+  };
+  schedule_compliance_evaluated: {
+    schedule_id: string;
+    check_type: "glucose" | "bp" | "cardiac" | "respiratory";
+    on_time_count: number;
+    late_count: number;
+    missed_count: number;
+    pending_count: number;
+  };
 }
 
 export type EventName = keyof EventPropsMap;

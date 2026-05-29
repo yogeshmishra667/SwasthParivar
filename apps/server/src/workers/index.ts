@@ -25,6 +25,10 @@ import {
   bootstrapDailyGuardianSummaryCron,
 } from "./daily-guardian-summary.worker.js";
 import { sosEscalationWorker } from "./sos-escalation.worker.js";
+import {
+  scheduleComplianceWorker,
+  bootstrapScheduleComplianceCron,
+} from "./schedule-compliance.worker.js";
 import { logger } from "../shared/logger.js";
 
 const workers = [
@@ -41,6 +45,7 @@ const workers = [
   guardianAlertDispatchWorker,
   dailyGuardianSummaryWorker,
   sosEscalationWorker,
+  scheduleComplianceWorker,
 ];
 
 export const workerNames = [
@@ -57,6 +62,7 @@ export const workerNames = [
   "guardian-alert-dispatch",
   "daily-guardian-summary",
   "sos-escalation",
+  "schedule-compliance",
 ];
 
 export const startWorkers = (): void => {
@@ -77,6 +83,9 @@ export const startWorkers = (): void => {
   );
   bootstrapDailyGuardianSummaryCron().catch((err) =>
     logger.error({ err }, "failed to bootstrap daily-guardian-summary cron"),
+  );
+  bootstrapScheduleComplianceCron().catch((err) =>
+    logger.error({ err }, "failed to bootstrap schedule-compliance cron"),
   );
   logger.info({ count: workers.length }, "workers started");
 };
