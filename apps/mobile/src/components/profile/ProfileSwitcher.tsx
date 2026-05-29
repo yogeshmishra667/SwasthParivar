@@ -5,7 +5,10 @@ import { TOUCH_TARGET_MIN } from "@/utils/constants";
 export const ProfileSwitcher = (): JSX.Element => {
   const profiles = useProfileStore((s) => s.profiles);
   const activeId = useProfileStore((s) => s.activeProfileId);
-  const locked = useProfileStore((s) => s.profileLockedForLogging);
+  // Either lock blocks the switch — logging mid-flow OR an active
+  // SOS chain (phase4.md §D'.2). The store enforces; this just
+  // dims the avatars so the disabled state is visible.
+  const locked = useProfileStore((s) => s.profileLockedForLogging || s.profileLockedForSOS);
   const switchProfile = useProfileStore((s) => s.switchProfile);
 
   return (

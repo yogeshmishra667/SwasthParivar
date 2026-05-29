@@ -36,6 +36,13 @@ export const QUEUE_NAMES = {
   // `cancelled`. Gated by `sos_enabled`; side effects gated by
   // `sos_test_mode`.
   SOS_ESCALATION: "sos-escalation",
+  // Phase 4 §D'.2 — delayed (5min) auto-escalation from a critical
+  // bypass dispatch when no contact responded. Gated by
+  // `sos_source_critical_bypass_enabled` (default false). The job
+  // calls `autoTriggerSOSFromCriticalBypass`, which is itself a
+  // no-op when the flag is off — so an in-flight queued job is safe
+  // even mid-rollback.
+  CRITICAL_BYPASS_AUTO_ESCALATE: "critical-bypass-auto-escalate",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

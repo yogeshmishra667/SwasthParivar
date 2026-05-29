@@ -71,6 +71,11 @@ export const buildApp = (): Express => {
     }),
   );
   app.use(express.json({ limit: "1mb" }));
+  // Form-encoded body parsing — required by Exotel + Twilio webhook
+  // callbacks (`application/x-www-form-urlencoded`) and the Razorpay
+  // success redirect (future). Capped to avoid OOM on a runaway
+  // vendor payload.
+  app.use(express.urlencoded({ extended: false, limit: "256kb" }));
   app.use(requestIdMiddleware);
   app.use(
     pinoHttp({

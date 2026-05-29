@@ -36,3 +36,9 @@ export const sosResolveSchema = z.object({
 });
 
 export const sosIdParamSchema = z.object({ id: z.uuid() });
+
+export const sosGuardianPatientParamSchema = z.object({ patientId: z.uuid() });
+
+export const sosGuardianTriggerSchema = z.object({
+  clientUuid: z.uuid(),
+});

@@ -259,14 +259,20 @@ describe("POST /api/v1/sos/trigger — idempotency + source guard", () => {
     expect(count).toBe(1);
   });
 
-  it("rejects non-patient_manual trigger sources until §D'.2 lands", async () => {
+  it("rejects guardian_initiated when the per-source flag is off (default)", async () => {
+    // Phase 4 close-out: the source is no longer hard-rejected at
+    // validation. Each source has its own Redis flag (default false)
+    // so ops can enable patient-manual + critical-bypass + guardian-
+    // initiated independently. With no flag flipped, the service
+    // returns 503 SOS_DISABLED — the operational "feature exists,
+    // not yet enabled" status, NOT a validation error.
     const res = await request(app)
       .post("/api/v1/sos/trigger")
       .set("Authorization", `Bearer ${patientToken}`)
       .send({ clientUuid: randomUUID(), source: "guardian_initiated" });
 
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    expect(res.status).toBe(503);
+    expect(res.body.error.code).toBe("SOS_DISABLED");
   });
 });
 
@@ -432,5 +438,151 @@ describe("GET /api/v1/sos/active", () => {
       .get("/api/v1/sos/active")
       .set("Authorization", `Bearer ${token}`);
     expect(after.body.data.active).toBeNull();
+  });
+});
+
+// Phase 4 SOS close-out — coverage for the endpoints added after the
+// Week-13 scaffold landed. These are happy-path + key safety branches
+// only; the failure matrix for vendor wiring is exercised by the unit
+// suite around exotel-voice / twilio-voice.
+
+describe("GET /api/v1/sos/contacts", () => {
+  it("returns the patient's emergency contacts sorted by priority", async () => {
+    const res = await request(app)
+      .get("/api/v1/sos/contacts")
+      .set("Authorization", `Bearer ${patientToken}`);
+    expect(res.status).toBe(200);
+    const contacts = res.body.data.contacts as { name: string; priority: number }[];
+    expect(contacts.length).toBeGreaterThanOrEqual(2);
+    for (let i = 1; i < contacts.length; i++) {
+      expect(contacts[i]!.priority).toBeGreaterThanOrEqual(contacts[i - 1]!.priority);
+    }
+    expect(contacts[0]!.name).toBe("Beta");
+  });
+
+  it("rejects unauthenticated callers with 401", async () => {
+    const res = await request(app).get("/api/v1/sos/contacts");
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("POST /api/v1/sos/trigger — guardian_initiated source guard", () => {
+  it("rejects guardian_initiated when the per-source flag is off (default)", async () => {
+    const res = await request(app)
+      .post("/api/v1/sos/trigger")
+      .set("Authorization", `Bearer ${patientToken}`)
+      .send({ clientUuid: randomUUID(), source: "guardian_initiated" });
+    expect(res.status).toBe(503);
+    expect(res.body.error.code).toBe("SOS_DISABLED");
+  });
+
+  it("rejects critical_bypass_escalation when the per-source flag is off (default)", async () => {
+    const res = await request(app)
+      .post("/api/v1/sos/trigger")
+      .set("Authorization", `Bearer ${patientToken}`)
+      .send({ clientUuid: randomUUID(), source: "critical_bypass_escalation" });
+    expect(res.status).toBe(503);
+    expect(res.body.error.code).toBe("SOS_DISABLED");
+  });
+});
+
+describe("POST /api/v1/sos/guardian/:patientId/trigger", () => {
+  it("rejects callers without an accepted FamilyLink", async () => {
+    const res = await request(app)
+      .post(`/api/v1/sos/guardian/${patientId}/trigger`)
+      .set("Authorization", `Bearer ${otherToken}`)
+      .send({ clientUuid: randomUUID() });
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("FAMILY_NO_ACCESS");
+  });
+});
+
+describe("POST /api/v1/sos/webhooks/twilio/status", () => {
+  it("flips the matching ivr entry to 'answered' on completed human pickup", async () => {
+    // Seed an SOS row with a queued IVR attempt the webhook can match.
+    const ev = await prisma.sOSEvent.create({
+      data: {
+        clientUuid: randomUUID(),
+        userId: patientId,
+        triggerSource: "patient_manual",
+        testMode: false,
+        contactsNotified: [
+          {
+            contactId: "test-c1",
+            stage: "stage_1_auto_dial",
+            channel: "ivr",
+            at: new Date().toISOString(),
+            status: "queued",
+            vendorCallId: "CA_test_sid_1",
+          },
+        ] as unknown as object,
+      },
+    });
+
+    const res = await request(app).post("/api/v1/sos/webhooks/twilio/status").send({
+      CallSid: "CA_test_sid_1",
+      CallStatus: "completed",
+      AnsweredBy: "human",
+      CallDuration: "12",
+    });
+    expect(res.status).toBe(200);
+
+    const row = await prisma.sOSEvent.findUnique({ where: { id: ev.id } });
+    const entries = row!.contactsNotified as unknown as {
+      vendorCallId?: string;
+      status: string;
+    }[];
+    const matched = entries.find((e) => e.vendorCallId === "CA_test_sid_1");
+    expect(matched?.status).toBe("answered");
+  });
+
+  it("ignores busy / no-answer outcomes", async () => {
+    await prisma.sOSEvent.create({
+      data: {
+        clientUuid: randomUUID(),
+        userId: patientId,
+        triggerSource: "patient_manual",
+        testMode: false,
+        contactsNotified: [
+          {
+            contactId: "test-c2",
+            stage: "stage_1_auto_dial",
+            channel: "ivr",
+            at: new Date().toISOString(),
+            status: "queued",
+            vendorCallId: "CA_test_sid_2",
+          },
+        ] as unknown as object,
+      },
+    });
+
+    const res = await request(app).post("/api/v1/sos/webhooks/twilio/status").send({
+      CallSid: "CA_test_sid_2",
+      CallStatus: "completed",
+      AnsweredBy: "machine",
+      CallDuration: "30",
+    });
+    expect(res.status).toBe(200);
+
+    const row = await prisma.sOSEvent.findFirst({
+      where: { triggerSource: "patient_manual" },
+      orderBy: { triggeredAt: "desc" },
+    });
+    const entries = row!.contactsNotified as unknown as {
+      vendorCallId?: string;
+      status: string;
+    }[];
+    const matched = entries.find((e) => e.vendorCallId === "CA_test_sid_2");
+    expect(matched?.status).toBe("queued");
+  });
+});
+
+describe("POST /api/v1/sos/webhooks/exotel/applet", () => {
+  it("returns XML TwiML-like response for the connected leg", async () => {
+    const res = await request(app).post("/api/v1/sos/webhooks/exotel/applet").send({});
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/xml/);
+    expect(res.text).toContain("<Say");
+    expect(res.text).toContain("emergency");
   });
 });
