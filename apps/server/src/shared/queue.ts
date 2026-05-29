@@ -36,6 +36,12 @@ export const QUEUE_NAMES = {
   // `cancelled`. Gated by `sos_enabled`; side effects gated by
   // `sos_test_mode`.
   SOS_ESCALATION: "sos-escalation",
+  // Phase 2 carry-over (Week 17). Hourly tick that walks every active
+  // `HealthCheckSchedule`, runs the pure `evaluateCompliance` on the
+  // last 24h window, and UPSERTs `HealthCheckCompliance` rows by
+  // `(scheduleId, expectedAt)`. Idempotent across re-runs. Gated by
+  // `schedule_compliance_check_enabled` (default true).
+  SCHEDULE_COMPLIANCE_CHECK: "schedule-compliance-check",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

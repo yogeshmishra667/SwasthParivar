@@ -31,8 +31,10 @@ const statusFor = (code: ErrorCode): number => {
     case "GUARDIAN_ALERT_NOT_FOUND":
     case "ADMIN_NOT_FOUND":
     case "SOS_NOT_FOUND":
+    case "SCHEDULE_NOT_FOUND":
       return 404;
     case "FAMILY_INVITE_INVALID":
+    case "SCHEDULE_INVALID":
       return 400;
     case "FAMILY_LINK_EXISTS":
     case "SOS_ALREADY_ACTIVE":
