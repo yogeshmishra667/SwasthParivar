@@ -284,6 +284,8 @@ Twilio is not reliably available in India for outbound voice without enterprise 
 
 **Notification delivery:** SOS guardian pushes use `resolveHouseholdDelivery()` (shipped #82) for the patient's household, but emergency contacts route via `EmergencyContact.userId` (the patient's contacts, not the guardian's). When the patient is a non-primary profile, the SOS push to the household primary's device carries `data.targetUserId=<patient profile>` so a tap opens the app focused on the right profile.
 
+**Emergency-contact population (Phase 1 corrigendum, shipped alongside D'):** the `EmergencyContact` schema and read paths (critical-bypass chain, SOS escalation) were specified in Phase 1, but no CRUD surface was. Without contacts the bypass chain has nothing to dial and SOS has no escalation targets. The `/api/v1/emergency-contacts` module (controller + service + routes + validation + integration tests) was retroactively shipped during Phase 4 §D' to close this gap. Invariants: 5-contact-per-patient cap, dense priority 1..N (cascade-shift on insert/move, renumber on delete), household-scoped authz via `resolveHouseholdMember` (same pattern as `/family`). Mobile management screen + onboarding integration are still pending — see followups list below.
+
 ### D'.3 Drill protocol (new — `docs/runbooks/sos-drill.md`)
 
 Quarterly SOS drill (per CLAUDE.md cadence parity with the DR drill):

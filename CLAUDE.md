@@ -18,11 +18,12 @@ Chronic condition health companion for Indian families. Patients (elderly, 50-70
 ### PHASE 1 (Weeks 1-4) — "Does Papa log daily?"
 
 GLUCOSE ONLY. No BP, no cardiac, no respiratory.
-Tables: User, GlucoseReading, MedicationSchedule, MedicationLog, UserStreak, FeedbackEvent, NotificationState
-Endpoints: auth, glucose logging (manual + voice), medications, dashboard, streaks
+Tables: User, GlucoseReading, MedicationSchedule, MedicationLog, UserStreak, FeedbackEvent, NotificationState, EmergencyContact
+Endpoints: auth, glucose logging (manual + voice), medications, dashboard, streaks, emergency-contacts CRUD
 Core: frictionless logging + habit loop + medicine reminders + immediate feedback
 Voice logging MUST be Phase 1
 Critical-low/high bypass MUST be Phase 1 (glucose < 65 or > 315)
+Emergency contact management MUST be Phase 1 (the bypass chain has nowhere to dial without it; delivered as Phase 1 corrigendum during Phase 4 SOS work — see "Emergency Contacts" section below)
 Shared phone profile switcher MUST be Phase 1
 Success metric: Papa logs 2+ readings/day for 14 consecutive days
 
@@ -397,6 +398,12 @@ POST /api/v1/prescriptions/upload | GET /api/v1/prescriptions/:id | POST /api/v1
 
 POST /api/v1/family/invite | POST /api/v1/family/accept | GET /api/v1/family/patients | GET /api/v1/family/patients/:id/dashboard | GET /api/v1/family/patients/:id/alerts | PUT /api/v1/family/privacy | GET /api/v1/household/profiles | POST /api/v1/household/switch/:userId
 
+### Emergency Contacts (Phase 1)
+
+GET /api/v1/emergency-contacts?targetUserId= | POST /api/v1/emergency-contacts | PUT /api/v1/emergency-contacts/:id | DELETE /api/v1/emergency-contacts/:id
+
+Per-patient cap: 5 contacts. Priority is dense 1..N — inserting or moving a contact to priority P cascades all rows at >= P down by one inside a single transaction; deletes renumber to keep the sequence dense. Authz: caller OR the household primary on a sub-profile's behalf (`targetUserId`, household-scoped via `resolveHouseholdMember` — same pattern as `/family`). Priority-1 is the canonical dialer target for both the Phase 1 critical-low/high bypass and the Phase 4 SOS escalation chain; both read the same rows.
+
 ### Silent Guardian
 
 GET /api/v1/guardian/alerts?patient_id=&type= | POST /api/v1/guardian/alerts/:id/read | GET /api/v1/guardian/daily-summary/:patient_id
@@ -499,13 +506,26 @@ Health: GET /health, /health/deep. Winston: requestId, method, path, status, dur
 
 Free: 3 chats/day, 20 readings/day, 100 req/min. Premium: unlimited. Family: premium × patients.
 
+**Enforcement (all four ceilings are flag-backed, admin-tunable without redeploy):**
+
+| Flag key                   | Surface                    | Keyed by                                    | Where                                                                                     |
+| -------------------------- | -------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `rate_limit.default.free`  | global (per-minute)        | **userId when JWT verifiable, IP fallback** | `defaultRateLimit` middleware (`apps/server/src/shared/middleware/rate-limit.ts`)         |
+| `rate_limit.auth.free`     | pre-auth (per-minute)      | per-IP (intentional — pre-auth brute-force) | `authRateLimit` middleware on send-otp, verify-otp, verify-firebase, refresh, admin login |
+| `rate_limit.chat.free`     | chat (per-day)             | per-userId                                  | Redis counter in `chat.service.ts`                                                        |
+| `rate_limit.readings.free` | glucose readings (per-day) | per-userId                                  | Redis counter in `readings.service.ts`                                                    |
+
+**Critical-bypass override:** glucose values < 65 or > 315 are NEVER rate-limited (hardcoded medical-safety per CLAUDE.md "Critical-Low/High Bypass"). The daily-readings ceiling skips the check for those values.
+
+**NAT defense:** the `default` ceiling keys per-userId because Indian mobile carriers put many users behind one carrier-NAT IP — a per-IP ceiling would mass-throttle real patients sharing an IP during an incident.
+
 ## Caching (Redis)
 
 dashboard 15min. health-score 24hr. hba1c 1hr. food:search 7d. insights 30min. streak 1hr.
 
 ## Error Codes
 
-AUTH_OTP_EXPIRED(401), AUTH_OTP_INVALID(401), AUTH_TOKEN_EXPIRED(401), AUTH_UNAUTHORIZED(403), READING_INVALID_VALUE(400), READING_CONFIRMATION_NEEDED(400), MED_SCHEDULE_NOT_FOUND(404), RX_PENDING_APPROVAL(400), FAMILY_LINK_EXISTS(409), FAMILY_NO_ACCESS(403), CHAT_RATE_LIMITED(429), SOS_ALREADY_ACTIVE(409), REPORT_GENERATING(202), INTERNAL_ERROR(500)
+AUTH_OTP_EXPIRED(401), AUTH_OTP_INVALID(401), AUTH_TOKEN_EXPIRED(401), AUTH_UNAUTHORIZED(403), READING_INVALID_VALUE(400), READING_CONFIRMATION_NEEDED(400), READING_STALE_VERSION(409), MED_SCHEDULE_NOT_FOUND(404), RX_PENDING_APPROVAL(400), FAMILY_LINK_EXISTS(409), FAMILY_NO_ACCESS(403), CHAT_RATE_LIMITED(429), RATE_LIMITED(429), SOS_ALREADY_ACTIVE(409), REPORT_GENERATING(202), INTERNAL_ERROR(500)
 
 ## File Upload
 
