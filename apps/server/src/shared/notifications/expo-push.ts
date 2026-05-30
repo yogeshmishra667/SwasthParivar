@@ -53,8 +53,15 @@ export const sendExpoPush = async (messages: ExpoPushMessage[]): Promise<ExpoPus
     });
 
     if (!res.ok) {
-      logger.error({ status: res.status }, "expo push http error");
-      return messages.map((m) => ({ token: m.to, success: false, errorCode: "HTTP_ERROR" }));
+      // Include the HTTP status in the errorCode so the admin UI and
+      // server logs both have enough context to diagnose without a
+      // separate server-log grep. Common codes:
+      //   401 → EXPO_ACCESS_TOKEN wrong / expired / belongs to wrong project
+      //   429 → rate-limited by Expo
+      //   500 → Expo service error (retry)
+      const errorCode = `HTTP_${res.status}`;
+      logger.error({ status: res.status, errorCode }, "expo push http error");
+      return messages.map((m) => ({ token: m.to, success: false, errorCode }));
     }
 
     const json = (await res.json()) as { data?: ExpoTicket[] };

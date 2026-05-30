@@ -496,6 +496,24 @@ const EXPO_ERROR_HINTS: Record<string, { label: string; fix: string }> = {
     label: "Expo project mismatch",
     fix: "The server's EXPO_ACCESS_TOKEN belongs to a different Expo project than the one that minted this push token. Either unset EXPO_ACCESS_TOKEN (Expo accepts anonymous push with rate limits — fine for dev) OR generate a new token at expo.dev for the account that owns the project in apps/mobile/app.json → eas.projectId.",
   },
+  // HTTP-level errors — server now includes the status code in the code string
+  HTTP_401: {
+    label: "EXPO_ACCESS_TOKEN rejected (401)",
+    fix: "The token is invalid, expired, or belongs to a different Expo account. Check EXPO_ACCESS_TOKEN in apps/server/.env matches the account that owns the project (yogeshmishra667). Restart the server after changing the token.",
+  },
+  HTTP_429: {
+    label: "Expo rate limit hit (429)",
+    fix: "Too many pushes sent from this server in a short window. Wait a minute and try again. If this keeps happening, check for a push loop.",
+  },
+  HTTP_500: {
+    label: "Expo server error (500)",
+    fix: "Expo's push API returned a 500. This is transient — try again in a few seconds. If it persists, check https://status.expo.dev.",
+  },
+  // Kept as fallback for old tokens before the status-code change landed
+  HTTP_ERROR: {
+    label: "HTTP error from Expo (no status code)",
+    fix: "Expo's push API returned a non-2xx response. Check server logs for the exact status. Most common causes: 401 (wrong EXPO_ACCESS_TOKEN), 429 (rate limit), 500 (Expo outage). Restart the server after any .env change.",
+  },
   DeviceNotRegistered: {
     label: "Token expired",
     fix: "The user uninstalled the app, cleared data, or revoked notification permission. The token will be auto-pruned on next Expo response. Ask the user to reinstall or re-grant permission.",
