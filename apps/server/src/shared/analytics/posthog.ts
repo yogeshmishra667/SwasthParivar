@@ -98,7 +98,13 @@ export interface EventPropsMap {
   // one `signal_detected` per persisted SilentGuardianSignal, one
   // `alert_created` per fired GuardianAlert. distinctId is the patient.
   silent_guardian_signal_detected: {
-    source: "med_adherence" | "data_anomaly";
+    source:
+      | "med_adherence"
+      | "data_anomaly"
+      | "chat_sentiment"
+      | "schedule_miss"
+      | "activity_drop"
+      | "cross_signal";
     type: string;
     contribution: number;
   };

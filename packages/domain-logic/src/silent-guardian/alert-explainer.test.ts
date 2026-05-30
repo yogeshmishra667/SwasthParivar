@@ -34,6 +34,35 @@ describe("classifyAlertType", () => {
   it("empty → trend_concern (degenerate; the service never calls it this way)", () => {
     expect(classifyAlertType([])).toBe("trend_concern");
   });
+
+  // Phase 4 §C' — new signal source mappings
+  it("schedule_miss-only → med_adherence (non-adherence category)", () => {
+    expect(classifyAlertType([{ source: "schedule_miss" }])).toBe("med_adherence");
+  });
+
+  it("chat_sentiment-only → trend_concern", () => {
+    expect(classifyAlertType([{ source: "chat_sentiment" }])).toBe("trend_concern");
+  });
+
+  it("activity_drop-only → trend_concern", () => {
+    expect(classifyAlertType([{ source: "activity_drop" }])).toBe("trend_concern");
+  });
+
+  it("cross_signal alone → combined (stacking meta-signal)", () => {
+    expect(classifyAlertType([{ source: "cross_signal" }])).toBe("combined");
+  });
+
+  it("schedule_miss + chat_sentiment → combined (med + trend)", () => {
+    expect(classifyAlertType([{ source: "schedule_miss" }, { source: "chat_sentiment" }])).toBe(
+      "combined",
+    );
+  });
+
+  it("med_adherence + schedule_miss → med_adherence (both non-adherence)", () => {
+    expect(classifyAlertType([{ source: "med_adherence" }, { source: "schedule_miss" }])).toBe(
+      "med_adherence",
+    );
+  });
 });
 
 describe("buildAlertContent — med_adherence", () => {
@@ -176,6 +205,84 @@ describe("buildAlertContent — empty signals (degenerate)", () => {
   it("produces generic trend copy without crashing", () => {
     const out = buildAlertContent({ signals: [], patientName: "A", language: "hi" });
     expect(out.title).toBe("Sugar badh raha hai");
+  });
+});
+
+// Phase 4 §C' — extractFacts coverage for new signal sources.
+describe("buildAlertContent — Phase 4 §C' new sources", () => {
+  it("schedule_miss missedSlots is aggregated into the med_adherence template", () => {
+    // schedule_miss → med_adherence alert type; missedSlots adds to the
+    // missedCount fact used in the copy template.
+    const out = buildAlertContent({
+      signals: [
+        {
+          source: "schedule_miss",
+          signalType: "schedule_miss_streak",
+          rawEvidence: { missedSlots: 4, missedConsecutive: 4, checkType: "glucose" },
+        },
+      ],
+      patientName: "Ramesh ji",
+      language: "en",
+    });
+    expect(out.title).toBe("Medication is being missed");
+    expect(out.explanation).toContain("4 time(s)");
+  });
+
+  it("schedule_miss with null missedSlots does not crash", () => {
+    const out = buildAlertContent({
+      signals: [
+        {
+          source: "schedule_miss",
+          signalType: "schedule_miss_isolated",
+          rawEvidence: {},
+        },
+      ],
+      patientName: "A",
+      language: "en",
+    });
+    expect(out.title).toBe("Medication is being missed");
+  });
+
+  it("chat_sentiment → trend_concern copy without facts interpolated", () => {
+    const out = buildAlertContent({
+      signals: [
+        {
+          source: "chat_sentiment",
+          signalType: "chat_distress_present",
+          rawEvidence: { distressedTurns: 2, totalTurns: 8 },
+        },
+      ],
+      patientName: "Sushila ji",
+      language: "hi",
+    });
+    expect(out.title).toBe("Sugar badh raha hai");
+    expect(out.summary).toContain("Sushila ji");
+  });
+
+  it("cross_signal → combined copy", () => {
+    const out = buildAlertContent({
+      signals: [{ source: "cross_signal", signalType: "cross_signal_stack", rawEvidence: {} }],
+      patientName: "A",
+      language: "en",
+    });
+    expect(out.title).toBe("Needs attention");
+  });
+
+  it("activity_drop → trend_concern copy", () => {
+    const out = buildAlertContent({
+      signals: [
+        {
+          source: "activity_drop",
+          signalType: "activity_drop_present",
+          rawEvidence: { pctDrop: 0.45, slopePerDay: 3 },
+        },
+      ],
+      patientName: "A",
+      language: "en",
+    });
+    expect(out.title).toBe("Sugar is trending up");
+    // slopePerDay 3 is picked up from the activity_drop evidence
+    expect(out.explanation).toContain("3");
   });
 });
 

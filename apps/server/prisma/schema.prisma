@@ -147,6 +147,17 @@ enum ChatCostTier {
 enum SignalSource {
   med_adherence
   data_anomaly
+  // Phase 4 §C' Silent Guardian expansion.
+  //   chat_sentiment — derived from Tier-3 chat exchanges flagged as
+  //                    distressed (CLAUDE.md "Silent Guardian → Signals").
+  //   schedule_miss  — ≥ 3 consecutive HealthCheckCompliance.status='missed'
+  //                    slots for the same schedule.
+  //   activity_drop  — wired-but-dormant (depends on ActivityDaily, Feature I).
+  //   cross_signal   — meta-signal: ≥ 2 other signals firing in the same cycle.
+  chat_sentiment
+  schedule_miss
+  activity_drop
+  cross_signal
 }
 
 // What a fired GuardianAlert is about. `combined` = both a med-adherence
