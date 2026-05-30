@@ -208,6 +208,11 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
       { userId, householdSize: memberIds.length },
       "notification-trigger: zero push tokens in household — skipping",
     );
+    captureAnalyticsEvent("push_zero_recipients", userId, {
+      surface: "notification_trigger",
+      reason: "no_tokens_in_household",
+      household_size: memberIds.length,
+    });
     return;
   }
 

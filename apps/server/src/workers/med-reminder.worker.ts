@@ -5,6 +5,7 @@ import { prisma } from "../shared/database.js";
 import { logger } from "../shared/logger.js";
 import { sendExpoPush } from "../shared/notifications/expo-push.js";
 import { resolveHouseholdDelivery } from "../shared/notifications/household-delivery.js";
+import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
 
 export interface MedReminderJob {
   scheduleId: string;
@@ -63,6 +64,11 @@ export const medReminderWorker: Worker<MedReminderJob> = createWorker<MedReminde
         { userId, scheduleId, householdSize: memberIds.length },
         "med-reminder: zero push tokens in household — local notification only",
       );
+      captureAnalyticsEvent("push_zero_recipients", userId, {
+        surface: "med_reminder",
+        reason: "no_tokens_in_household",
+        household_size: memberIds.length,
+      });
     }
     if (tokens.length > 0) {
       const profileName = memberIds.length > 1 ? schedule.user.name : null;

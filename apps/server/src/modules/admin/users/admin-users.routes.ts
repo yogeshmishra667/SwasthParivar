@@ -62,3 +62,13 @@ adminUsersRouter.post(
   validateParams(userIdParamSchema),
   controller.reactivateUser,
 );
+
+// Diagnostic — fires one non-critical push to every device the user's
+// household has registered. Use to verify push delivery after a user
+// reports notifications aren't arriving. super_admin + ops only.
+adminUsersRouter.post(
+  "/:id/test-push",
+  requireAdminRole("super_admin", "ops"),
+  validateParams(userIdParamSchema),
+  controller.sendTestPush,
+);

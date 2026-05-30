@@ -219,6 +219,23 @@ export function useDeactivateUser(userId: string) {
   });
 }
 
+/**
+ * Diagnostic mutation that fires a single non-critical test push to
+ * every device the user's household has registered. Invalidates the
+ * audit timeline (the action writes one row) but NOT the user detail
+ * payload itself — the devices list doesn't change, only its last-seen
+ * timestamps would refresh on the next natural refetch.
+ */
+export function useSendTestPush(userId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => adminApi.sendTestPush(userId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
+  });
+}
+
 export function useReactivateUser(userId: string) {
   const queryClient = useQueryClient();
   return useMutation({

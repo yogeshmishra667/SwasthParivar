@@ -9,6 +9,7 @@ import type {
   AdminPatientList,
   AdminResourcePanelData,
   AdminRole,
+  AdminTestPushResult,
   AdminTier,
   AdminTierChangeResult,
   AdminTotpEnrollment,
@@ -139,6 +140,14 @@ export const adminApi = {
 
   reactivateUser: (id: string) =>
     request<AdminUserActivationResult>(`/admin/users/${enc(id)}/reactivate`, {
+      method: "POST",
+    }),
+
+  // Diagnostic — fires one non-critical push to every device the
+  // user's household has registered. Returns per-token success counts
+  // so the UI can render which devices accepted the push.
+  sendTestPush: (id: string) =>
+    request<AdminTestPushResult>(`/admin/users/${enc(id)}/test-push`, {
       method: "POST",
     }),
 

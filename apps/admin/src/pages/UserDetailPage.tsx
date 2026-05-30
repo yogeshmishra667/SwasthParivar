@@ -15,10 +15,12 @@ import type {
   AdminResourcePanelMeta,
   AdminTier,
 } from "@swasth/shared-types";
+import { toast } from "sonner";
 import {
   useChangeUserTier,
   useDeactivateUser,
   useReactivateUser,
+  useSendTestPush,
   useUser,
   useUserFeatureMap,
   useUserResource,
@@ -357,6 +359,7 @@ function CoProfilesCard({ profiles }: CoProfilesCardProps) {
 // open the primary profile to debug.
 
 interface DevicesCardProps {
+  userId: string;
   devices: readonly AdminPatientDevice[];
 }
 
@@ -371,11 +374,52 @@ function fmtRelative(iso: string): string {
   return `${days}d ago`;
 }
 
-function DevicesCard({ devices }: DevicesCardProps) {
+function DevicesCard({ userId, devices }: DevicesCardProps) {
+  const sendTestPush = useSendTestPush(userId);
+
+  const handleTestPush = (): void => {
+    sendTestPush
+      .mutateAsync()
+      .then((result) => {
+        if (result.tokensTried === 0) {
+          toast.warning("No registered devices — nothing was sent.");
+          return;
+        }
+        if (result.successCount === result.tokensTried) {
+          toast.success(`Push sent to ${result.successCount} device(s). Check the phone.`);
+        } else if (result.successCount === 0) {
+          toast.error(
+            `All ${result.tokensTried} push(es) rejected by Expo. See result list for codes.`,
+          );
+        } else {
+          toast.warning(
+            `Partial: ${result.successCount}/${result.tokensTried} delivered. See codes below.`,
+          );
+        }
+      })
+      .catch((err: unknown) => {
+        toast.error(humanizeApiError(err, "Test push failed."));
+      });
+  };
+
+  const lastResult = sendTestPush.data;
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm">Registered devices</CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-sm">Registered devices</CardTitle>
+          <RoleGate allow={["super_admin", "ops"]}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={sendTestPush.isPending}
+              onClick={handleTestPush}
+            >
+              {sendTestPush.isPending ? "Sending…" : "Send test push"}
+            </Button>
+          </RoleGate>
+        </div>
         <CardDescription className="text-xs">
           Expo push tokens registered to this user. Empty = the device never hit{" "}
           <code>POST /auth/push-token</code> — only local notifications (med reminders) will fire.
@@ -407,6 +451,27 @@ function DevicesCard({ devices }: DevicesCardProps) {
             ))}
           </ul>
         )}
+        {lastResult && lastResult.results.length > 0 ? (
+          <div className="mt-3 space-y-1 border-t pt-2">
+            <p className="text-xs text-muted-foreground">Last test push result:</p>
+            <ul className="space-y-1 text-xs">
+              {lastResult.results.map((r, i) => (
+                <li
+                  key={`${r.tokenSuffix}-${i}`}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span className="font-mono text-muted-foreground">{r.tokenSuffix}</span>
+                  <Badge
+                    variant={r.success ? "success" : "destructive"}
+                    className="shrink-0 text-xs"
+                  >
+                    {r.success ? "delivered" : (r.errorCode ?? "failed")}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -610,7 +675,7 @@ export function UserDetailPage() {
             </CardContent>
           </Card>
 
-          <DevicesCard devices={devices} />
+          <DevicesCard userId={user.id} devices={devices} />
 
           {coProfiles.length > 0 ? <CoProfilesCard profiles={coProfiles} /> : null}
 
