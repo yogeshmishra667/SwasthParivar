@@ -1,7 +1,10 @@
 # Phase 4 — Best-in-Class Implementation Plan
 
 > Companion to: `CLAUDE.md`, `phase3.md`, `phase-3-progress.md`, `audit-progress.md`, `docs/ARCHITECTURE.md`.
-> Status: draft 2026-05-27. Append a per-session log to `phase-4-progress.md` once the first PR opens.
+>
+> 📍 **For what's remaining + what's next, read `phase4-progress.md`.** That doc is the live status board.
+>
+> This file is the original specification. ✅ markers next to carry-over rows indicate completion; the spec text below each feature remains the source of truth for what the work should look like when it eventually ships.
 
 ---
 
@@ -70,24 +73,15 @@ Cardiac + respiratory `checkType` values are in the enum for forward compatibili
 
 | Item                                                                | Why deferred                                                                                          | Phase 4 home                              | Blocker for                                                       | Status |
 |---------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------|-------------------------------------------|-------------------------------------------------------------------|--------|
-
-| Feature D — SOS (entire feature)                                    | hard-gated "4+ weeks Phase 2 stability"; gate landed but work slid                                    | Week 13 §D' (verbatim phase3.md §579+)    | Patient safety chain completeness                                  | **Code-complete (2026-05-30)** — scaffold #94, mobile UI #95, close-out (real vendor HTTP + webhooks + push + auto-escalate + profile lock + foreground rehydrate) on this PR. Pending ops: 7-day soak + flag flips. |
-| `chat_sentiment` Silent Guardian signal                              | Phase 3 SG scope cap: "basic: med adherence + trend only" (CLAUDE.md)                                  | §C' Silent Guardian expansion             | Full SG signal coverage per CLAUDE.md "Silent Guardian" section    | |
-| `schedule_miss` SG signal                                            | depends on `HealthCheckCompliance` (above)                                                              | §C' + Week 13 carry-over                  | Same                                                               | |
-| `activity_drop` SG signal                                            | depends on `ActivityDaily` (Phase 4 Feature I)                                                          | §C'                                       | Same                                                               | |
-| `cross_signal` SG correlator                                         | depends on other signals being live                                                                    | §C'                                       | Same                                                               | |
-| Exotel/Twilio IVR vendor wrapper                                     | belongs in SOS — never built                                                                            | §D'.1                                     | SOS stage 2 escalation                                             | **Real HTTP wired (2026-05-30)** — Exotel `Connect Application` + Twilio inline-TwiML; status webhooks flip `answered`; `SOS_IVR_NO_VENDOR` pages Sentry |
-| SOS multi-patient guardian routing + profile lock                    | not specced in phase3.md §D — gap discovered in this audit                                              | §D'.2                                     | Shared-device SOS correctness                                      | **Landed (2026-05-30)** — profile switcher locks for chain duration; SOS push uses `resolveHouseholdDelivery()` + `targetUserId`; foreground rehydrate returns to fullscreen |
-
-| Feature D — SOS (entire feature)                                    | hard-gated "4+ weeks Phase 2 stability"; gate landed but work slid                                    | Week 13 §D' (verbatim phase3.md §579+)    | Patient safety chain completeness                                  | **Scaffold landed (2026-05-28)** — server only; mobile §M.4 follows |
-| `chat_sentiment` Silent Guardian signal                              | Phase 3 SG scope cap: "basic: med adherence + trend only" (CLAUDE.md)                                  | §C' Silent Guardian expansion             | Full SG signal coverage per CLAUDE.md "Silent Guardian" section    | **Landed PR-B (2026-05-30)** — scorer + explainer + processor wired; reads `ChatMessage.flagged` in 7d window |
-| `schedule_miss` SG signal                                            | depends on `HealthCheckCompliance` (above)                                                              | §C' + Week 13 carry-over                  | Same                                                               | **Landed PR-B (2026-05-30)** — consecutive-miss threshold (≥3) enforced; reads `HealthCheckCompliance` |
-| `activity_drop` SG signal                                            | depends on `ActivityDaily` (Phase 4 Feature I)                                                          | §C'                                       | Same                                                               | **Wired-but-dormant (2026-05-30)** — scorer + enum + processor branch exist; worker returns score=0 until `ActivityDaily` table lands (Feature I) |
-| `cross_signal` SG correlator                                         | depends on other signals being live                                                                    | §C'                                       | Same                                                               | **Landed PR-B (2026-05-30)** — fires when ≥2 other sources contribute >0 in same analysis cycle |
-| Exotel/Twilio IVR vendor wrapper                                     | belongs in SOS — never built                                                                            | §D'.1                                     | SOS stage 2 escalation                                             | **Stubs landed (2026-05-28)** — safe no-ops; real HTTP in Week 14 |
-| SOS multi-patient guardian routing + profile lock                    | not specced in phase3.md §D — gap discovered in this audit                                              | §D'.2                                     | Shared-device SOS correctness                                      | Deferred to §D'.2 (separate PR) |
-
-| SOS quarterly drill protocol                                         | not specced in phase3.md §D                                                                             | §D'.3 + `docs/runbooks/sos-drill.md`      | Operational readiness                                              | **Landed (2026-05-28)** |
+| Feature D — SOS (entire feature)                                    | hard-gated "4+ weeks Phase 2 stability"; gate landed but work slid                                    | Week 13 §D' (verbatim phase3.md §579+)    | Patient safety chain completeness                                  | ✅ **Code-complete (2026-05-31)** — scaffold #94, mobile UI #95, close-out #99 (real vendor HTTP + webhooks + dispatch + auto-escalate + profile lock + foreground rehydrate), webhook-signature hardening #110, mobile UI clinical redesign #116. **Pending ops: 7-day soak + flag promotion + one real drill** (tracked in `phase4-progress.md`). |
+| `chat_sentiment` Silent Guardian signal                              | Phase 3 SG scope cap: "basic: med adherence + trend only" (CLAUDE.md)                                  | §C' Silent Guardian expansion             | Full SG signal coverage per CLAUDE.md "Silent Guardian" section    | ✅ **Landed PR-B (2026-05-30)** — scorer + explainer + processor wired; reads `ChatMessage.flagged` in 7d window |
+| `schedule_miss` SG signal                                            | depends on `HealthCheckCompliance` (above)                                                              | §C' + Week 13 carry-over                  | Same                                                               | ✅ **Landed PR-B (2026-05-30)** — consecutive-miss threshold (≥3) enforced; reads `HealthCheckCompliance` |
+| `activity_drop` SG signal                                            | depends on `ActivityDaily` (Phase 4 Feature I)                                                          | §C'                                       | Same                                                               | 🟡 **Wired-but-dormant (2026-05-30)** — scorer + enum + processor branch exist; worker returns score=0 until `ActivityDaily` table lands (Feature I, Week 19) |
+| `cross_signal` SG correlator                                         | depends on other signals being live                                                                    | §C'                                       | Same                                                               | ✅ **Landed PR-B (2026-05-30)** — fires when ≥2 other sources contribute >0 in same analysis cycle |
+| Exotel/Twilio IVR vendor wrapper                                     | belongs in SOS — never built                                                                            | §D'.1                                     | SOS stage 2 escalation                                             | ✅ **Real HTTP wired (2026-05-29 PR #99)** — Exotel `Connect Application` + Twilio inline-TwiML; status webhooks flip `answered`; `SOS_IVR_NO_VENDOR` pages Sentry. Webhook signature verification hardened in PR #110. |
+| SOS multi-patient guardian routing + profile lock                    | not specced in phase3.md §D — gap discovered in this audit                                              | §D'.2                                     | Shared-device SOS correctness                                      | ✅ **Landed (2026-05-29 PR #99)** — profile switcher locks for chain duration; SOS push uses `resolveHouseholdDelivery()` + `targetUserId`; foreground rehydrate returns to fullscreen; `critical_bypass_escalation` + `guardian_initiated` sources unlocked behind per-source flags |
+| SOS quarterly drill protocol                                         | not specced in phase3.md §D                                                                             | §D'.3 + `docs/runbooks/sos-drill.md`      | Operational readiness                                              | ✅ **Landed (2026-05-28)** — runbook + first-drill log table |
+| Emergency-contact CRUD (Phase 1 corrigendum)                         | schema in Phase 1 spec but no write surface — gap discovered in SOS UI work (PR #95)                    | §D' (corrigendum)                         | Bypass chain + SOS chain both need this populated                  | ✅ **Landed PR #115 (2026-05-31)** — `/api/v1/emergency-contacts` CRUD + cascade-shift priority + 5-contact cap + household authz. **Mobile management screen pending** (tracked in `phase4-progress.md`). |
 
 **SOS scaffold — what shipped in chunk 3:**
 
@@ -109,13 +103,23 @@ Cardiac + respiratory `checkType` values are in the enum for forward compatibili
 - Integration tests: 14 cases in `apps/server/tests/integration/sos.test.ts` covering kill switch, happy path, testMode snapshot, idempotent retry, source guard, cancel + resolve flows, cross-user 403, 404 for unknown id, and active-event lookup.
 - Drill runbook `docs/runbooks/sos-drill.md` — test-mode + real-mode protocols, pre-flight checklist (7 days zero-false-alarm gate before real-mode), reverse-chronological drill log table.
 
-**Not yet shipped — explicit follow-up scope:**
+**SOS follow-ups — all code-complete:**
 
-- Mobile UI (`phase3.md §M.4` — `SOSButton`, `SOSConfirmationScreen`, `SOSActiveFullscreen`, `SOSDialIntegration`, `SOSAfterActionCard`).
-- Real Exotel + Twilio HTTP request bodies + webhook receivers (Week 14 ramp).
-- `§D'.2` multi-patient guardian routing + profile lock.
-- `§D'.2` `critical_bypass_escalation` + `guardian_initiated` trigger sources (currently rejected at the service layer).
-- The "any contact answered" signal — the worker currently always passes `anyContactAnsweredCall=false` because no vendor webhooks are wired yet.
+- ✅ Mobile UI (PR #95) — `SOSButton`, `SOSConfirmationScreen`, `SOSActiveFullscreen`, `SOSDialIntegration`, `SOSAfterActionCard` + 30 i18n keys (hi + en). Clinical redesign landed in PR #116 (2026-05-31).
+- ✅ Real Exotel + Twilio HTTP wiring (PR #99) — `Calls/connect.json` (Exotel) + `Calls.json` with inline TwiML (Twilio).
+- ✅ Vendor status webhooks (PR #99 + #110) — `POST /api/v1/sos/webhooks/{exotel,twilio}/status` flip `contactsNotified[].status='answered'` on human pickup; Exotel applet XML endpoint serves the TTS body. PR #110 hardened the signature check so a missing header in prod returns 401 instead of bypassing verification.
+- ✅ `§D'.2` multi-patient guardian routing + profile lock (PR #99).
+- ✅ `§D'.2` `critical_bypass_escalation` (delayed 5-min auto-escalate worker) + `guardian_initiated` (FamilyLink-authorised endpoint), both gated by per-source flags (default false).
+- ✅ "Any contact answered" signal — webhook flips `status='answered'`, the worker reads it on the next tick → state machine auto-resolves the chain (`anyContactAnsweredCall=true`).
+- ✅ `GET /api/v1/sos/contacts` + mobile "Call {name}" button in `SOSActiveFullscreen` (PR #95 + #116).
+- ✅ `SOS_IVR_NO_VENDOR` Sentry page when `sos_ivr_enabled=true` and the routed vendor is unconfigured — chain continues with push + SMS.
+
+**Pending operational close-out (no code — tracked in `phase4-progress.md`):**
+
+- Vendor credentialing — `EXOTEL_*`, `TWILIO_*`, `EXOTEL_APPLET_URL`, `PUBLIC_API_BASE_URL` (plus optional `EXOTEL_WEBHOOK_SECRET` for HMAC).
+- **7-day internal test-mode soak** per `docs/runbooks/sos-drill.md` §2 pre-flight.
+- Flag promotion sequence: `sos_enabled` → cohort first, then `sos_ivr_enabled` after vendor verified, then per-source flags (`sos_source_critical_bypass_enabled`, `sos_source_guardian_initiated_enabled`).
+- Execute the §D'.3 drill once and log it in `docs/runbooks/sos-drill.md` §3.
 
 **Phase 3 items verified shipped (no carry-over):** AI Chat (server + mobile + WatermelonDB offline + STT + Tier 2 cache + retention sweep), cross-condition + meal-correlation detectors, basic Silent Guardian (med_adherence + data_anomaly), GuardianAlert + dispatch, anomaly detector (`packages/domain-logic/src/detectors/anomaly.ts`), CC.12 Feature Rollout & Targeting, maintenance-mode middleware, household-aware notifications + profile-aware guardian invites (PR #82), critical-bypass no-recipient paging (PR #80).
 
@@ -124,8 +128,8 @@ Cardiac + respiratory `checkType` values are in the enum for forward compatibili
 | Item                                                  | Why deferred                                                                  | Phase 4 home                                | Blocker for                                       | Status |
 |-------------------------------------------------------|-------------------------------------------------------------------------------|---------------------------------------------|---------------------------------------------------|--------|
 | `User.active` / `deactivatedAt` (suspend a patient)    | patient-facing change, beyond additive admin API                              | Week 13 admin carry-over (new schema field) | **Payments** — can't suspend abusive paying users | **Landed (2026-05-28)** — server + admin UI |
-| Runtime-adjustable rate limits                         | hardcoded in `shared/middleware/rate-limit.ts`; console shows read-only        | §T.2 (folded into tier-aware infra)         | Premium ramp incident playbook                     | |
-| TOTP recovery codes + email-based admin password reset | admin operability only; no patient/revenue impact                              | **Stays deferred → Phase 5**                | Admin self-service recovery (low priority)         | |
+| Runtime-adjustable rate limits                         | hardcoded in `shared/middleware/rate-limit.ts`; console shows read-only        | §T.2 (folded into tier-aware infra)         | Premium ramp incident playbook                     | ✅ **Landed PR #102 (2026-05-29)** — flag-backed ceilings (default + auth + chat + readings), admin console writes them; 30s cache TTL. Subsequent fixes: readings-daily counter actually wired (PR #111), per-user JWT keying on the `default` surface to defeat carrier-NAT mass-throttling (PR #112). |
+| TOTP recovery codes + email-based admin password reset | admin operability only; no patient/revenue impact                              | **Stays deferred → Phase 5**                | Admin self-service recovery (low priority)         | 📌 **Stays deferred → Phase 5** |
 
 **`User.active` admin carry-over — what shipped:**
 
