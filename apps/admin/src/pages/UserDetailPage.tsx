@@ -434,19 +434,26 @@ function DevicesCard({ userId, devices }: DevicesCardProps) {
             {devices.map((d, i) => (
               <li
                 key={`${d.platform}-${d.deviceId ?? "no-device"}-${i}`}
-                className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
+                // Two-line layout: badge + deviceId on row 1, last-seen
+                // on row 2 right-aligned. Keeps long Android build
+                // fingerprints from blowing out the card width without
+                // a brittle truncate that depended on min-w-0 plumbing.
+                className="rounded-md border px-2 py-1.5"
               >
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <Badge variant="outline" className="shrink-0">
                     {d.platform}
                   </Badge>
-                  <span className="font-mono text-muted-foreground truncate">
+                  <span
+                    className="font-mono text-muted-foreground truncate min-w-0"
+                    title={d.deviceId ?? undefined}
+                  >
                     {d.deviceId ?? "no device id"}
                   </span>
                 </div>
-                <span className="text-muted-foreground shrink-0">
+                <div className="mt-0.5 text-right text-muted-foreground">
                   last seen {fmtRelative(d.lastSeenAtIso)}
-                </span>
+                </div>
               </li>
             ))}
           </ul>
@@ -460,7 +467,9 @@ function DevicesCard({ userId, devices }: DevicesCardProps) {
                   key={`${r.tokenSuffix}-${i}`}
                   className="flex items-center justify-between gap-2"
                 >
-                  <span className="font-mono text-muted-foreground">{r.tokenSuffix}</span>
+                  <span className="font-mono text-muted-foreground truncate min-w-0">
+                    {r.tokenSuffix}
+                  </span>
                   <Badge
                     variant={r.success ? "success" : "destructive"}
                     className="shrink-0 text-xs"
@@ -470,10 +479,55 @@ function DevicesCard({ userId, devices }: DevicesCardProps) {
                 </li>
               ))}
             </ul>
+            <PushErrorHint results={lastResult.results} />
           </div>
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+// Maps Expo push-API error codes the admin is likely to see to a
+// human-readable cause + first fix. Surfaces ONE hint per result set:
+// the codes we recognise have one canonical fix each, so the first
+// matched error wins.
+const EXPO_ERROR_HINTS: Record<string, { label: string; fix: string }> = {
+  InvalidCredentials: {
+    label: "Expo project mismatch",
+    fix: "The server's EXPO_ACCESS_TOKEN belongs to a different Expo project than the one that minted this push token. Either unset EXPO_ACCESS_TOKEN (Expo accepts anonymous push with rate limits — fine for dev) OR generate a new token at expo.dev for the account that owns the project in apps/mobile/app.json → eas.projectId.",
+  },
+  DeviceNotRegistered: {
+    label: "Token expired",
+    fix: "The user uninstalled the app, cleared data, or revoked notification permission. The token will be auto-pruned on next Expo response. Ask the user to reinstall or re-grant permission.",
+  },
+  MessageRateExceeded: {
+    label: "Per-device rate limit",
+    fix: "Too many pushes sent to this device in a short window. Wait a minute and try again.",
+  },
+  MismatchSenderId: {
+    label: "Android FCM project mismatch",
+    fix: "The Firebase project in google-services.json doesn't match the one the device's FCM token was registered with. Re-prebuild the mobile app with the correct google-services.json.",
+  },
+  MessageTooBig: {
+    label: "Payload too large",
+    fix: "The push payload exceeds 4 KB. Trim the data field.",
+  },
+};
+
+interface PushErrorHintProps {
+  results: readonly { success: boolean; errorCode?: string }[];
+}
+
+function PushErrorHint({ results }: PushErrorHintProps) {
+  const firstFailure = results.find((r) => !r.success && r.errorCode);
+  if (!firstFailure?.errorCode) return null;
+  const hint = EXPO_ERROR_HINTS[firstFailure.errorCode];
+  if (!hint) return null;
+  return (
+    <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs">
+      <div className="font-medium text-destructive">{hint.label}</div>
+      <div className="mt-0.5 text-muted-foreground">{hint.fix}</div>
+    </div>
   );
 }
 
