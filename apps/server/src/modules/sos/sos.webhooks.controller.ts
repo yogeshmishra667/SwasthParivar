@@ -110,11 +110,17 @@ export const exotelStatusWebhook = async (req: Request, res: Response): Promise<
   const correlationId = body.CustomField ?? null;
   const vendorCallId = body.CallSid ?? null;
 
-  // Optional HMAC verification when the operator has provisioned a
-  // signing secret with Exotel. Reject mismatches.
+  // HMAC verification when the operator has provisioned a signing
+  // secret with Exotel. When a secret is configured, a signature header
+  // is mandatory — a missing header must not bypass verification.
   const secret = env.EXOTEL_WEBHOOK_SECRET;
   const signature = req.header("x-exotel-signature");
-  if (secret && signature) {
+  if (secret) {
+    if (!signature) {
+      logger.warn({ vendorCallId }, "exotel webhook missing signature");
+      res.status(401).end();
+      return;
+    }
     const payload = JSON.stringify(body);
     const expected = createHmac("sha256", secret).update(payload).digest("hex");
     const a = Buffer.from(signature);
@@ -195,9 +201,15 @@ export const twilioStatusWebhook = async (req: Request, res: Response): Promise<
 
   const signature = req.header("x-twilio-signature");
   const authToken = env.TWILIO_AUTH_TOKEN;
-  // We accept unsigned-only-when-unconfigured (dev/test). Signed in
-  // prod is mandatory whenever creds are present.
-  if (authToken && signature) {
+  // We accept unsigned-only-when-unconfigured (dev/test). When the
+  // auth token is present (prod), a signature header is mandatory —
+  // a missing header must not bypass verification.
+  if (authToken) {
+    if (!signature) {
+      logger.warn({ vendorCallId: body.CallSid }, "twilio webhook missing signature");
+      res.status(401).end();
+      return;
+    }
     const proto = req.header("x-forwarded-proto") ?? req.protocol;
     const host = req.header("x-forwarded-host") ?? req.header("host") ?? "";
     const fullUrl = `${proto}://${host}${req.originalUrl}`;
