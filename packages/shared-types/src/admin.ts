@@ -101,6 +101,18 @@ export interface AdminResourcePanelMeta {
   sensitive: boolean;
 }
 
+/** One registered Expo push token for a patient. Tokens are scoped to
+ * the household primary on shared-phone setups, so a non-primary
+ * profile's row will be empty — call out the primary's row instead. */
+export interface AdminPatientDevice {
+  platform: "ios" | "android" | "web";
+  deviceId: string | null;
+  /** ISO 8601. When this device last hit POST /auth/push-token. */
+  lastSeenAtIso: string;
+  /** ISO 8601. When the device first registered. */
+  registeredAtIso: string;
+}
+
 /** The detailed 360° view of one patient user. */
 export interface AdminPatientDetail {
   user: AdminPatientProfile;
@@ -110,6 +122,10 @@ export interface AdminPatientDetail {
   streak: unknown;
   /** NotificationState row, or null. */
   notificationState: unknown;
+  /** Push tokens this user has registered. On a shared-phone household
+   * tokens live under the household primary — a sub-profile's list will
+   * be empty, and ops should look at the primary to debug delivery. */
+  devices: AdminPatientDevice[];
   /** Registered resource panels — each fetched lazily by key. */
   panels: AdminResourcePanelMeta[];
 }

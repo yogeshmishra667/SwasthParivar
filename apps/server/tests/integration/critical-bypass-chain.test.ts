@@ -357,6 +357,59 @@ describe("Critical-bypass full chain (HTTP → service → queue → worker → 
     expect(sendSmsBatchMock).not.toHaveBeenCalled();
   });
 
+  it("solo patient (no guardian contact): patient's own device still gets the push", async () => {
+    // Regression for the bug where `pushTargets.length === 0` short-circuited
+    // the entire push branch, so a solo patient (no family link) never
+    // got the fullscreen-alert push and had to notice the reading visually.
+    const household = await prisma.household.create({ data: {} });
+    const patient = await prisma.user.create({
+      data: {
+        phone: `+9196${Math.floor(10_000_000 + Math.random() * 89_999_999)}`,
+        name: "Solo Patient",
+        age: 70,
+        householdId: household.id,
+        onboardingComplete: true,
+      },
+    });
+    // Patient HAS a device registered, but NO emergency contacts and
+    // NO guardian. Previously this combination produced zero push.
+    const patientPushToken = `ExponentPushToken[${randomUUID()}]`;
+    await prisma.pushToken.create({
+      data: { userId: patient.id, token: patientPushToken, platform: "android" },
+    });
+    const patientToken = jwt.sign(
+      { sub: patient.id, householdId: household.id },
+      process.env.JWT_SECRET!,
+      { expiresIn: "1h" },
+    );
+
+    sendExpoPushMock.mockResolvedValueOnce([{ token: patientPushToken, success: true }]);
+
+    const res = await request(app)
+      .post("/api/v1/readings/glucose")
+      .set("Authorization", `Bearer ${patientToken}`)
+      .send({
+        clientUuid: randomUUID(),
+        valueMgDl: 50,
+        readingType: "fasting",
+        context: "normal",
+        source: "manual",
+        measuredAt: new Date().toISOString(),
+        version: 1,
+      });
+    expect(res.body.data.critical.isCritical).toBe(true);
+
+    const job = await fetchEnqueuedJob(res.body.data.reading.id);
+    expect(job).not.toBeNull();
+    await processCriticalAlert({ data: job.data, id: String(job.id) });
+
+    expect(sendExpoPushMock).toHaveBeenCalled();
+    const firstCall = sendExpoPushMock.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    const messages = firstCall![0] as { to: string }[];
+    expect(messages.map((m) => m.to)).toContain(patientPushToken);
+  });
+
   it("threshold boundary: 65 mg/dL is NOT critical, 64 mg/dL IS critical", async () => {
     // CLAUDE.md: "Thresholds HARDCODED. Not configurable. Medical safety."
     // This test exists so a future change to the threshold constants
