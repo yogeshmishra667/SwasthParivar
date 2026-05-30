@@ -497,3 +497,52 @@ describe("Auth perimeter — deactivated users blocked", () => {
     expect(res.body.error.code).toBe("USER_DEACTIVATED");
   });
 });
+
+// Diagnostic "Send test push" endpoint. The happy-path with real
+// tokens would hit https://exp.host — we don't want CI making outbound
+// calls — so the zero-recipient path is the one we cover here. RBAC +
+// 404 + audit-log are the load-bearing assertions.
+
+describe("Admin Users — POST /:id/test-push", () => {
+  it("returns 0 tokens for a user with no devices, audit row still written", async () => {
+    const patient = await seedPatient();
+
+    const res = await request(app)
+      .post(`/admin/users/${patient.id}/test-push`)
+      .set("Authorization", `Bearer ${operatorToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.targetUserId).toBe(patient.id);
+    expect(res.body.data.tokensTried).toBe(0);
+    expect(res.body.data.successCount).toBe(0);
+    expect(res.body.data.results).toEqual([]);
+
+    // Audit row is written even on the zero-recipient path — that's the
+    // entire point of having this endpoint discoverable.
+    const audit = await request(app)
+      .get("/admin/audit?action=user.test_push_sent")
+      .set("Authorization", `Bearer ${operatorToken}`);
+    expect(audit.status).toBe(200);
+    const row = audit.body.data.records.find((r: any) => r.targetId === patient.id);
+    expect(row).toBeDefined();
+    expect(row.metadata.tokensTried).toBe(0);
+    expect(row.metadata.successCount).toBe(0);
+  });
+
+  it("support role cannot send a test push (403)", async () => {
+    const patient = await seedPatient();
+    const res = await request(app)
+      .post(`/admin/users/${patient.id}/test-push`)
+      .set("Authorization", `Bearer ${supportToken}`);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("ADMIN_FORBIDDEN");
+  });
+
+  it("404 on an unknown user id", async () => {
+    const res = await request(app)
+      .post("/admin/users/00000000-0000-0000-0000-000000000000/test-push")
+      .set("Authorization", `Bearer ${operatorToken}`);
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("ADMIN_NOT_FOUND");
+  });
+});

@@ -160,3 +160,14 @@ export interface AdminUserActivationResult {
   deactivatedAt: string | null;
   deactivationReason: string | null;
 }
+
+/** Result of an admin "Send test push" action against a user. Token
+ *  strings are NEVER exposed (anyone with the token can send a push) —
+ *  only the trailing 8 chars surface so the admin can disambiguate
+ *  multiple devices. */
+export interface AdminTestPushResult {
+  targetUserId: string;
+  tokensTried: number;
+  successCount: number;
+  results: { tokenSuffix: string; success: boolean; errorCode?: string }[];
+}

@@ -160,17 +160,20 @@ export const processCriticalAlert = async (job: Job<CriticalAlertJob>): Promise<
       // have zero tokens — usually means the device never registered)
       // from "guardian contacts unreachable" (the original branch).
       // Both fall through to SMS, but the cause is different.
+      const reason =
+        decision.pushTargets.length === 0
+          ? "no_tokens_in_household"
+          : "no_tokens_for_resolved_recipients";
       log.warn(
-        {
-          userId,
-          guardianContacts: decision.pushTargets.length,
-          reason:
-            decision.pushTargets.length === 0
-              ? "no_push_tokens_in_household"
-              : "no_push_tokens_for_resolved_recipients",
-        },
+        { userId, guardianContacts: decision.pushTargets.length, reason },
         "critical-alert: zero push tokens — falling through to SMS",
       );
+      const householdSize = (await householdUserIds(userId)).length;
+      captureAnalyticsEvent("push_zero_recipients", userId, {
+        surface: "critical_alert",
+        reason,
+        household_size: householdSize,
+      });
     }
   }
 

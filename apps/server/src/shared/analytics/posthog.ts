@@ -198,6 +198,40 @@ export interface EventPropsMap {
     missed_count: number;
     pending_count: number;
   };
+  // Emitted whenever a push-sending worker resolves zero recipients
+  // — the user/household never registered a device token, or all
+  // tokens were pruned by Expo's DeviceNotRegistered cleanup.
+  // distinctId is the patient.
+  //
+  // `surface` identifies which worker emitted (so dashboards can pivot
+  // by feature: a spike in `critical_alert` zero-recipient is medically
+  // urgent; a spike in `med_reminder` is just an opportunity to ask
+  // users to reinstall). `reason` separates "no tokens in household"
+  // from "resolved recipients had no tokens" — same outcome,
+  // different ops response.
+  //
+  // Admin "test-push" emits with `surface: "admin_test"` and
+  // `reason: "no_tokens"` when the target user has no devices.
+  push_zero_recipients: {
+    surface:
+      | "critical_alert"
+      | "med_reminder"
+      | "notification_trigger"
+      | "guardian_alert_dispatch"
+      | "daily_guardian_summary"
+      | "admin_test";
+    reason: "no_tokens_in_household" | "no_tokens_for_resolved_recipients" | "no_tokens";
+    household_size: number;
+  };
+  // Emitted by the admin "Send test push" endpoint. distinctId is the
+  // target patient (not the admin). The admin actor lands in the audit
+  // log via AdminAuditLog; this event powers a delivery-rate dashboard.
+  admin_test_push: {
+    admin_id: string;
+    target_user_id: string;
+    tokens_sent: number;
+    success_count: number;
+  };
 }
 
 export type EventName = keyof EventPropsMap;
