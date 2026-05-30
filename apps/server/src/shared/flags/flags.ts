@@ -102,6 +102,23 @@ const parse = (raw: string | null): FlagValue | null => {
   }
 };
 
+// Defensive cap on a single Redis lookup. The shared ioredis client
+// is configured with `maxRetriesPerRequest: null` (buffer indefinitely
+// across reconnects), so a stuck connection would otherwise block the
+// caller forever — and since Phase 4 §T.2 the rate-limit middleware
+// calls getFlag on every request, that means every request queues
+// behind a dead Redis. Falling back to the default after 250ms keeps
+// the request path live; the next request retries.
+const FLAG_READ_TIMEOUT_MS = 250;
+
+const withTimeout = <T>(p: Promise<T>, ms: number, tag: string): Promise<T> =>
+  Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${tag} timeout after ${ms}ms`)), ms),
+    ),
+  ]);
+
 /**
  * Read a flag. Returns the default value (and does not cache it) when
  * the key is unset, so a later set of the same key is immediately
@@ -115,13 +132,17 @@ export const getFlag = async <T extends FlagValue>(key: string, defaultValue: T)
   }
 
   try {
-    const raw = await redis.get(FLAG_PREFIX + key);
+    const raw = await withTimeout(
+      redis.get(FLAG_PREFIX + key),
+      FLAG_READ_TIMEOUT_MS,
+      `flag read ${key}`,
+    );
     const value = parse(raw);
     cache.set(key, { value, fetchedAt: Date.now() });
     return (value ?? defaultValue) as T;
   } catch (err) {
-    // Redis down → fail safe to default. Critical paths should also
-    // hardcode their "safe" default rather than relying on Redis.
+    // Redis down / slow → fail safe to default. Critical paths should
+    // also hardcode their "safe" default rather than relying on Redis.
     logger.warn({ err, key }, "flag read failed — using default");
     return defaultValue;
   }

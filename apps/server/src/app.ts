@@ -82,9 +82,15 @@ export const buildApp = (): Express => {
       },
     }),
   );
-  app.use(defaultRateLimit);
-
+  // /health probes MUST be reachable independent of the rate-limit
+  // middleware. Since Phase 4 §T.2 the limit ceiling is read from the
+  // flag service (Redis), so gating /health behind it makes liveness
+  // dependent on Redis availability — the smoke test's stub Redis
+  // would hang `redis.get()` forever and curl gets `Connection reset
+  // by peer` after the job timeout. Mount /health FIRST.
   app.use(healthRouter);
+
+  app.use(defaultRateLimit);
 
   // CC.12.7 #1 — global maintenance kill switch. Mounted after the
   // health probes and before the feature routers; exempts /health and
