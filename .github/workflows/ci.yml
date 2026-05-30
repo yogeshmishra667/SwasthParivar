@@ -68,7 +68,7 @@ jobs:
       server_image: ${{ steps.filter.outputs.server_image }}
       admin: ${{ steps.filter.outputs.admin }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - id: filter
         uses: dorny/paths-filter@v3
         with:
@@ -103,7 +103,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: pnpm/action-setup@v4
 
@@ -131,7 +131,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
@@ -154,7 +154,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
@@ -186,7 +186,7 @@ jobs:
     # success pattern — a SKIPPED check is treated as a pass by GitHub.
     if: needs.changes.outputs.domain_logic == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -203,7 +203,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
@@ -225,7 +225,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
@@ -254,7 +254,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
@@ -279,7 +279,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Run gitleaks
@@ -299,7 +299,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: pnpm/action-setup@v4
 
@@ -326,7 +326,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: pnpm/action-setup@v4
 
@@ -361,7 +361,7 @@ jobs:
       BASE_REF: ${{ github.event.pull_request.base.sha }}
       HEAD_REF: ${{ github.event.pull_request.head.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -387,7 +387,7 @@ jobs:
       BASE_REF: ${{ github.event.pull_request.base.sha }}
       HEAD_REF: ${{ github.event.pull_request.head.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -412,7 +412,7 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -453,7 +453,7 @@ jobs:
     # workflow). Mobile-only and docs-only PRs cannot affect the image.
     if: needs.changes.outputs.server_image == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
