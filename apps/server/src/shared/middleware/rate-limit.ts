@@ -19,7 +19,43 @@
 
 import rateLimit from "express-rate-limit";
 import type { Request, Response } from "express";
+import jwt from "jsonwebtoken";
 import { getFlag } from "../flags/index.js";
+import { env } from "../../config/env.js";
+
+// ── key generator ────────────────────────────────────────────────────
+//
+// Rationale: Indian mobile carriers (Jio, Airtel, Vi) put most subscribers
+// behind carrier-grade NAT. Dozens-to-thousands of phones share one
+// public IP. The default `req.ip`-only key would let one chatty user
+// throttle every patient on the same NAT — and worse, an ops tightening
+// of `rate_limit.default.free` during an incident could mass-throttle
+// real patients sharing an IP with a misbehaving bot.
+//
+// Fix: when the caller has a verifiable JWT, key by `user:<sub>`. The
+// JWT is HMAC-verified inline (no DB) so a stale/forged token can't be
+// used to claim someone else's quota. Pre-auth traffic + unverifiable
+// tokens fall back to `ip:<remote>` — same behaviour as before.
+//
+// authRateLimit deliberately stays IP-only because its purpose is
+// pre-auth brute-force protection (`POST /auth/send-otp`, admin login).
+// A per-user key would be useless before the user has a token.
+
+const userIdOrIpKey = (req: Request): string => {
+  const auth = req.headers.authorization;
+  if (auth?.startsWith("Bearer ")) {
+    try {
+      const decoded = jwt.verify(auth.slice(7), env.JWT_SECRET) as { sub?: string };
+      if (decoded.sub) return `user:${decoded.sub}`;
+    } catch {
+      // Invalid / expired / wrong-secret tokens fall through to IP
+      // keying — same quota an unauthenticated caller would get. We
+      // deliberately swallow the error so the auth middleware downstream
+      // is the single source of truth for 401s.
+    }
+  }
+  return `ip:${req.ip ?? "unknown"}`;
+};
 
 // ── flag-backed ceiling helpers ──────────────────────────────────────
 
@@ -43,6 +79,7 @@ export const getReadingsDailyLimit = (): Promise<number> =>
 export const defaultRateLimit = rateLimit({
   windowMs: 60_000,
   limit: (_req: Request, _res: Response): Promise<number> => getDefaultRateLimitCeiling(),
+  keyGenerator: userIdOrIpKey,
   standardHeaders: "draft-7",
   legacyHeaders: false,
 });
