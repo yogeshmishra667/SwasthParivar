@@ -1,17 +1,31 @@
 // Phase 4 Feature D' — Exotel outbound IVR wrapper (India primary).
 //
 // Wraps Exotel's "Connect Application" API for outbound TTS calls.
-// Safe-by-default: when ANY of the required env vars are missing OR
-// when `testMode === true`, the wrapper returns without making a
-// network call and logs what it WOULD have done. This lets us ship
-// the whole SOS surface dark and promote it via a single flag flip
-// later (CLAUDE.md "SOS Test-Mode Default").
+// Safe-by-default: when `testMode === true` OR required env vars
+// are missing, we return early without making any network call.
+// Otherwise we POST to the Exotel REST API and surface the call SID
+// as `vendorCallId` so the dispatcher can correlate the eventual
+// status-callback back to the SOSEvent + contact attempt.
 //
-// The full Exotel API exchange (auth, body shape, status callbacks)
-// is intentionally NOT implemented in this PR — the SOS scaffold
-// lands behind `sos_enabled=false` + `sos_test_mode=true` so no
-// production call path runs through this code. Week 14 ramp wires
-// the real HTTP request + status webhook.
+// API reference: https://developer.exotel.com/api/#call-flows
+//
+//   POST https://api.exotel.com/v1/Accounts/{SID}/Calls/connect.json
+//   Basic auth: API_KEY:API_TOKEN
+//   Form-encoded body:
+//     From       = the contact's E.164 phone (we dial them first)
+//     To         = the Exotel virtual number / app
+//     CallerId   = our verified Exotel virtual number
+//     Url        = absolute URL Exotel POSTs to for the TwiML-like
+//                  applet response (XML with <Say>{script}</Say>)
+//     StatusCallback = absolute URL Exotel POSTs status updates to
+//     CustomField    = `correlationId` so the webhook can find the
+//                      SOSEvent + contact attempt
+//
+// The `applet response` route is `POST /api/v1/sos/webhooks/exotel/applet`
+// (see modules/sos/webhooks). It looks up the correlation id and
+// returns the TTS XML. Decoupling the applet URL from the call
+// request lets ops swap to a static recording later without touching
+// this code.
 
 import { env } from "../../config/env.js";
 import { logger } from "../logger.js";
@@ -25,13 +39,28 @@ interface ExotelCallOptions {
 
 const isConfigured = (): boolean =>
   Boolean(
-    env.EXOTEL_ACCOUNT_SID && env.EXOTEL_API_KEY && env.EXOTEL_API_TOKEN && env.EXOTEL_CALLER_ID,
+    env.EXOTEL_ACCOUNT_SID &&
+    env.EXOTEL_API_KEY &&
+    env.EXOTEL_API_TOKEN &&
+    env.EXOTEL_CALLER_ID &&
+    env.EXOTEL_APPLET_URL &&
+    env.PUBLIC_API_BASE_URL,
   );
+
+const statusCallbackUrl = (): string =>
+  `${(env.PUBLIC_API_BASE_URL ?? "").replace(/\/+$/, "")}/api/v1/sos/webhooks/exotel/status`;
+
+/** Type guard for the Exotel response envelope. */
+const isExotelOk = (body: unknown): body is { Call: { Sid: string; Status?: string } } => {
+  if (typeof body !== "object" || body === null) return false;
+  const call = (body as { Call?: unknown }).Call;
+  if (typeof call !== "object" || call === null) return false;
+  return typeof (call as { Sid?: unknown }).Sid === "string";
+};
 
 export const placeExotelIvrCall = async (
   request: IvrCallRequest,
   options: ExotelCallOptions,
-  // eslint-disable-next-line @typescript-eslint/require-await
 ): Promise<IvrCallResult> => {
   const log = logger.child({
     vendor: "exotel",
@@ -48,24 +77,64 @@ export const placeExotelIvrCall = async (
     log.warn("exotel credentials missing — no call placed");
     return {
       status: "no_vendor_configured",
-      errorMessage: "Exotel credentials missing (EXOTEL_ACCOUNT_SID/API_KEY/API_TOKEN/CALLER_ID)",
+      errorMessage:
+        "Exotel credentials missing (EXOTEL_ACCOUNT_SID/API_KEY/API_TOKEN/CALLER_ID/APPLET_URL/PUBLIC_API_BASE_URL)",
     };
   }
 
-  // Week 14 will replace this branch with the real Exotel POST. For
-  // now ship the scaffold dark: a non-test, configured call is a
-  // no-op + a loud "not implemented" log so anyone who promotes the
-  // flag prematurely sees it. Returning `vendor_error` keeps the
-  // dispatcher honest — it will fall through to the SMS-all-contacts
-  // path rather than treat this as a successful dial.
-  log.error(
-    { scriptLen: request.script.length },
-    "exotel real-call path NOT IMPLEMENTED (phase4 week14) — dispatcher should fall through",
-  );
-  return {
-    status: "vendor_error",
-    errorMessage: "exotel real-call path not yet wired (phase4 week14 scope)",
-  };
+  const url = `https://api.exotel.com/v1/Accounts/${env.EXOTEL_ACCOUNT_SID!}/Calls/connect.json`;
+  const auth = Buffer.from(`${env.EXOTEL_API_KEY!}:${env.EXOTEL_API_TOKEN!}`).toString("base64");
+
+  const body = new URLSearchParams({
+    From: request.to,
+    To: env.EXOTEL_CALLER_ID!,
+    CallerId: env.EXOTEL_CALLER_ID!,
+    Url: env.EXOTEL_APPLET_URL!,
+    StatusCallback: statusCallbackUrl(),
+    StatusCallbackEvents: "terminal",
+    // Surfaced verbatim in every status callback so the webhook can
+    // join the call back to its SOSEvent + contact attempt without
+    // its own state.
+    CustomField: request.correlationId,
+  });
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: body.toString(),
+      // 10s timeout — SOS path can't afford to block a worker tick.
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "<unreadable>");
+      log.error({ status: res.status, body: text.slice(0, 500) }, "exotel call failed");
+      return {
+        status: "vendor_error",
+        errorMessage: `Exotel HTTP ${res.status}: ${text.slice(0, 200)}`,
+      };
+    }
+
+    const json: unknown = await res.json();
+    if (!isExotelOk(json)) {
+      log.error({ json }, "exotel response shape unexpected");
+      return { status: "vendor_error", errorMessage: "Exotel response missing Call.Sid" };
+    }
+
+    log.info({ vendorCallId: json.Call.Sid }, "exotel call queued");
+    return { status: "queued", vendorCallId: json.Call.Sid };
+  } catch (err) {
+    log.error({ err }, "exotel call threw");
+    return {
+      status: "vendor_error",
+      errorMessage: err instanceof Error ? err.message : String(err),
+    };
+  }
 };
 
 /** Re-exported helper so tests can assert the configured-check rule

@@ -17,6 +17,9 @@ import { GlucoseTrendChart, type TrendPoint } from "@/components/dashboard/Gluco
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { SOSButton } from "@/components/sos/SOSButton";
+import { useSOSStore } from "@/stores/sos.store";
+import { useSOSForegroundRehydrate } from "@/hooks/useSOSForegroundRehydrate";
 import { useActiveProfile } from "@/hooks/useActiveProfile";
 import { useProfileStore } from "@/stores/profile.store";
 import { api } from "@/services/api";
@@ -84,6 +87,11 @@ export default function DashboardScreen(): JSX.Element {
   const router = useRouter();
   const profile = useActiveProfile();
   const setHousehold = useProfileStore((s) => s.setHousehold);
+  // Phase 4 §D'.2 — bring the patient back to the SOS fullscreen if
+  // they backgrounded mid-chain. Fires on foreground transitions and
+  // on cold start; idempotent when local state already reflects an
+  // active chain.
+  useSOSForegroundRehydrate();
   const [data, setData] = useState<DashboardData>(EMPTY);
   const [refreshing, setRefreshing] = useState(false);
   const [cacheFetchedAt, setCacheFetchedAt] = useState<string | null>(null);
@@ -364,6 +372,20 @@ export default function DashboardScreen(): JSX.Element {
         </Pressable>
 
         <Button label={t("dashboard.logReading")} onPress={() => router.push("/(tabs)/log")} />
+
+        {/* Phase 4 Feature D' — SOS. Always-visible long-press
+            button. Arming routes to /sos which hosts the full flow.
+            Disabled while a chain is already open so the patient
+            sees the fullscreen overlay, not a second trigger. */}
+        <View className="mt-2 items-center py-3">
+          <SOSButton
+            onArmed={() => {
+              useSOSStore.getState().startConfirming();
+              router.push("/sos");
+            }}
+            disabled={useSOSStore.getState().active !== null}
+          />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

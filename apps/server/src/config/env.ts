@@ -114,9 +114,30 @@ const envSchema = z.object({
   EXOTEL_API_KEY: z.string().optional(),
   EXOTEL_API_TOKEN: z.string().optional(),
   EXOTEL_CALLER_ID: z.string().optional(),
+
+  // URL Exotel POSTs to for the call applet response (an XML body
+  // resembling TwiML — `<Response><Say>…</Say></Response>`). For
+  // SwasthParivar we expose `POST /api/v1/sos/webhooks/exotel/applet`
+  // which generates the per-call TTS from the correlation id. The
+  // env var is the PUBLIC absolute URL Exotel can reach.
+  EXOTEL_APPLET_URL: z.string().optional(),
+  // Optional Exotel webhook signing secret — we HMAC-verify the
+  // status callback when set. Without it we accept the callback as-
+  // is (Exotel does not currently sign by default).
+  EXOTEL_WEBHOOK_SECRET: z.string().optional(),
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_FROM_NUMBER: z.string().optional(),
+  // Twilio status callbacks are signed with the auth token (X-
+  // Twilio-Signature header). The webhook validates the signature
+  // against the absolute URL it received the request at; we don't
+  // need a separate secret env var.
+
+  // Public base URL of the server — used to derive the absolute
+  // status-callback URLs we pass to Exotel + Twilio. Without this
+  // the vendors cannot reach back to us, so the real-call path
+  // refuses to fire and falls back to log-only.
+  PUBLIC_API_BASE_URL: z.string().optional(),
 });
 
 // Production-only required keys — these are nominally optional at the type

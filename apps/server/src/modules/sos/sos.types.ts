@@ -22,6 +22,15 @@ export interface SOSTriggerInput {
   lastReadings?: Record<string, unknown>;
 }
 
+export interface EmergencyContactDto {
+  id: string;
+  name: string;
+  phone: string;
+  relationship: string;
+  priority: number;
+  isGuardian: boolean;
+}
+
 /** Response from /trigger + /resolve + /cancel + GET /active. */
 export interface SOSEventDto {
   id: string;

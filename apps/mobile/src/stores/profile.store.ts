@@ -19,11 +19,19 @@ interface ProfileState {
   lastSwitchedAt: number | null;
   lastActiveAt: number | null;
   profileLockedForLogging: boolean;
+  /** Phase 4 §D'.2 — locked for the duration of an active SOS chain.
+   *  The shared-device profile cannot switch mid-SOS, so a guardian
+   *  reaching the patient on the household primary's phone hands it
+   *  back focused on the right profile. Cleared on SOS resolve /
+   *  cancel via `unlockForSOS`. */
+  profileLockedForSOS: boolean;
   selectorRequired: boolean;
   setHousehold: (id: string, profiles: Profile[], primaryUserId: string | null) => void;
   switchProfile: (id: string) => void;
   lockForLogging: () => void;
   unlock: () => void;
+  lockForSOS: () => void;
+  unlockForSOS: () => void;
   markActive: () => void;
   requestSelector: () => void;
   dismissSelector: () => void;
@@ -38,6 +46,7 @@ const INITIAL = {
   lastSwitchedAt: null,
   lastActiveAt: null,
   profileLockedForLogging: false,
+  profileLockedForSOS: false,
   selectorRequired: false,
 } satisfies Partial<ProfileState>;
 
@@ -51,13 +60,20 @@ export const useProfileStore = create<ProfileState>((set) => ({
       activeProfileId: s.activeProfileId ?? profiles[0]?.id ?? null,
     })),
   switchProfile: (id) =>
-    set((s) => ({
-      activeProfileId: s.profileLockedForLogging ? s.activeProfileId : id,
-      lastSwitchedAt: s.profileLockedForLogging ? s.lastSwitchedAt : Date.now(),
-      selectorRequired: false,
-    })),
+    set((s) => {
+      // Either lock blocks the switch — logging or SOS. Both must
+      // clear before the user can move to another profile.
+      const locked = s.profileLockedForLogging || s.profileLockedForSOS;
+      return {
+        activeProfileId: locked ? s.activeProfileId : id,
+        lastSwitchedAt: locked ? s.lastSwitchedAt : Date.now(),
+        selectorRequired: false,
+      };
+    }),
   lockForLogging: () => set({ profileLockedForLogging: true }),
   unlock: () => set({ profileLockedForLogging: false }),
+  lockForSOS: () => set({ profileLockedForSOS: true }),
+  unlockForSOS: () => set({ profileLockedForSOS: false }),
   markActive: () => set({ lastActiveAt: Date.now() }),
   requestSelector: () => set({ selectorRequired: true }),
   dismissSelector: () => set({ selectorRequired: false }),

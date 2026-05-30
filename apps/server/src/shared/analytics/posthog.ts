@@ -173,6 +173,7 @@ export interface EventPropsMap {
     elapsed_seconds: number;
     false_alarm: boolean;
   };
+
   // Phase 2 carry-over (Week 17) — health-check schedules surface.
   // `schedule_created` fires on POST, `schedule_updated` on PUT.
   // `schedule_compliance_evaluated` is emitted by the hourly cron, ONE

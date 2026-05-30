@@ -25,10 +25,14 @@ import {
   bootstrapDailyGuardianSummaryCron,
 } from "./daily-guardian-summary.worker.js";
 import { sosEscalationWorker } from "./sos-escalation.worker.js";
+
+import { criticalBypassAutoEscalateWorker } from "./critical-bypass-auto-escalate.worker.js";
+
 import {
   scheduleComplianceWorker,
   bootstrapScheduleComplianceCron,
 } from "./schedule-compliance.worker.js";
+
 import { logger } from "../shared/logger.js";
 
 const workers = [
@@ -45,6 +49,9 @@ const workers = [
   guardianAlertDispatchWorker,
   dailyGuardianSummaryWorker,
   sosEscalationWorker,
+
+  criticalBypassAutoEscalateWorker,
+
   scheduleComplianceWorker,
 ];
 
@@ -62,6 +69,9 @@ export const workerNames = [
   "guardian-alert-dispatch",
   "daily-guardian-summary",
   "sos-escalation",
+
+  "critical-bypass-auto-escalate",
+
   "schedule-compliance",
 ];
 
