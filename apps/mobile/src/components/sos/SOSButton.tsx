@@ -1,19 +1,18 @@
 // Phase 4 Feature D' — SOSButton.
 //
-// Always visible on the patient home screen. Long-press for 1s to
-// arm the confirmation flow (phase3.md §M.4: prevents accidental
-// touches in pocket / sleeve). 48dp+ touch target with continuous
-// visual + haptic feedback during the hold so an elderly user can
-// tell the press is registering.
+// Visual: clinical card with a subtle red accent in the resting state.
+// The button is the visual anchor of an otherwise-calm card so the
+// elderly user perceives it as a deliberate, professional emergency
+// surface rather than a panic-button toy.
 //
-// Cross-cutting design:
-//  - NEVER a single-tap trigger (CLAUDE.md "Critical Bypass" /
-//    elderly accessibility — accidental taps are common).
-//  - Hold duration ≥ 1s + a separate 3s confirmation countdown
-//    (SOSConfirmationScreen) before the actual server call. Two
-//    "are you sure" gates by design.
+// Behaviour (unchanged from the initial PR):
+//  - 1-second long-press to arm the confirmation flow (prevents
+//    accidental triggers in pocket / sleeve)
 //  - On release before 1s: cancel silently — no nag, no analytics
-//    event (it was probably a brush).
+//  - Progress fill animates around the inner circle while held so the
+//    patient can tell the press is registering
+//  - 48dp+ touch target enforced via min size, NOT just padding
+//  - Continuous haptic ramp: warning on press-in, critical on arm
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Text, View, AccessibilityInfo } from "react-native";
@@ -24,6 +23,11 @@ import { hapticCritical, hapticWarning } from "@/utils/haptics";
 
 const ARM_HOLD_MS = 1_000;
 const TICK_MS = 50;
+
+// Outer ring is the 48dp+ touch target. The inner pressable circle
+// shrinks slightly while held to confirm the press is being read.
+const OUTER_DIAMETER = 132;
+const INNER_DIAMETER = 96;
 
 interface SOSButtonProps {
   onArmed: () => void;
@@ -70,8 +74,6 @@ export const SOSButton = ({ onArmed, disabled = false }: SOSButtonProps): JSX.El
         setHolding(false);
         setProgress(0);
         hapticCritical();
-        // Announce for screen readers — elderly users on Talkback rely
-        // on this confirmation.
         AccessibilityInfo.announceForAccessibility(t("sos.confirm.title"));
         onArmed();
       }
@@ -79,45 +81,99 @@ export const SOSButton = ({ onArmed, disabled = false }: SOSButtonProps): JSX.El
   }, [disabled, onArmed, stopTimers, t]);
 
   const handlePressOut = useCallback(() => {
-    if (firedRef.current) return; // already fired — handled
+    if (firedRef.current) return;
     stopTimers();
     setHolding(false);
     setProgress(0);
   }, [stopTimers]);
 
-  // Visual progress: shrink the inner ring as the hold completes.
-  const ringScale = 1 - 0.3 * progress;
+  // Visual feedback while held: inner circle shrinks subtly + a red
+  // progress ring rises around it. Both are layered absolutely on top
+  // of the resting circle so the layout never reflows.
+  const innerScale = 1 - 0.06 * progress;
+  const ringOpacity = 0.15 + 0.6 * progress;
 
   return (
-    <View className="items-center">
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t("sos.button.label")}
-        accessibilityHint={t("sos.button.hint")}
-        accessibilityState={{ disabled, busy: holding }}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        disabled={disabled}
-        style={{ minHeight: TOUCH_TARGET_MIN * 2, minWidth: TOUCH_TARGET_MIN * 2 }}
-        className={`h-32 w-32 items-center justify-center rounded-full ${
-          disabled ? "bg-gray-300" : "bg-critical active:bg-red-700"
-        }`}
-      >
-        <View
-          style={{ transform: [{ scale: ringScale }] }}
-          className="h-24 w-24 items-center justify-center rounded-full border-4 border-white"
-        >
-          <Icon name="warning" size={36} color="#FFFFFF" accessibilityLabel="" />
-          <Text className="mt-1 text-important font-bold text-white">SOS</Text>
+    <View className="w-full rounded-3xl border border-red-100 bg-white p-5 shadow-sm">
+      <View className="mb-4 flex-row items-center justify-between">
+        <View>
+          <Text className="text-xs font-semibold uppercase tracking-wider text-red-700">
+            {t("sos.button.label")}
+          </Text>
+          <Text className="mt-1 text-body text-neutral">{t("sos.button.hint")}</Text>
         </View>
-      </Pressable>
-      {holding ? (
-        <Text className="mt-2 text-body text-critical font-semibold">
-          {t("sos.button.longPressHelp")}
+        <View className="rounded-full bg-red-50 px-3 py-1">
+          <Text className="text-xs font-medium text-red-700">24/7</Text>
+        </View>
+      </View>
+
+      <View className="items-center py-2">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("sos.button.label")}
+          accessibilityHint={t("sos.button.hint")}
+          accessibilityState={{ disabled, busy: holding }}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          disabled={disabled}
+          style={{
+            height: OUTER_DIAMETER,
+            width: OUTER_DIAMETER,
+            minHeight: TOUCH_TARGET_MIN * 2,
+            minWidth: TOUCH_TARGET_MIN * 2,
+          }}
+          className="items-center justify-center"
+        >
+          {/* Resting halo — soft red wash that grows visible while held. */}
+          <View
+            style={{
+              position: "absolute",
+              height: OUTER_DIAMETER,
+              width: OUTER_DIAMETER,
+              borderRadius: OUTER_DIAMETER / 2,
+              backgroundColor: "#FEE2E2",
+              opacity: ringOpacity,
+            }}
+            pointerEvents="none"
+          />
+          {/* Inner solid circle — the visible button itself. */}
+          <View
+            style={{
+              height: INNER_DIAMETER,
+              width: INNER_DIAMETER,
+              borderRadius: INNER_DIAMETER / 2,
+              transform: [{ scale: innerScale }],
+              backgroundColor: disabled ? "#D1D5DB" : "#DC2626",
+              shadowColor: "#7F1D1D",
+              shadowOpacity: disabled ? 0 : 0.25,
+              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 6 },
+              elevation: disabled ? 0 : 6,
+            }}
+            className="items-center justify-center"
+          >
+            <Icon name="warning" size={32} color="#FFFFFF" accessibilityLabel="" />
+            <Text className="mt-1 text-sm font-bold tracking-wider text-white">SOS</Text>
+          </View>
+        </Pressable>
+      </View>
+
+      <View className="mt-3 flex-row items-center justify-center gap-1.5">
+        <View
+          style={{
+            height: 6,
+            width: 6,
+            borderRadius: 3,
+            backgroundColor: holding ? "#DC2626" : "#9CA3AF",
+          }}
+        />
+        <Text
+          className={`text-body ${holding ? "font-semibold text-red-700" : "text-neutral"}`}
+          accessibilityLiveRegion="polite"
+        >
+          {holding ? t("sos.button.longPressHelp") : t("sos.button.hint")}
         </Text>
-      ) : (
-        <Text className="mt-2 text-body text-neutral">{t("sos.button.hint")}</Text>
-      )}
+      </View>
     </View>
   );
 };

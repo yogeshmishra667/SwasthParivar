@@ -155,7 +155,13 @@ export default function SOSScreen(): JSX.Element | null {
           // contacts). The fullscreen renders "Call {name}" when
           // present, the generic dialer button otherwise.
           primaryContact={
-            primaryContact ? { name: primaryContact.name, phone: primaryContact.phone } : null
+            primaryContact
+              ? {
+                  name: primaryContact.name,
+                  phone: primaryContact.phone,
+                  relationship: primaryContact.relationship,
+                }
+              : null
           }
           onCancel={() => {
             void onActiveCancel();
