@@ -35,10 +35,23 @@ const KEEP_AWAKE_TAG = "sos-active";
 interface SOSActiveFullscreenProps {
   event: SOSEventDto;
   /** Priority-1 emergency contact when known. The dashboard fetches
-   *  this from the family/contacts service and passes it down. */
-  primaryContact?: { name: string; phone: string } | null;
+   *  this from the family/contacts service and passes it down. The
+   *  `relationship` is shown beneath the name on the contact card
+   *  ("son" / "spouse" / etc.) so the patient can confirm at a glance
+   *  who they're about to dial — not just a context-less number. */
+  primaryContact?: { name: string; phone: string; relationship?: string } | null;
   onCancel: () => void;
 }
+
+// Friendly E.164 → "+91 98 1234 5670" presentation for the contact
+// card. Falls back to the raw phone if the shape doesn't match the
+// expected Indian mobile format — never throws.
+const formatPhone = (phone: string): string => {
+  const cleaned = phone.replace(/[^\d+]/g, "");
+  const match = /^\+91(\d{2})(\d{4})(\d{4})$/.exec(cleaned);
+  if (!match) return phone;
+  return `+91 ${match[1]} ${match[2]} ${match[3]}`;
+};
 
 const stageLabelKey = (stage: SOSStage): string => {
   switch (stage) {
@@ -111,42 +124,108 @@ export const SOSActiveFullscreen = ({
 
   return (
     <SafeAreaView className="flex-1 bg-critical">
-      <View className="flex-1 items-center justify-between p-6">
-        <View className="items-center">
-          <Icon name="warning" size={64} color="#FFFFFF" accessibilityLabel="" />
-          <Text className="mt-4 text-hero font-bold text-white" accessibilityRole="header">
-            {t("sos.active.title")}
-          </Text>
-          <Text className="mt-2 text-center text-important text-white">
-            {t("sos.active.subtitle")}
-          </Text>
-          <View className="mt-4 rounded-md bg-white/20 px-4 py-2">
-            <Text className="text-body text-white">{t(stageLabelKey(event.escalationStage))}</Text>
-          </View>
+      <View className="flex-1 justify-between p-5">
+        {/* Top — test-mode chip (when applicable), big iconography,
+            title + subtitle, stage chip. */}
+        <View>
           {event.testMode ? (
-            <View className="mt-3 rounded-md border border-white bg-white/10 px-3 py-2">
-              <Text className="text-body text-white">{t("sos.active.testModeBadge")}</Text>
+            <View className="self-center rounded-full bg-amber-100 px-3 py-1.5">
+              <Text className="text-xs font-bold uppercase tracking-wider text-amber-800">
+                {t("sos.active.testModeBadge")}
+              </Text>
             </View>
           ) : null}
+
+          <View className="mt-6 items-center">
+            <View
+              style={{
+                height: 88,
+                width: 88,
+                borderRadius: 44,
+                backgroundColor: "rgba(255,255,255,0.15)",
+                borderWidth: 2,
+                borderColor: "rgba(255,255,255,0.4)",
+              }}
+              className="items-center justify-center"
+            >
+              <Icon name="warning" size={48} color="#FFFFFF" accessibilityLabel="" />
+            </View>
+            <Text className="mt-5 text-hero font-bold text-white" accessibilityRole="header">
+              {t("sos.active.title")}
+            </Text>
+            <Text className="mt-2 text-center text-important text-white/90">
+              {t("sos.active.subtitle")}
+            </Text>
+          </View>
+
+          {/* Stage indicator — pill with live region so a screen reader
+              announces transitions as the escalation chain advances. */}
+          <View className="mt-6 self-center flex-row items-center gap-2 rounded-full bg-white/15 px-4 py-2">
+            <View
+              style={{
+                height: 8,
+                width: 8,
+                borderRadius: 4,
+                backgroundColor: "#FFFFFF",
+              }}
+            />
+            <Text className="text-body font-medium text-white" accessibilityLiveRegion="polite">
+              {t(stageLabelKey(event.escalationStage))}
+            </Text>
+          </View>
         </View>
 
-        <View className="w-full gap-3">
-          {primaryContact ? (
-            <Button
-              label={t("sos.active.callPrimaryButton", { name: primaryContact.name })}
-              variant="primary"
-              onPress={handleCallPrimary}
-              style={{ minHeight: 64 }}
-            />
-          ) : (
-            <Button
-              label={t("sos.active.callGenericButton")}
-              variant="primary"
-              onPress={handleCallGeneric}
-              style={{ minHeight: 64 }}
-            />
-          )}
+        {/* Primary-contact card — visual center of gravity. The "Call
+            now" CTA lives INSIDE the card so the patient confirms WHO
+            they're calling before tapping, not after. */}
+        <View className="rounded-3xl bg-white p-5 shadow-2xl">
+          <Text className="text-xs font-semibold uppercase tracking-wider text-red-700">
+            {primaryContact
+              ? t("sos.active.callPrimaryButton", { name: "" }).trim()
+              : t("sos.active.stageFullscreen")}
+          </Text>
 
+          {primaryContact ? (
+            <>
+              <Text className="mt-2 text-hero font-bold text-foreground" numberOfLines={1}>
+                {primaryContact.name}
+              </Text>
+              {primaryContact.relationship ? (
+                <Text className="text-body text-neutral">{primaryContact.relationship}</Text>
+              ) : null}
+              <Text className="mt-1 text-important font-medium text-foreground">
+                {formatPhone(primaryContact.phone)}
+              </Text>
+              <View className="mt-4">
+                <Button
+                  label={t("sos.active.callPrimaryButton", { name: primaryContact.name })}
+                  variant="critical"
+                  onPress={handleCallPrimary}
+                  style={{ minHeight: 64 }}
+                />
+              </View>
+            </>
+          ) : (
+            <>
+              <Text className="mt-2 text-important font-medium text-foreground">
+                {t("sos.active.subtitle")}
+              </Text>
+              <View className="mt-4">
+                <Button
+                  label={t("sos.active.callGenericButton")}
+                  variant="critical"
+                  onPress={handleCallGeneric}
+                  style={{ minHeight: 64 }}
+                />
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* Cancel — gated by the 30s lock. Disabled state shows the
+            remaining seconds + a live region so a screen reader
+            announces the countdown. */}
+        <View>
           <Button
             label={
               canCancel
@@ -156,7 +235,12 @@ export const SOSActiveFullscreen = ({
             variant="ghost"
             disabled={!canCancel}
             onPress={canCancel ? onCancel : undefined}
-            style={{ backgroundColor: "#FFFFFF", opacity: canCancel ? 1 : 0.5 }}
+            style={{
+              backgroundColor: "rgba(255,255,255,0.95)",
+              opacity: canCancel ? 1 : 0.65,
+              minHeight: 52,
+            }}
+            accessibilityLiveRegion="polite"
           />
         </View>
       </View>
