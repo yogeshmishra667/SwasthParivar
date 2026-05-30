@@ -68,12 +68,12 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiBaseUrl": "http://10.157.159.196:4000/api/v1",
+      "apiBaseUrl": "http://10.251.99.196:4000/api/v1",
       "router": {},
       "eas": {
-        "projectId": "7c1ee25d-2bf0-4f69-a9a0-a93301707631"
+        "projectId": "2e01622b-f527-4bfd-a9cc-002327b0babc"
       }
     },
-    "owner": "yogijs"
+    "owner": "yogeshmishra667"
   }
 }
