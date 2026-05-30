@@ -54,6 +54,7 @@ import { logger } from "../../shared/logger.js";
 import { isFeatureEnabled } from "../../shared/rollout.js";
 import { checkIdempotent } from "../../shared/idempotency.js";
 import { capture as captureAnalyticsEvent } from "../../shared/analytics/posthog.js";
+import { getChatDailyLimit } from "../../shared/middleware/rate-limit.js";
 import {
   generateResponse,
   type ClaudeResponse,
@@ -122,10 +123,14 @@ export const sendMessage = async (input: SendMessageInput): Promise<SendMessageR
   ]);
 
   // 3. Rate limit — free tier only.
-  if (user.tier === "free" && dailyCount > env.CHAT_DAILY_FREE_LIMIT) {
+  // Ceiling is flag-controlled (rate_limit.chat.free, default 3 from
+  // CLAUDE.md). env.CHAT_DAILY_FREE_LIMIT is the static fallback kept
+  // for backwards compat; the flag wins when set.
+  const chatLimit = await getChatDailyLimit();
+  if (user.tier === "free" && dailyCount > chatLimit) {
     throw new DomainError(
       "CHAT_RATE_LIMITED",
-      `Daily chat limit (${env.CHAT_DAILY_FREE_LIMIT}) reached. Try again tomorrow.`,
+      `Daily chat limit (${chatLimit}) reached. Try again tomorrow.`,
     );
   }
 
