@@ -25,6 +25,24 @@ export interface ExpoPushResult {
 
 const EXPO_PUSH_ENDPOINT = "https://exp.host/--/api/v2/push/send";
 
+// Per-token Expo errors that mean "this token row is structurally broken
+// and will never deliver again — delete it so the next mobile-app launch
+// can register a clean one." Distinct from transient errors
+// (`MessageRateExceeded`) which we want to retry, and from server-config
+// errors (`InvalidCredentials`) which would delete every token.
+//
+//   DeviceNotRegistered      → token was uninstalled / revoked
+//   PushTooManyExperienceIds → token is bound to multiple Expo projects
+//                              (typically Expo Go + dev/prod build mix);
+//                              Enhanced Security refuses to deliver
+//   MismatchSenderId         → token's FCM sender ID doesn't match the
+//                              project the server is sending from
+const PERMANENT_TOKEN_FAILURE_CODES: ReadonlySet<string> = new Set([
+  "DeviceNotRegistered",
+  "PushTooManyExperienceIds",
+  "MismatchSenderId",
+]);
+
 interface ExpoTicketOk {
   status: "ok";
   id: string;
@@ -123,14 +141,20 @@ export const sendExpoPush = async (messages: ExpoPushMessage[]): Promise<ExpoPus
     });
 
     const invalidTokens = results
-      .filter((r) => r.errorCode === "DeviceNotRegistered")
+      .filter((r) => r.errorCode !== undefined && PERMANENT_TOKEN_FAILURE_CODES.has(r.errorCode))
       .map((r) => r.token);
     if (invalidTokens.length > 0) {
       try {
         const deleted = await prisma.pushToken.deleteMany({
           where: { token: { in: invalidTokens } },
         });
-        logger.info({ count: deleted.count }, "pruned invalid push tokens");
+        logger.info(
+          {
+            count: deleted.count,
+            errorCodes: [...new Set(results.map((r) => r.errorCode).filter(Boolean))],
+          },
+          "pruned permanently-broken push tokens",
+        );
       } catch (err) {
         logger.warn({ err }, "failed to prune invalid push tokens");
       }
