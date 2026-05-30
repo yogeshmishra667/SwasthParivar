@@ -28,6 +28,8 @@ import { chatRouter } from "./modules/chat/chat.routes.js";
 import { configRouter } from "./modules/config/config.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { adminRouter } from "./modules/admin/admin.routes.js";
+import { setupBullBoard } from "./shared/bull-board.js";
+import { requireBullBoardAuth } from "./shared/middleware/bull-board-auth.js";
 
 // Parse TRUST_PROXY env value: "true"/"false"/<int>/<comma list>.
 // Express accepts boolean, integer, or string of comma-separated CIDRs.
@@ -115,6 +117,15 @@ export const buildApp = (): Express => {
   app.use("/api/v1/sos", sosRouter);
   app.use("/api/v1/chat", chatRouter);
   app.use("/api/v1/config", configRouter);
+
+  // Bull-board UI for queue inspection — mounted BEFORE the main admin
+  // router so its routes match first (`/admin/queues/*` would otherwise
+  // hit `adminRouter` and fail Bearer-header auth, which a browser
+  // navigation cannot supply). Guard accepts `?token=` on the initial
+  // navigation, then sets a path-scoped HttpOnly cookie. Limited to
+  // super_admin + ops (same as the Ops page that links to it).
+  app.use("/admin/queues", requireBullBoardAuth, setupBullBoard());
+
   app.use("/admin", adminRouter);
 
   app.use(errorHandler);

@@ -46,7 +46,7 @@ export const QUEUE_NAMES = {
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 
-const bullConnection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+export const bullConnection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
 
 export const createQueue = <T>(name: QueueName): Queue<T> =>
   new Queue<T>(name, {
