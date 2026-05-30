@@ -22,8 +22,11 @@ const queueFor = (name: QueueName): Queue<unknown> => {
 
 export interface QueueStat {
   name: string;
-  /** waiting / active / completed / failed / delayed counts, or null on error. */
-  counts: Record<string, number> | null;
+  waiting: number;
+  active: number;
+  completed: number;
+  failed: number;
+  delayed: number;
   error?: string;
 }
 
@@ -33,10 +36,25 @@ export const getQueueStats = async (): Promise<{ queues: QueueStat[] }> => {
     names.map(async (name): Promise<QueueStat> => {
       try {
         const counts = await queueFor(name).getJobCounts();
-        return { name, counts };
+        return {
+          name,
+          waiting: counts.waiting ?? 0,
+          active: counts.active ?? 0,
+          completed: counts.completed ?? 0,
+          failed: counts.failed ?? 0,
+          delayed: counts.delayed ?? 0,
+        };
       } catch (err) {
         logger.warn({ err, queue: name }, "admin ops: queue stats read failed");
-        return { name, counts: null, error: "unavailable" };
+        return {
+          name,
+          waiting: 0,
+          active: 0,
+          completed: 0,
+          failed: 0,
+          delayed: 0,
+          error: "unavailable",
+        };
       }
     }),
   );
