@@ -7,10 +7,12 @@ import {
 } from "@swasth/domain-logic";
 import { Prisma, type GlucoseReading } from "@prisma/client";
 import { prisma } from "../../shared/database.js";
+import { redis } from "../../shared/redis.js";
 import { logger } from "../../shared/logger.js";
 import { createQueue, QUEUE_NAMES } from "../../shared/queue.js";
 import { capture as captureAnalyticsEvent } from "../../shared/analytics/posthog.js";
 import { checkIdempotent } from "../../shared/idempotency.js";
+import { getReadingsDailyLimit } from "../../shared/middleware/rate-limit.js";
 
 const criticalQueue = createQueue<{
   readingId: string;
@@ -35,6 +37,22 @@ const analyzeQueue = createQueue<{
 const SERVER_TIME_FALLBACK_THRESHOLD_HOURS = 2;
 const TIME_ANOMALY_TRIGGER_COUNT = 2;
 const MS_PER_HOUR = 3_600_000;
+
+// Hardcoded medical-safety thresholds (CLAUDE.md "Critical-Low/High Bypass").
+// Glucose readings outside this band bypass the daily rate limit so a patient
+// in crisis can always log — even at the admin-imposed ceiling of "1/day".
+const GLUCOSE_CRITICAL_LOW = 65;
+const GLUCOSE_CRITICAL_HIGH = 315;
+
+// Daily reading counter — per user, per UTC calendar day. Mirrors
+// `incrementDailyRateCounter` in chat.service.ts for symmetry. TTL is 36h
+// so the key self-expires across the day boundary without a cron sweep.
+const incrementDailyReadingsCounter = async (userId: string): Promise<number> => {
+  const key = `readings:rate:${userId}:${new Date().toISOString().slice(0, 10)}`;
+  const count = await redis.incr(key);
+  if (count === 1) await redis.expire(key, 60 * 60 * 36);
+  return count;
+};
 
 interface CreateReadingInput {
   userId: string;
@@ -133,6 +151,26 @@ export const createGlucoseReading = async (
   const existing = idem.kind === "update" ? idem.existing : null;
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId } });
+
+  // Daily readings rate limit — free tier only, admin-tunable via the
+  // `rate_limit.readings.free` flag (see admin OpsPage). Replays + stale-
+  // version paths already exited above, so we only count fresh inserts and
+  // version-bump updates. Critical-bypass values (< 65 or > 315) always
+  // pass — medical safety overrides the cap.
+  const isCriticalValue =
+    input.valueMgDl < GLUCOSE_CRITICAL_LOW || input.valueMgDl > GLUCOSE_CRITICAL_HIGH;
+  if (user.tier === "free" && !isCriticalValue) {
+    const [dailyCount, dailyLimit] = await Promise.all([
+      incrementDailyReadingsCounter(input.userId),
+      getReadingsDailyLimit(),
+    ]);
+    if (dailyCount > dailyLimit) {
+      throw new DomainError(
+        "RATE_LIMITED",
+        `Daily reading limit (${dailyLimit}) reached. Try again tomorrow.`,
+      );
+    }
+  }
 
   // Increment time-anomaly counter atomically when this reading's client
   // clock is off by > 2hr from the server. The post-increment count drives

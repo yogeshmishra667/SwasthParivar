@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
+import type * as FlagsModuleType from "../../src/shared/flags/index.js";
 
 const runPrisma = (args: string[], opts: { input?: string } = {}): void => {
   const result = spawnSync("npx", ["prisma", ...args], {
@@ -421,6 +422,116 @@ describe("POST /api/v1/readings/glucose", () => {
 
     const refreshed = await prisma.user.findUnique({ where: { id: user.id } });
     expect(refreshed?.timeAnomalyCount).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("POST /api/v1/readings/glucose — daily rate limit (rate_limit.readings.free)", () => {
+  // A fresh user per scenario so the per-day Redis counter starts at zero
+  // independent of the file's shared `accessToken`. We exercise the admin
+  // flag path end-to-end: set the flag low → 2nd save trips RATE_LIMITED;
+  // a critical-bypass value (< 65) saves regardless.
+  const setupFreshUser = async (
+    flagsModule: typeof FlagsModuleType,
+  ): Promise<{ token: string; userId: string }> => {
+    const household = await prisma.household.create({ data: {} });
+    const u = await prisma.user.create({
+      data: {
+        phone: `+9198${Math.floor(Math.random() * 1e10)
+          .toString()
+          .slice(0, 8)}`,
+        name: "Rate Limit Test",
+        age: 60,
+        householdId: household.id,
+        onboardingComplete: true,
+        tier: "free",
+      },
+    });
+    const token = jwt.sign({ sub: u.id, householdId: u.householdId }, process.env.JWT_SECRET!, {
+      expiresIn: "1h",
+    });
+    // Reset Redis counter for the new user (defensive — different UUID each
+    // time but the key namespace is shared).
+    const cacheModule = await import("../../src/shared/redis.js");
+    await cacheModule.redis.del(`readings:rate:${u.id}:${new Date().toISOString().slice(0, 10)}`);
+    flagsModule.__resetFlagCache();
+    return { token, userId: u.id };
+  };
+
+  const postGlucose = async (token: string, valueMgDl: number): Promise<request.Response> => {
+    return await request(app)
+      .post("/api/v1/readings/glucose")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        clientUuid: randomUUID(),
+        valueMgDl,
+        readingType: "fasting",
+        context: "normal",
+        source: "manual",
+        measuredAt: new Date().toISOString(),
+        version: 1,
+      });
+  };
+
+  it("free-tier patient — second save trips RATE_LIMITED when admin sets ceiling=1", async () => {
+    const flagsModule = await import("../../src/shared/flags/index.js");
+    await flagsModule.setFlag("rate_limit.readings.free", 1, "test");
+    flagsModule.__resetFlagCache();
+
+    const { token } = await setupFreshUser(flagsModule);
+
+    const first = await postGlucose(token, 110);
+    expect(first.status).toBe(201);
+
+    const second = await postGlucose(token, 120);
+    expect(second.status).toBe(429);
+    expect(second.body.error.code).toBe("RATE_LIMITED");
+    expect(second.body.error.message).toContain("1");
+
+    // Restore default so other tests in this run aren't affected.
+    await flagsModule.setFlag("rate_limit.readings.free", 20, "test");
+    flagsModule.__resetFlagCache();
+  });
+
+  it("critical-bypass value (< 65) saves even when over the rate limit", async () => {
+    const flagsModule = await import("../../src/shared/flags/index.js");
+    await flagsModule.setFlag("rate_limit.readings.free", 1, "test");
+    flagsModule.__resetFlagCache();
+
+    const { token } = await setupFreshUser(flagsModule);
+
+    // Burn the daily quota with one non-critical save.
+    const first = await postGlucose(token, 110);
+    expect(first.status).toBe(201);
+
+    // Critical-low (< 65) must still go through — medical safety overrides.
+    const criticalLow = await postGlucose(token, 55);
+    expect(criticalLow.status).toBe(201);
+    expect(criticalLow.body.data.critical.isCritical).toBe(true);
+
+    // Critical-high (> 315) — same rule.
+    const criticalHigh = await postGlucose(token, 350);
+    expect(criticalHigh.status).toBe(201);
+    expect(criticalHigh.body.data.critical.isCritical).toBe(true);
+
+    await flagsModule.setFlag("rate_limit.readings.free", 20, "test");
+    flagsModule.__resetFlagCache();
+  });
+
+  it("premium-tier patient — rate limit does not apply", async () => {
+    const flagsModule = await import("../../src/shared/flags/index.js");
+    await flagsModule.setFlag("rate_limit.readings.free", 1, "test");
+    flagsModule.__resetFlagCache();
+
+    const { token, userId } = await setupFreshUser(flagsModule);
+    await prisma.user.update({ where: { id: userId }, data: { tier: "premium" } });
+
+    const first = await postGlucose(token, 110);
+    expect(first.status).toBe(201);
+    const second = await postGlucose(token, 120);
+    expect(second.status).toBe(201);
+
+    await flagsModule.setFlag("rate_limit.readings.free", 20, "test");
+    flagsModule.__resetFlagCache();
   });
 });
 
