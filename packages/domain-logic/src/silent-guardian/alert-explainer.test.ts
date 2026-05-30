@@ -208,6 +208,84 @@ describe("buildAlertContent — empty signals (degenerate)", () => {
   });
 });
 
+// Phase 4 §C' — extractFacts coverage for new signal sources.
+describe("buildAlertContent — Phase 4 §C' new sources", () => {
+  it("schedule_miss missedSlots is aggregated into the med_adherence template", () => {
+    // schedule_miss → med_adherence alert type; missedSlots adds to the
+    // missedCount fact used in the copy template.
+    const out = buildAlertContent({
+      signals: [
+        {
+          source: "schedule_miss",
+          signalType: "schedule_miss_streak",
+          rawEvidence: { missedSlots: 4, missedConsecutive: 4, checkType: "glucose" },
+        },
+      ],
+      patientName: "Ramesh ji",
+      language: "en",
+    });
+    expect(out.title).toBe("Medication is being missed");
+    expect(out.explanation).toContain("4 time(s)");
+  });
+
+  it("schedule_miss with null missedSlots does not crash", () => {
+    const out = buildAlertContent({
+      signals: [
+        {
+          source: "schedule_miss",
+          signalType: "schedule_miss_isolated",
+          rawEvidence: {},
+        },
+      ],
+      patientName: "A",
+      language: "en",
+    });
+    expect(out.title).toBe("Medication is being missed");
+  });
+
+  it("chat_sentiment → trend_concern copy without facts interpolated", () => {
+    const out = buildAlertContent({
+      signals: [
+        {
+          source: "chat_sentiment",
+          signalType: "chat_distress_present",
+          rawEvidence: { distressedTurns: 2, totalTurns: 8 },
+        },
+      ],
+      patientName: "Sushila ji",
+      language: "hi",
+    });
+    expect(out.title).toBe("Sugar badh raha hai");
+    expect(out.summary).toContain("Sushila ji");
+  });
+
+  it("cross_signal → combined copy", () => {
+    const out = buildAlertContent({
+      signals: [{ source: "cross_signal", signalType: "cross_signal_stack", rawEvidence: {} }],
+      patientName: "A",
+      language: "en",
+    });
+    expect(out.title).toBe("Needs attention");
+  });
+
+  it("activity_drop → trend_concern copy", () => {
+    const out = buildAlertContent({
+      signals: [
+        {
+          source: "activity_drop",
+          signalType: "activity_drop_present",
+          rawEvidence: { pctDrop: 0.45, slopePerDay: 3 },
+        },
+      ],
+      patientName: "A",
+      language: "en",
+    });
+    expect(out.title).toBe("Sugar is trending up");
+    // slopePerDay 3 is picked up from the activity_drop evidence
+    expect(out.explanation).toContain("3");
+  });
+});
+
 // ---------------------------------------------------------------------
 // SAFETY property test — verbatim-content / PII leakage (phase3.md C.8).
 // ---------------------------------------------------------------------
