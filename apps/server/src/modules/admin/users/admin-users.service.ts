@@ -72,7 +72,7 @@ export const getUserDetail = async (userId: string): Promise<AdminPatientDetail>
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new DomainError("ADMIN_NOT_FOUND", "patient user not found");
 
-  const [coProfiles, streak, notificationState] = await Promise.all([
+  const [coProfiles, streak, notificationState, deviceRows] = await Promise.all([
     prisma.user.findMany({
       where: { householdId: user.householdId, id: { not: user.id } },
       orderBy: { createdAt: "asc" },
@@ -80,6 +80,19 @@ export const getUserDetail = async (userId: string): Promise<AdminPatientDetail>
     }),
     prisma.userStreak.findUnique({ where: { userId } }),
     prisma.notificationState.findUnique({ where: { userId } }),
+    // Push tokens registered to this user. Token strings themselves
+    // are sensitive (anyone with the token can send a push) — we only
+    // expose platform + deviceId + timestamps to ops, never the token.
+    prisma.pushToken.findMany({
+      where: { userId },
+      select: {
+        platform: true,
+        deviceId: true,
+        lastSeenAt: true,
+        createdAt: true,
+      },
+      orderBy: { lastSeenAt: "desc" },
+    }),
   ]);
 
   return {
@@ -95,6 +108,12 @@ export const getUserDetail = async (userId: string): Promise<AdminPatientDetail>
     coProfiles: coProfiles.map(toListItem),
     streak,
     notificationState,
+    devices: deviceRows.map((d) => ({
+      platform: d.platform as "ios" | "android" | "web",
+      deviceId: d.deviceId ?? null,
+      lastSeenAtIso: d.lastSeenAt.toISOString(),
+      registeredAtIso: d.createdAt.toISOString(),
+    })),
     panels: adminResources().map((r) => ({
       key: r.key,
       label: r.label,

@@ -72,17 +72,77 @@ export const registerForPushNotificationsAsync = async (): Promise<string | null
   return token.data;
 };
 
-export const registerAndSyncPushToken = async (): Promise<void> => {
+/**
+ * Result of the registration attempt. Surfaced so a debug surface (and
+ * Sentry breadcrumbs) can distinguish:
+ *   - `not_a_device` — running on a simulator/emulator without FCM/APNS
+ *   - `expo_go` — bundled inside Expo Go (no remote-push support since SDK 53)
+ *   - `permission_denied` — the user dismissed the OS prompt
+ *   - `no_token` — Expo returned null (project id mismatch, FCM unreachable)
+ *   - `server_post_failed` — POST /auth/push-token failed (auth, network)
+ *   - `synced` — happy path
+ *
+ * The original silent-catch behaviour is preserved; this just makes the
+ * failure mode visible to the caller and to Sentry breadcrumbs.
+ */
+export type PushTokenSyncResult =
+  | { ok: false; reason: "not_a_device" | "expo_go" | "permission_denied" | "no_token" }
+  | { ok: false; reason: "server_post_failed"; error: unknown }
+  | { ok: true; reason: "synced"; token: string };
+
+const probeRegistration = async (): Promise<PushTokenSyncResult> => {
+  if (!Device.isDevice) return { ok: false, reason: "not_a_device" };
+  if (isExpoGo) return { ok: false, reason: "expo_go" };
+
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("default", {
+      name: "default",
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#2563EB",
+    });
+    await Notifications.setNotificationChannelAsync("critical", {
+      name: "Critical health alerts",
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 500, 250, 500],
+      lightColor: "#DC2626",
+      bypassDnd: true,
+    });
+  }
+
+  const existing = await Notifications.getPermissionsAsync();
+  let granted = existing.granted;
+  if (!granted) {
+    const req = await Notifications.requestPermissionsAsync();
+    granted = req.granted;
+  }
+  if (!granted) return { ok: false, reason: "permission_denied" };
+
+  const extra = Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined;
+  const easConfig = Constants.easConfig as { projectId?: string } | null | undefined;
+  const projectId: string | undefined = extra?.eas?.projectId ?? easConfig?.projectId;
+  const token = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+  if (!token.data) return { ok: false, reason: "no_token" };
+  return { ok: true, reason: "synced", token: token.data };
+};
+
+export const registerAndSyncPushToken = async (): Promise<PushTokenSyncResult> => {
+  const probe = await probeRegistration().catch((err): PushTokenSyncResult => {
+    logError("registerAndSyncPushToken.probe", err);
+    return { ok: false, reason: "no_token" };
+  });
+  if (!probe.ok) return probe;
+
   try {
-    const token = await registerForPushNotificationsAsync();
-    if (!token) return;
     await api.post("/auth/push-token", {
-      token,
+      token: probe.token,
       platform: Platform.OS === "ios" ? "ios" : Platform.OS === "android" ? "android" : "web",
       deviceId: Device.osInternalBuildId ?? undefined,
     });
+    return probe;
   } catch (err) {
-    logError("registerAndSyncPushToken", err);
+    logError("registerAndSyncPushToken.post", err);
+    return { ok: false, reason: "server_post_failed", error: err };
   }
 };
 

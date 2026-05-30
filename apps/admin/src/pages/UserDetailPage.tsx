@@ -9,7 +9,12 @@ import {
   ShieldCheck,
   User as UserIcon,
 } from "lucide-react";
-import type { AdminPatientListItem, AdminResourcePanelMeta, AdminTier } from "@swasth/shared-types";
+import type {
+  AdminPatientDevice,
+  AdminPatientListItem,
+  AdminResourcePanelMeta,
+  AdminTier,
+} from "@swasth/shared-types";
 import {
   useChangeUserTier,
   useDeactivateUser,
@@ -340,6 +345,73 @@ function CoProfilesCard({ profiles }: CoProfilesCardProps) {
   );
 }
 
+// ── Devices ──────────────────────────────────────────────────────
+//
+// Shows every Expo push token registered to this user — without
+// exposing the token strings themselves (anyone with the token can
+// send a push). Empty list is the answer to "why is push not
+// reaching this user?": the device never hit POST /auth/push-token.
+//
+// On a shared-phone household tokens live under the PRIMARY user. A
+// sub-profile's list will be empty even when push works — ops should
+// open the primary profile to debug.
+
+interface DevicesCardProps {
+  devices: readonly AdminPatientDevice[];
+}
+
+function fmtRelative(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.round(ms / 60_000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const days = Math.round(hr / 24);
+  return `${days}d ago`;
+}
+
+function DevicesCard({ devices }: DevicesCardProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Registered devices</CardTitle>
+        <CardDescription className="text-xs">
+          Expo push tokens registered to this user. Empty = the device never hit{" "}
+          <code>POST /auth/push-token</code> — only local notifications (med reminders) will fire.
+          On shared-phone households tokens are under the household primary.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {devices.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No push tokens registered.</p>
+        ) : (
+          <ul className="space-y-2 text-xs">
+            {devices.map((d, i) => (
+              <li
+                key={`${d.platform}-${d.deviceId ?? "no-device"}-${i}`}
+                className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
+              >
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="shrink-0">
+                    {d.platform}
+                  </Badge>
+                  <span className="font-mono text-muted-foreground truncate">
+                    {d.deviceId ?? "no device id"}
+                  </span>
+                </div>
+                <span className="text-muted-foreground shrink-0">
+                  last seen {fmtRelative(d.lastSeenAtIso)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Feature map ──────────────────────────────────────────────────
 
 interface FeatureMapCardProps {
@@ -431,7 +503,7 @@ export function UserDetailPage() {
     );
   }
 
-  const { user, coProfiles, streak, notificationState } = data;
+  const { user, coProfiles, streak, notificationState, devices } = data;
 
   return (
     <div className="space-y-6">
@@ -537,6 +609,8 @@ export function UserDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          <DevicesCard devices={devices} />
 
           {coProfiles.length > 0 ? <CoProfilesCard profiles={coProfiles} /> : null}
 
