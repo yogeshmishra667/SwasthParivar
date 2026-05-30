@@ -322,8 +322,16 @@ export interface AdminTestPushResult {
   /** Per-token outcome for the admin UI to render. Token strings are
    * masked: only the trailing 8 chars appear, so the admin sees enough
    * to disambiguate multiple devices without the raw value (anyone with
-   * the token can send a push). */
-  results: { tokenSuffix: string; success: boolean; errorCode?: string }[];
+   * the token can send a push). `errorMessage` carries Expo's
+   * human-readable explanation (e.g. "Push notification rate exceeded"
+   * or project-scope rejection details) so operators can diagnose
+   * without grepping logs. */
+  results: {
+    tokenSuffix: string;
+    success: boolean;
+    errorCode?: string;
+    errorMessage?: string;
+  }[];
 }
 
 const TOKEN_BRACKET_PATTERN = /\[([^\]]+)\]/;
@@ -399,6 +407,7 @@ export const sendTestPush = async (params: {
       tokenSuffix: maskToken(r.token),
       success: r.success,
       ...(r.errorCode ? { errorCode: r.errorCode } : {}),
+      ...(r.errorMessage ? { errorMessage: r.errorMessage } : {}),
     })),
   };
 };
