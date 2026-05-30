@@ -114,6 +114,7 @@ const envSchema = z.object({
   EXOTEL_API_KEY: z.string().optional(),
   EXOTEL_API_TOKEN: z.string().optional(),
   EXOTEL_CALLER_ID: z.string().optional(),
+
   // URL Exotel POSTs to for the call applet response (an XML body
   // resembling TwiML — `<Response><Say>…</Say></Response>`). For
   // SwasthParivar we expose `POST /api/v1/sos/webhooks/exotel/applet`

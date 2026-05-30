@@ -47,26 +47,33 @@ const resolveGuardianPushTokens = async (
   userId: string,
   guardianContactIds: string[],
 ): Promise<string[]> => {
-  if (guardianContactIds.length === 0) return [];
-
-  const contacts = await prisma.emergencyContact.findMany({
-    where: { id: { in: guardianContactIds } },
-    select: { phone: true },
-  });
-  const phones = contacts.map((c) => c.phone);
-  if (phones.length === 0) return [];
-
-  const guardianUsers = await prisma.user.findMany({
-    where: { phone: { in: phones } },
-    select: { id: true },
-  });
-  const guardianUserIds = guardianUsers.map((u) => u.id);
-
-  // Also include the patient's own device (they need the fullscreen
-  // alert trigger). The reading may belong to a non-primary household
-  // profile, whose device token is registered under the household
-  // primary — so resolve the whole household, not just `userId`.
+  // The patient's OWN device must always receive the fullscreen-alert
+  // push — that's how CriticalAlert.tsx triggers in the foreground/
+  // background. Guardian contacts ADD to this set; their absence does
+  // NOT skip the patient's own device. Previously this whole function
+  // short-circuited to `[]` when there were no guardian contacts, which
+  // meant a solo patient (no family link) never got the alert push and
+  // had to notice the reading visually.
   const patientHouseholdIds = await householdUserIds(userId);
+
+  // Guardian-contact resolution is conditional — only runs when contacts
+  // were actually passed in.
+  let guardianUserIds: string[] = [];
+  if (guardianContactIds.length > 0) {
+    const contacts = await prisma.emergencyContact.findMany({
+      where: { id: { in: guardianContactIds } },
+      select: { phone: true },
+    });
+    const phones = contacts.map((c) => c.phone);
+    if (phones.length > 0) {
+      const guardianUsers = await prisma.user.findMany({
+        where: { phone: { in: phones } },
+        select: { id: true },
+      });
+      guardianUserIds = guardianUsers.map((u) => u.id);
+    }
+  }
+
   const tokens = await prisma.pushToken.findMany({
     where: { userId: { in: [...guardianUserIds, ...patientHouseholdIds] } },
     select: { token: true },
@@ -116,7 +123,12 @@ export const processCriticalAlert = async (job: Job<CriticalAlertJob>): Promise<
   let pushSuccessCount = 0;
   const pushFailures: string[] = [];
 
-  if (decision.triggerPush && decision.pushTargets.length > 0) {
+  // The push branch fires whenever the bypass says to, REGARDLESS of
+  // whether guardian contacts exist — the patient's own device is the
+  // primary target (fullscreen alert trigger). Guardian-contact tokens
+  // are additive. Gating on `pushTargets.length > 0` previously skipped
+  // the entire branch for a solo patient with no family link.
+  if (decision.triggerPush) {
     const tokens = await resolveGuardianPushTokens(userId, decision.pushTargets);
     if (tokens.length > 0) {
       const notificationId = randomUUID();
@@ -144,7 +156,24 @@ export const processCriticalAlert = async (job: Job<CriticalAlertJob>): Promise<
         else pushFailures.push(r.token);
       });
     } else {
-      log.warn({ userId }, "no push tokens for guardians — falling through to SMS");
+      // Distinguish "no recipients at all" (patient + guardians both
+      // have zero tokens — usually means the device never registered)
+      // from "guardian contacts unreachable" (the original branch).
+      // Both fall through to SMS, but the cause is different.
+      const reason =
+        decision.pushTargets.length === 0
+          ? "no_tokens_in_household"
+          : "no_tokens_for_resolved_recipients";
+      log.warn(
+        { userId, guardianContacts: decision.pushTargets.length, reason },
+        "critical-alert: zero push tokens — falling through to SMS",
+      );
+      const householdSize = (await householdUserIds(userId)).length;
+      captureAnalyticsEvent("push_zero_recipients", userId, {
+        surface: "critical_alert",
+        reason,
+        household_size: householdSize,
+      });
     }
   }
 

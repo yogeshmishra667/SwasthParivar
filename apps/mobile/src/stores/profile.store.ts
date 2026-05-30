@@ -9,6 +9,11 @@ export interface Profile {
 
 interface ProfileState {
   householdId: string | null;
+  // The household primary — the only User in the household with a real
+  // phone + JWT. CLAUDE.md: "Guardian role requires login → a guardian
+  // is ALWAYS a primary account." Guardian UI (Family tab, invites,
+  // patient dashboards) is hidden when `activeProfileId !== primaryUserId`.
+  primaryUserId: string | null;
   profiles: Profile[];
   activeProfileId: string | null;
   lastSwitchedAt: number | null;
@@ -21,7 +26,7 @@ interface ProfileState {
    *  cancel via `unlockForSOS`. */
   profileLockedForSOS: boolean;
   selectorRequired: boolean;
-  setHousehold: (id: string, profiles: Profile[]) => void;
+  setHousehold: (id: string, profiles: Profile[], primaryUserId: string | null) => void;
   switchProfile: (id: string) => void;
   lockForLogging: () => void;
   unlock: () => void;
@@ -35,6 +40,7 @@ interface ProfileState {
 
 const INITIAL = {
   householdId: null,
+  primaryUserId: null,
   profiles: [],
   activeProfileId: null,
   lastSwitchedAt: null,
@@ -46,9 +52,10 @@ const INITIAL = {
 
 export const useProfileStore = create<ProfileState>((set) => ({
   ...INITIAL,
-  setHousehold: (id, profiles) =>
+  setHousehold: (id, profiles, primaryUserId) =>
     set((s) => ({
       householdId: id,
+      primaryUserId,
       profiles,
       activeProfileId: s.activeProfileId ?? profiles[0]?.id ?? null,
     })),
@@ -81,3 +88,10 @@ export const selectActiveProfile = (s: ProfileState): Profile | null =>
 
 export const isRecentSwitch = (s: ProfileState, withinMs = 30_000): boolean =>
   s.lastSwitchedAt !== null && Date.now() - s.lastSwitchedAt < withinMs;
+
+// True when the active profile is the household primary — the only
+// state in which the Family / guardian UI is allowed to be visible.
+// During pre-login / pre-onboarding (primaryUserId === null) this is
+// false, which keeps the tab hidden until the household is hydrated.
+export const isActiveProfilePrimary = (s: ProfileState): boolean =>
+  s.primaryUserId !== null && s.activeProfileId === s.primaryUserId;

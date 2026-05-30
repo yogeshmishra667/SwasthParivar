@@ -33,7 +33,6 @@ export const scheduleMedReminders = async (
       { scheduleId, userId, timeSlot: slot },
       {
         repeat: { pattern, tz: "Asia/Kolkata", key: repeatKey(scheduleId, slot) },
-        jobId: repeatKey(scheduleId, slot),
       },
     );
   }

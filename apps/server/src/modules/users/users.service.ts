@@ -19,6 +19,7 @@ export const getProfile = async (userId: string) => {
       tier: true,
       timeAnomalyCount: true,
       createdAt: true,
+      household: { select: { primaryUserId: true } },
     },
   });
 
@@ -28,7 +29,11 @@ export const getProfile = async (userId: string) => {
     orderBy: { createdAt: "asc" },
   });
 
-  return { ...user, householdProfiles };
+  // Mobile compares activeUserId against primaryUserId to gate
+  // guardian-only UI. CLAUDE.md: "Guardian role requires login → a
+  // guardian is ALWAYS a primary account."
+  const { household, ...rest } = user;
+  return { ...rest, primaryUserId: household?.primaryUserId ?? null, householdProfiles };
 };
 
 export const updateProfile = async (userId: string, input: UpdateProfileInput) => {

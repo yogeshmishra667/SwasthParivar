@@ -1,9 +1,13 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { AlertCircle, Activity, Database, ServerCog } from "lucide-react";
+import { AlertCircle, Activity, Database, ServerCog, Gauge, Pencil, Send } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useFlag, useSetFlag, useOpsHealth, useOpsQueues, useSetMaintenance } from "@/api/queries";
+import { getAccessToken } from "@/api/client";
 import { humanizeApiError } from "@/lib/errorMessage";
 import { AccessDenied } from "@/components/shared/AccessDenied";
+import { RoleGate } from "@/components/shared/RoleGate";
+import { useAdminRole } from "@/auth/auth-context";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -140,6 +144,21 @@ function QueuesCard() {
             </TableBody>
           </Table>
         )}
+        <div className="mt-4 flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const token = getAccessToken();
+              window.open(
+                `${import.meta.env.VITE_API_BASE_URL ?? ""}/admin/queues?token=${token}`,
+                "_blank",
+              );
+            }}
+          >
+            Open Detailed Queue Dashboard ↗
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -259,6 +278,213 @@ function OtpProviderToggle() {
   );
 }
 
+// ── Rate Limits Card (Phase 4 §T.2) ────────────────────────────────
+// Shows the live flag-backed ceilings and lets super_admin / ops tweak
+// them without a redeploy. Changes take effect within 30s (flag cache
+// TTL). Each input accepts integer values only; the flag service
+// validates + stores on PATCH.
+
+const RATE_LIMIT_FLAGS: { key: string; label: string; unit: string; fallback: number }[] = [
+  { key: "rate_limit.default.free", label: "Global default", unit: "req/min", fallback: 100 },
+  { key: "rate_limit.auth.free", label: "Auth surface", unit: "req/min", fallback: 10 },
+  { key: "rate_limit.chat.free", label: "Chat messages", unit: "per day", fallback: 3 },
+  { key: "rate_limit.readings.free", label: "Readings", unit: "per day", fallback: 20 },
+];
+
+function RateLimitRow({
+  flagKey,
+  label,
+  unit,
+  fallback,
+}: {
+  flagKey: string;
+  label: string;
+  unit: string;
+  fallback: number;
+}) {
+  const { data, isLoading } = useFlag(flagKey);
+  const mutation = useSetFlag(flagKey);
+  const [draft, setDraft] = useState<string>("");
+  const [editing, setEditing] = useState(false);
+  const role = useAdminRole();
+  const canEdit = role === "super_admin" || role === "ops";
+
+  const current = data?.value !== null && data?.value !== undefined ? Number(data.value) : fallback;
+
+  const save = (): void => {
+    const parsed = parseInt(draft, 10);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      toast.error("Must be a positive integer");
+      return;
+    }
+    mutation
+      .mutateAsync(parsed)
+      .then(() => {
+        toast.success(`${label} set to ${parsed}`);
+        setEditing(false);
+      })
+      .catch((err: unknown) => toast.error(humanizeApiError(err, `Failed to update ${label}`)));
+  };
+
+  return (
+    <TableRow>
+      <TableCell className="text-xs font-medium">{label}</TableCell>
+      <TableCell className="text-xs text-muted-foreground font-mono">{flagKey}</TableCell>
+      <TableCell className="text-xs text-muted-foreground">{unit}</TableCell>
+      <TableCell className="text-xs text-right font-mono">
+        {isLoading ? (
+          <Skeleton className="h-7 w-20 ml-auto" />
+        ) : editing ? (
+          <div className="flex items-center justify-end gap-1">
+            <input
+              type="number"
+              min={1}
+              defaultValue={current}
+              className="w-20 h-8 text-xs border rounded px-2 font-mono text-right"
+              onChange={(e) => {
+                setDraft(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") save();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              autoFocus
+            />
+            <Button size="sm" className="h-8 text-xs" onClick={save} disabled={mutation.isPending}>
+              {mutation.isPending ? "…" : "Save"}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 text-xs"
+              onClick={() => {
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : canEdit ? (
+          // Visible input-like affordance: bordered rounded cell with a
+          // pencil icon. Hover lifts the background so the cursor change
+          // alone isn't the only signal. aria-label so screen readers
+          // describe it as "Edit Global default, currently 100".
+          <button
+            type="button"
+            aria-label={`Edit ${label}, currently ${current}`}
+            className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-1 text-xs font-mono hover:bg-accent hover:text-accent-foreground transition-colors min-w-[80px] justify-end"
+            onClick={() => {
+              setDraft(String(current));
+              setEditing(true);
+            }}
+          >
+            <span>{current}</span>
+            <Pencil className="h-3 w-3 text-muted-foreground" />
+          </button>
+        ) : (
+          // Support / analyst roles see the value but cannot edit — show
+          // a read-only badge so it's clear why no pencil appears.
+          <span
+            className="inline-flex items-center gap-2 rounded-md border border-dashed px-3 py-1 text-xs font-mono text-muted-foreground min-w-[80px] justify-end"
+            title="Read-only — requires super_admin or ops"
+          >
+            {current}
+          </span>
+        )}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function RateLimitsCard() {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Gauge className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-sm">Rate Limits</CardTitle>
+        </div>
+        <CardDescription className="text-xs">
+          Live flag-backed ceilings.{" "}
+          <RoleGate
+            allow={["super_admin", "ops"]}
+            fallback={
+              <span>
+                Read-only at your role — <span className="font-medium">super_admin</span> or{" "}
+                <span className="font-medium">ops</span> can edit.
+              </span>
+            }
+          >
+            <span>
+              Click any <Pencil className="inline h-3 w-3 mx-0.5 align-baseline" /> value to edit.
+              Changes take effect within 30s (flag cache TTL).
+            </span>
+          </RoleGate>{" "}
+          Auth + default are req/min; chat + readings are daily free-tier caps.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="text-xs">Surface</TableHead>
+              <TableHead className="text-xs">Flag key</TableHead>
+              <TableHead className="text-xs">Unit</TableHead>
+              <TableHead className="text-xs text-right">Ceiling</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {RATE_LIMIT_FLAGS.map((f) => (
+              <RateLimitRow
+                key={f.key}
+                flagKey={f.key}
+                label={f.label}
+                unit={f.unit}
+                fallback={f.fallback}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Push diagnostics hint ────────────────────────────────────────
+//
+// Test pushes are PER-USER (we need to know which household's tokens
+// to target), so the button lives on `/users/:id` (Devices card).
+// This card on the Ops page tells the operator where to go — without
+// it they'd be hunting for a "send test push" control here.
+
+function PushDiagnosticsCard() {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Send className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-sm">Push delivery diagnostics</CardTitle>
+        </div>
+        <CardDescription className="text-xs">
+          To verify push delivery to a specific user, open their profile and use the{" "}
+          <span className="font-medium">Send test push</span> button on the{" "}
+          <span className="font-medium">Registered devices</span> card. It fires a single
+          non-critical push to every device the user&apos;s household has registered, then shows
+          per-token delivery outcome.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Link
+          to="/users"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+        >
+          Open Users <span aria-hidden>→</span>
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function OpsPage() {
   return (
     <AccessDenied allow={["super_admin", "ops"]}>
@@ -266,7 +492,7 @@ export function OpsPage() {
         <header>
           <h1 className="text-2xl font-semibold tracking-tight">Ops &amp; health</h1>
           <p className="text-sm text-muted-foreground">
-            Backend probes, BullMQ queue depth, and the maintenance kill switch.
+            Backend probes, BullMQ queue depth, maintenance kill switch, and rate-limit ceilings.
           </p>
         </header>
         <HealthCards />
@@ -275,6 +501,8 @@ export function OpsPage() {
           <MaintenanceToggle />
           <OtpProviderToggle />
         </div>
+        <RateLimitsCard />
+        <PushDiagnosticsCard />
       </div>
     </AccessDenied>
   );

@@ -109,3 +109,30 @@ export const reactivateUser = async (req: Request, res: Response): Promise<void>
   }
   ok(res, result);
 };
+
+/**
+ * Admin "Send test push" — fires a single non-critical push to every
+ * device this user's household has registered. Lets ops verify
+ * end-to-end push delivery for a specific user without needing a real
+ * critical reading. Always audited (success OR zero recipients).
+ */
+export const sendTestPush = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const admin = req.admin!;
+
+  const result = await service.sendTestPush({ adminId: admin.id, targetUserId: id });
+
+  await recordAdminAction({
+    adminUserId: admin.id,
+    action: "user.test_push_sent",
+    targetType: "user",
+    targetId: id,
+    metadata: {
+      tokensTried: result.tokensTried,
+      successCount: result.successCount,
+    },
+    ip: req.ip,
+  });
+
+  ok(res, result);
+};

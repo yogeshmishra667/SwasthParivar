@@ -9,11 +9,18 @@ import {
   ShieldCheck,
   User as UserIcon,
 } from "lucide-react";
-import type { AdminPatientListItem, AdminResourcePanelMeta, AdminTier } from "@swasth/shared-types";
+import type {
+  AdminPatientDevice,
+  AdminPatientListItem,
+  AdminResourcePanelMeta,
+  AdminTier,
+} from "@swasth/shared-types";
+import { toast } from "sonner";
 import {
   useChangeUserTier,
   useDeactivateUser,
   useReactivateUser,
+  useSendTestPush,
   useUser,
   useUserFeatureMap,
   useUserResource,
@@ -340,6 +347,208 @@ function CoProfilesCard({ profiles }: CoProfilesCardProps) {
   );
 }
 
+// ── Devices ──────────────────────────────────────────────────────
+//
+// Shows every Expo push token registered to this user — without
+// exposing the token strings themselves (anyone with the token can
+// send a push). Empty list is the answer to "why is push not
+// reaching this user?": the device never hit POST /auth/push-token.
+//
+// On a shared-phone household tokens live under the PRIMARY user. A
+// sub-profile's list will be empty even when push works — ops should
+// open the primary profile to debug.
+
+interface DevicesCardProps {
+  userId: string;
+  devices: readonly AdminPatientDevice[];
+}
+
+function fmtRelative(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.round(ms / 60_000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const days = Math.round(hr / 24);
+  return `${days}d ago`;
+}
+
+function DevicesCard({ userId, devices }: DevicesCardProps) {
+  const sendTestPush = useSendTestPush(userId);
+
+  const handleTestPush = (): void => {
+    sendTestPush
+      .mutateAsync()
+      .then((result) => {
+        if (result.tokensTried === 0) {
+          toast.warning("No registered devices — nothing was sent.");
+          return;
+        }
+        if (result.successCount === result.tokensTried) {
+          toast.success(`Push sent to ${result.successCount} device(s). Check the phone.`);
+        } else if (result.successCount === 0) {
+          toast.error(
+            `All ${result.tokensTried} push(es) rejected by Expo. See result list for codes.`,
+          );
+        } else {
+          toast.warning(
+            `Partial: ${result.successCount}/${result.tokensTried} delivered. See codes below.`,
+          );
+        }
+      })
+      .catch((err: unknown) => {
+        toast.error(humanizeApiError(err, "Test push failed."));
+      });
+  };
+
+  const lastResult = sendTestPush.data;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-sm">Registered devices</CardTitle>
+          <RoleGate allow={["super_admin", "ops"]}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={sendTestPush.isPending}
+              onClick={handleTestPush}
+            >
+              {sendTestPush.isPending ? "Sending…" : "Send test push"}
+            </Button>
+          </RoleGate>
+        </div>
+        <CardDescription className="text-xs">
+          Expo push tokens registered to this user. Empty = the device never hit{" "}
+          <code>POST /auth/push-token</code> — only local notifications (med reminders) will fire.
+          On shared-phone households tokens are under the household primary.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {devices.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No push tokens registered.</p>
+        ) : (
+          <ul className="space-y-2 text-xs">
+            {devices.map((d, i) => (
+              <li
+                key={`${d.platform}-${d.deviceId ?? "no-device"}-${i}`}
+                // Two-line layout: badge + deviceId on row 1, last-seen
+                // on row 2 right-aligned. Keeps long Android build
+                // fingerprints from blowing out the card width without
+                // a brittle truncate that depended on min-w-0 plumbing.
+                className="rounded-md border px-2 py-1.5"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <Badge variant="outline" className="shrink-0">
+                    {d.platform}
+                  </Badge>
+                  <span
+                    className="font-mono text-muted-foreground truncate min-w-0"
+                    title={d.deviceId ?? undefined}
+                  >
+                    {d.deviceId ?? "no device id"}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-right text-muted-foreground">
+                  last seen {fmtRelative(d.lastSeenAtIso)}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {lastResult && lastResult.results.length > 0 ? (
+          <div className="mt-3 space-y-1 border-t pt-2">
+            <p className="text-xs text-muted-foreground">Last test push result:</p>
+            <ul className="space-y-1 text-xs">
+              {lastResult.results.map((r, i) => (
+                <li
+                  key={`${r.tokenSuffix}-${i}`}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span className="font-mono text-muted-foreground truncate min-w-0">
+                    {r.tokenSuffix}
+                  </span>
+                  <Badge
+                    variant={r.success ? "success" : "destructive"}
+                    className="shrink-0 text-xs"
+                  >
+                    {r.success ? "delivered" : (r.errorCode ?? "failed")}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+            <PushErrorHint results={lastResult.results} />
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Maps Expo push-API error codes the admin is likely to see to a
+// human-readable cause + first fix. Surfaces ONE hint per result set:
+// the codes we recognise have one canonical fix each, so the first
+// matched error wins.
+const EXPO_ERROR_HINTS: Record<string, { label: string; fix: string }> = {
+  InvalidCredentials: {
+    label: "Expo project mismatch",
+    fix: "The server's EXPO_ACCESS_TOKEN belongs to a different Expo project than the one that minted this push token. Either unset EXPO_ACCESS_TOKEN (Expo accepts anonymous push with rate limits — fine for dev) OR generate a new token at expo.dev for the account that owns the project in apps/mobile/app.json → eas.projectId.",
+  },
+  // HTTP-level errors — server now includes the status code in the code string
+  HTTP_401: {
+    label: "EXPO_ACCESS_TOKEN rejected (401)",
+    fix: "The token is invalid, expired, or belongs to a different Expo account. Check EXPO_ACCESS_TOKEN in apps/server/.env matches the account that owns the project (yogeshmishra667). Restart the server after changing the token.",
+  },
+  HTTP_429: {
+    label: "Expo rate limit hit (429)",
+    fix: "Too many pushes sent from this server in a short window. Wait a minute and try again. If this keeps happening, check for a push loop.",
+  },
+  HTTP_500: {
+    label: "Expo server error (500)",
+    fix: "Expo's push API returned a 500. This is transient — try again in a few seconds. If it persists, check https://status.expo.dev.",
+  },
+  // Kept as fallback for old tokens before the status-code change landed
+  HTTP_ERROR: {
+    label: "HTTP error from Expo (no status code)",
+    fix: "Expo's push API returned a non-2xx response. Check server logs for the exact status. Most common causes: 401 (wrong EXPO_ACCESS_TOKEN), 429 (rate limit), 500 (Expo outage). Restart the server after any .env change.",
+  },
+  DeviceNotRegistered: {
+    label: "Token expired",
+    fix: "The user uninstalled the app, cleared data, or revoked notification permission. The token will be auto-pruned on next Expo response. Ask the user to reinstall or re-grant permission.",
+  },
+  MessageRateExceeded: {
+    label: "Per-device rate limit",
+    fix: "Too many pushes sent to this device in a short window. Wait a minute and try again.",
+  },
+  MismatchSenderId: {
+    label: "Android FCM project mismatch",
+    fix: "The Firebase project in google-services.json doesn't match the one the device's FCM token was registered with. Re-prebuild the mobile app with the correct google-services.json.",
+  },
+  MessageTooBig: {
+    label: "Payload too large",
+    fix: "The push payload exceeds 4 KB. Trim the data field.",
+  },
+};
+
+interface PushErrorHintProps {
+  results: readonly { success: boolean; errorCode?: string }[];
+}
+
+function PushErrorHint({ results }: PushErrorHintProps) {
+  const firstFailure = results.find((r) => !r.success && r.errorCode);
+  if (!firstFailure?.errorCode) return null;
+  const hint = EXPO_ERROR_HINTS[firstFailure.errorCode];
+  if (!hint) return null;
+  return (
+    <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs">
+      <div className="font-medium text-destructive">{hint.label}</div>
+      <div className="mt-0.5 text-muted-foreground">{hint.fix}</div>
+    </div>
+  );
+}
+
 // ── Feature map ──────────────────────────────────────────────────
 
 interface FeatureMapCardProps {
@@ -431,7 +640,7 @@ export function UserDetailPage() {
     );
   }
 
-  const { user, coProfiles, streak, notificationState } = data;
+  const { user, coProfiles, streak, notificationState, devices } = data;
 
   return (
     <div className="space-y-6">
@@ -537,6 +746,8 @@ export function UserDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          <DevicesCard userId={user.id} devices={devices} />
 
           {coProfiles.length > 0 ? <CoProfilesCard profiles={coProfiles} /> : null}
 

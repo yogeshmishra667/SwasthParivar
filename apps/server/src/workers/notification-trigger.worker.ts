@@ -203,7 +203,18 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
   // resolve delivery across the household so the shared device still
   // receives this profile's nudge.
   const { memberIds, tokens } = await resolveHouseholdDelivery(userId);
-  if (tokens.length === 0) return;
+  if (tokens.length === 0) {
+    logger.warn(
+      { userId, householdSize: memberIds.length },
+      "notification-trigger: zero push tokens in household — skipping",
+    );
+    captureAnalyticsEvent("push_zero_recipients", userId, {
+      surface: "notification_trigger",
+      reason: "no_tokens_in_household",
+      household_size: memberIds.length,
+    });
+    return;
+  }
 
   // The profile name only labels the notification on a shared device;
   // a single-profile household keeps the unprefixed copy untouched.

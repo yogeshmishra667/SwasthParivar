@@ -98,7 +98,13 @@ export interface EventPropsMap {
   // one `signal_detected` per persisted SilentGuardianSignal, one
   // `alert_created` per fired GuardianAlert. distinctId is the patient.
   silent_guardian_signal_detected: {
-    source: "med_adherence" | "data_anomaly";
+    source:
+      | "med_adherence"
+      | "data_anomaly"
+      | "chat_sentiment"
+      | "schedule_miss"
+      | "activity_drop"
+      | "cross_signal";
     type: string;
     contribution: number;
   };
@@ -166,6 +172,66 @@ export interface EventPropsMap {
     by: "patient" | "guardian" | "admin";
     elapsed_seconds: number;
     false_alarm: boolean;
+  };
+
+  // Phase 2 carry-over (Week 17) — health-check schedules surface.
+  // `schedule_created` fires on POST, `schedule_updated` on PUT.
+  // `schedule_compliance_evaluated` is emitted by the hourly cron, ONE
+  // row per (user, schedule) so the dashboard can pivot adherence by
+  // check_type. distinctId is the patient.
+  schedule_created: {
+    schedule_id: string;
+    check_type: "glucose" | "bp" | "cardiac" | "respiratory";
+    frequency: "daily" | "weekly";
+    slot_count: number;
+    reminder_enabled: boolean;
+  };
+  schedule_updated: {
+    schedule_id: string;
+    active: boolean;
+    fields_changed: string[];
+  };
+  schedule_compliance_evaluated: {
+    schedule_id: string;
+    check_type: "glucose" | "bp" | "cardiac" | "respiratory";
+    on_time_count: number;
+    late_count: number;
+    missed_count: number;
+    pending_count: number;
+  };
+  // Emitted whenever a push-sending worker resolves zero recipients
+  // — the user/household never registered a device token, or all
+  // tokens were pruned by Expo's DeviceNotRegistered cleanup.
+  // distinctId is the patient.
+  //
+  // `surface` identifies which worker emitted (so dashboards can pivot
+  // by feature: a spike in `critical_alert` zero-recipient is medically
+  // urgent; a spike in `med_reminder` is just an opportunity to ask
+  // users to reinstall). `reason` separates "no tokens in household"
+  // from "resolved recipients had no tokens" — same outcome,
+  // different ops response.
+  //
+  // Admin "test-push" emits with `surface: "admin_test"` and
+  // `reason: "no_tokens"` when the target user has no devices.
+  push_zero_recipients: {
+    surface:
+      | "critical_alert"
+      | "med_reminder"
+      | "notification_trigger"
+      | "guardian_alert_dispatch"
+      | "daily_guardian_summary"
+      | "admin_test";
+    reason: "no_tokens_in_household" | "no_tokens_for_resolved_recipients" | "no_tokens";
+    household_size: number;
+  };
+  // Emitted by the admin "Send test push" endpoint. distinctId is the
+  // target patient (not the admin). The admin actor lands in the audit
+  // log via AdminAuditLog; this event powers a delivery-rate dashboard.
+  admin_test_push: {
+    admin_id: string;
+    target_user_id: string;
+    tokens_sent: number;
+    success_count: number;
   };
 }
 

@@ -46,7 +46,7 @@ export interface InviteResult {
 export const createInvite = async (input: CreateInviteInput): Promise<InviteResult> => {
   const guardian = await prisma.user.findUnique({
     where: { phone: input.guardianPhone },
-    select: { id: true, name: true },
+    select: { id: true, name: true, householdId: true },
   });
   if (!guardian) {
     // Phase 2 requires the guardian to already have an account. SMS
@@ -60,6 +60,18 @@ export const createInvite = async (input: CreateInviteInput): Promise<InviteResu
   }
   if (guardian.id === input.patientId) {
     throw new DomainError("FAMILY_INVITE_INVALID", "cannot invite yourself as guardian");
+  }
+  // Same-household FamilyLinks are semantically wrong: members of the
+  // same household already share data through the household-scoped
+  // notification path (`shared/notifications/household-delivery.ts`).
+  // A FamilyLink models a remote-guardian relationship, not an
+  // intra-household one.
+  const patient = await prisma.user.findUnique({
+    where: { id: input.patientId },
+    select: { householdId: true },
+  });
+  if (patient?.householdId === guardian.householdId) {
+    throw new DomainError("FAMILY_INVITE_INVALID", "guardian must be from a different household");
   }
 
   // (patient_id, guardian_id) is unique. Re-invite after revoke = reset

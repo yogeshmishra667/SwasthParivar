@@ -22,12 +22,22 @@ import type {
 // GuardianAlert.alertType and to feed the deduper).
 // ---------------------------------------------------------------------
 
+// Phase 4 §C' mapping: new sources collapse onto the 3 existing
+// GuardianAlertType values so the copy banks stay unchanged.
+//   schedule_miss  → med_adherence  (missed checks = non-adherence)
+//   chat_sentiment → trend_concern  (emotional concern, no med angle)
+//   activity_drop  → trend_concern  (lifestyle-based concern)
+//   cross_signal   → combined       (multiple sources stacking)
 export const classifyAlertType = (
   signals: readonly Pick<AlertContentSignal, "source">[],
 ): GuardianAlertType => {
-  const hasMed = signals.some((s) => s.source === "med_adherence");
-  const hasAnomaly = signals.some((s) => s.source === "data_anomaly");
-  if (hasMed && hasAnomaly) return "combined";
+  const hasMed = signals.some((s) => s.source === "med_adherence" || s.source === "schedule_miss");
+  const hasTrend = signals.some(
+    (s) =>
+      s.source === "data_anomaly" || s.source === "chat_sentiment" || s.source === "activity_drop",
+  );
+  const hasStack = signals.some((s) => s.source === "cross_signal");
+  if ((hasMed && hasTrend) || hasStack) return "combined";
   if (hasMed) return "med_adherence";
   return "trend_concern";
 };
@@ -70,13 +80,22 @@ const extractFacts = (signals: readonly AlertContentSignal[]): AlertFacts => {
       if (m !== null) missedCount += Math.max(0, Math.trunc(m));
       const w = readNumber(s.rawEvidence, "windowDays");
       if (w !== null && w > 0) windowDays = Math.trunc(w);
-    } else {
+    } else if (s.source === "schedule_miss") {
+      // schedule_miss is non-adherence — add the missed slot count to the
+      // same missedCount field so the "med_adherence" copy template
+      // reflects the full non-adherence picture.
+      const m = readNumber(s.rawEvidence, "missedSlots");
+      if (m !== null) missedCount += Math.max(0, Math.trunc(m));
+    } else if (s.source === "data_anomaly" || s.source === "activity_drop") {
       const slope = readNumber(s.rawEvidence, "slopePerDay");
       if (slope !== null && Math.abs(slope) > Math.abs(worstSlope)) {
         worstSlope = slope;
         readingTypeKey = toReadingTypeKey(s.rawEvidence.readingType);
       }
     }
+    // chat_sentiment and cross_signal carry no numeric facts useful in
+    // the copy template — they influence classifyAlertType but not the
+    // sentence-level facts.
   }
 
   return {

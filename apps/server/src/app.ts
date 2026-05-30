@@ -22,11 +22,16 @@ import { usersRouter } from "./modules/users/users.routes.js";
 import { householdRouter } from "./modules/household/household.routes.js";
 import { familyRouter } from "./modules/family/family.routes.js";
 import { silentGuardianRouter } from "./modules/silent-guardian/silent-guardian.routes.js";
+
+import { schedulesRouter } from "./modules/schedules/schedules.routes.js";
+
 import { sosRouter } from "./modules/sos/sos.routes.js";
 import { chatRouter } from "./modules/chat/chat.routes.js";
 import { configRouter } from "./modules/config/config.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { adminRouter } from "./modules/admin/admin.routes.js";
+import { setupBullBoard } from "./shared/bull-board.js";
+import { requireBullBoardAuth } from "./shared/middleware/bull-board-auth.js";
 
 // Parse TRUST_PROXY env value: "true"/"false"/<int>/<comma list>.
 // Express accepts boolean, integer, or string of comma-separated CIDRs.
@@ -86,9 +91,15 @@ export const buildApp = (): Express => {
       },
     }),
   );
-  app.use(defaultRateLimit);
-
+  // /health probes MUST be reachable independent of the rate-limit
+  // middleware. Since Phase 4 §T.2 the limit ceiling is read from the
+  // flag service (Redis), so gating /health behind it makes liveness
+  // dependent on Redis availability — the smoke test's stub Redis
+  // would hang `redis.get()` forever and curl gets `Connection reset
+  // by peer` after the job timeout. Mount /health FIRST.
   app.use(healthRouter);
+
+  app.use(defaultRateLimit);
 
   // CC.12.7 #1 — global maintenance kill switch. Mounted after the
   // health probes and before the feature routers; exempts /health and
@@ -109,9 +120,21 @@ export const buildApp = (): Express => {
   app.use("/api/v1/household", householdRouter);
   app.use("/api/v1/family", familyRouter);
   app.use("/api/v1/guardian", silentGuardianRouter);
+
+  app.use("/api/v1/schedules", schedulesRouter);
+
   app.use("/api/v1/sos", sosRouter);
   app.use("/api/v1/chat", chatRouter);
   app.use("/api/v1/config", configRouter);
+
+  // Bull-board UI for queue inspection — mounted BEFORE the main admin
+  // router so its routes match first (`/admin/queues/*` would otherwise
+  // hit `adminRouter` and fail Bearer-header auth, which a browser
+  // navigation cannot supply). Guard accepts `?token=` on the initial
+  // navigation, then sets a path-scoped HttpOnly cookie. Limited to
+  // super_admin + ops (same as the Ops page that links to it).
+  app.use("/admin/queues", requireBullBoardAuth, setupBullBoard());
+
   app.use("/admin", adminRouter);
 
   app.use(errorHandler);

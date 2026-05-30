@@ -22,6 +22,9 @@ import { prisma } from "../../../shared/database.js";
 import { resolveFeatures } from "../../config/config.service.js";
 import { adminResources, getAdminResource } from "../registry/admin-resource.registry.js";
 import { roleAtLeast } from "../registry/admin-resource.types.js";
+import { sendExpoPush } from "../../../shared/notifications/expo-push.js";
+import { resolveHouseholdDelivery } from "../../../shared/notifications/household-delivery.js";
+import { capture as captureAnalyticsEvent } from "../../../shared/analytics/posthog.js";
 
 const toListItem = (u: User): AdminPatientListItem => ({
   id: u.id,
@@ -72,7 +75,7 @@ export const getUserDetail = async (userId: string): Promise<AdminPatientDetail>
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new DomainError("ADMIN_NOT_FOUND", "patient user not found");
 
-  const [coProfiles, streak, notificationState] = await Promise.all([
+  const [coProfiles, streak, notificationState, deviceRows] = await Promise.all([
     prisma.user.findMany({
       where: { householdId: user.householdId, id: { not: user.id } },
       orderBy: { createdAt: "asc" },
@@ -80,6 +83,19 @@ export const getUserDetail = async (userId: string): Promise<AdminPatientDetail>
     }),
     prisma.userStreak.findUnique({ where: { userId } }),
     prisma.notificationState.findUnique({ where: { userId } }),
+    // Push tokens registered to this user. Token strings themselves
+    // are sensitive (anyone with the token can send a push) — we only
+    // expose platform + deviceId + timestamps to ops, never the token.
+    prisma.pushToken.findMany({
+      where: { userId },
+      select: {
+        platform: true,
+        deviceId: true,
+        lastSeenAt: true,
+        createdAt: true,
+      },
+      orderBy: { lastSeenAt: "desc" },
+    }),
   ]);
 
   return {
@@ -95,6 +111,12 @@ export const getUserDetail = async (userId: string): Promise<AdminPatientDetail>
     coProfiles: coProfiles.map(toListItem),
     streak,
     notificationState,
+    devices: deviceRows.map((d) => ({
+      platform: d.platform as "ios" | "android" | "web",
+      deviceId: d.deviceId ?? null,
+      lastSeenAtIso: d.lastSeenAt.toISOString(),
+      registeredAtIso: d.createdAt.toISOString(),
+    })),
     panels: adminResources().map((r) => ({
       key: r.key,
       label: r.label,
@@ -273,4 +295,110 @@ export const changeUserTier = async (params: {
     data: { tier: params.tier },
   });
   return { id: updated.id, previousTier, tier: updated.tier };
+};
+
+// ── Test push ────────────────────────────────────────────────────
+//
+// Lets an admin verify end-to-end push delivery to a specific user
+// without needing a real critical reading. Resolves the same household
+// token set production push paths use (so it diagnoses the same
+// failure modes), sends ONE non-critical push, and returns per-token
+// success counts.
+//
+// The pushed message is clearly labelled "admin test" so the recipient
+// understands it isn't a medical alert. PostHog gets `admin_test_push`
+// (with success count) AND `push_zero_recipients` (when there's
+// nothing to send). AdminAuditLog is written by the controller.
+
+export interface AdminTestPushResult {
+  /** The user receiving the test (may be a sub-profile — tokens live
+   * under the household primary). */
+  targetUserId: string;
+  /** Number of distinct push tokens the household resolved to. */
+  tokensTried: number;
+  /** How many Expo accepted (does NOT guarantee delivery to the
+   * device — Expo can drop them silently downstream). */
+  successCount: number;
+  /** Per-token outcome for the admin UI to render. Token strings are
+   * masked: only the trailing 8 chars appear, so the admin sees enough
+   * to disambiguate multiple devices without the raw value (anyone with
+   * the token can send a push). */
+  results: { tokenSuffix: string; success: boolean; errorCode?: string }[];
+}
+
+const TOKEN_BRACKET_PATTERN = /\[([^\]]+)\]/;
+
+const maskToken = (token: string): string => {
+  // Expo tokens look like `ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]`.
+  // Show the last 8 chars from inside the brackets so two devices on
+  // the same user can be told apart in the UI.
+  const matched = TOKEN_BRACKET_PATTERN.exec(token);
+  const inner = matched?.[1] ?? token;
+  return inner.length <= 8 ? inner : `…${inner.slice(-8)}`;
+};
+
+export const sendTestPush = async (params: {
+  adminId: string;
+  targetUserId: string;
+}): Promise<AdminTestPushResult> => {
+  const user = await prisma.user.findUnique({
+    where: { id: params.targetUserId },
+    select: { id: true, name: true },
+  });
+  if (!user) throw new DomainError("ADMIN_NOT_FOUND", "patient user not found");
+
+  // Same delivery resolver every production push uses — `memberIds`
+  // tells us household size for the zero-recipient event.
+  const { memberIds, tokens } = await resolveHouseholdDelivery(user.id);
+
+  if (tokens.length === 0) {
+    captureAnalyticsEvent("push_zero_recipients", user.id, {
+      surface: "admin_test",
+      reason: "no_tokens",
+      household_size: memberIds.length,
+    });
+    captureAnalyticsEvent("admin_test_push", user.id, {
+      admin_id: params.adminId,
+      target_user_id: user.id,
+      tokens_sent: 0,
+      success_count: 0,
+    });
+    return {
+      targetUserId: user.id,
+      tokensTried: 0,
+      successCount: 0,
+      results: [],
+    };
+  }
+
+  const messages = tokens.map((token) => ({
+    to: token,
+    title: "SwasthParivar admin test",
+    body: `Push delivery test for ${user.name}. Yeh sirf test hai — koi medical alert nahi.`,
+    sound: "default" as const,
+    priority: "default" as const,
+    channelId: "default",
+    data: { type: "admin_test_push" },
+  }));
+
+  const results = await sendExpoPush(messages);
+  const successCount = results.filter((r) => r.success).length;
+
+  captureAnalyticsEvent("admin_test_push", user.id, {
+    admin_id: params.adminId,
+    target_user_id: user.id,
+    tokens_sent: tokens.length,
+    success_count: successCount,
+  });
+
+  return {
+    targetUserId: user.id,
+    tokensTried: tokens.length,
+    successCount,
+    results: results.map((r) => ({
+      tokenSuffix: maskToken(r.token),
+      success: r.success,
+      ...(r.errorCode ? { errorCode: r.errorCode } : {}),
+    })),
+  };
 };

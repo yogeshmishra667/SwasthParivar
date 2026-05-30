@@ -37,6 +37,12 @@ export type ErrorCode =
   | "MEAL_STALE_VERSION"
   | "MEAL_NOT_FOUND"
   | "MED_SCHEDULE_NOT_FOUND"
+  // Phase 4 Week 17 carry-over (Phase 2). Health-check schedules
+  // surface — `GET/POST/PUT /api/v1/schedules`. Distinct from
+  // `MED_SCHEDULE_*` so the mobile client can differentiate the two
+  // surfaces (medication reminder vs. self-check cadence).
+  | "SCHEDULE_NOT_FOUND"
+  | "SCHEDULE_INVALID"
   | "INSIGHT_NOT_FOUND"
   | "INSUFFICIENT_DATA"
   | "RX_PENDING_APPROVAL"

@@ -48,12 +48,19 @@ Before any new Phase 4 feature lands, the items below — un-shipped from earlie
   - Greedy slot-first matcher with constants exported: `COMPLIANCE_ON_TIME_WINDOW_MINUTES = 60`, `COMPLIANCE_LATE_WINDOW_MINUTES = 180`, `COMPLIANCE_MISSED_AFTER_MINUTES = 180`.
   - 36 test cases; coverage 100% lines / 100% functions / 98.7% statements / 94.8% branches. Ratchet pinned in `vitest.config.ts`.
 
-**Still deferred to Week 17** (per the schema-first sequencing principle — the worker, HTTP routes and UI all land together with the doctor-portal adherence display in Feature G):
+**Server slice landed (2026-05-30) — what shipped in PR-A:**
 
-- `SCHEDULE_COMPLIANCE_CHECK` cron in `apps/server/src/workers/`.
-- HTTP routes: `GET /api/v1/schedules`, `POST /api/v1/schedules`, `PUT /api/v1/schedules/:id` (CLAUDE.md "API Routes → Schedules").
-- Mobile schedule editor + adherence widget.
-- Doctor portal adherence column.
+- `apps/server/src/modules/schedules/` — full CRUD (`GET`, `POST`, `PUT /api/v1/schedules/:id`) behind `requireAuth`. Validation enforces ≥ 1 / ≤ 8 slots, hour 0-23 / minute 0-59 / dayOfWeek 0-6, and rejects weekly schedules missing `dayOfWeek`. Writes are household-scoped via the same `resolveHouseholdMember` chain as readings/medications. New error codes `SCHEDULE_NOT_FOUND` (404) + `SCHEDULE_INVALID` (400).
+- `SCHEDULE_COMPLIANCE_CHECK` BullMQ cron (`5 * * * *` UTC, hourly at minute 5 to clear the 00-minute traffic from notification-trigger + daily-health-score). Walks every active `HealthCheckSchedule`, fetches its checkType's reading window (last 24h), calls the pure `evaluateCompliance`, and UPSERTs `HealthCheckCompliance` rows keyed on `(scheduleId, expectedAt)`. Idempotent across re-runs — a slot stays `on_time` once it matches a reading, never flips back to `pending`. Cardiac + respiratory checkTypes return empty readings list (those tables land in Feature E.1, Week 14).
+- Kill switch: `schedule_compliance_check_enabled` flag (default `true`). Flipped via the existing flag service; cache TTL 30s.
+- PostHog events: `schedule_created`, `schedule_updated`, `schedule_compliance_evaluated` (one row per `(user, schedule)` so dashboards pivot adherence by checkType).
+- `GET /api/v1/schedules` returns each row with a compact `compliance` summary (last 7 days of slots from `HealthCheckCompliance` + live-computed `nextDueAtIso` so the mobile screen renders without a second round-trip).
+- Integration tests (12 cases, `tests/integration/schedules.test.ts`): create / list / update happy paths, weekly-without-dayOfWeek validation, empty-slot-array rejection, cross-household 404, empty-body 400, processor UPSERT from in-window reading, idempotent re-run, kill-switch no-op.
+
+**Still deferred** (one more Phase 4 stack each):
+
+- Mobile schedule editor + adherence widget (`apps/mobile/` — separate PR alongside the doctor-portal UI work).
+- Doctor portal adherence column (depends on the doctor portal itself, Feature G).
 
 Cardiac + respiratory `checkType` values are in the enum for forward compatibility; the reading tables themselves ship in Week 14 (Feature E.1).
 
@@ -63,6 +70,7 @@ Cardiac + respiratory `checkType` values are in the enum for forward compatibili
 
 | Item                                                                | Why deferred                                                                                          | Phase 4 home                              | Blocker for                                                       | Status |
 |---------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------|-------------------------------------------|-------------------------------------------------------------------|--------|
+
 | Feature D — SOS (entire feature)                                    | hard-gated "4+ weeks Phase 2 stability"; gate landed but work slid                                    | Week 13 §D' (verbatim phase3.md §579+)    | Patient safety chain completeness                                  | **Code-complete (2026-05-30)** — scaffold #94, mobile UI #95, close-out (real vendor HTTP + webhooks + push + auto-escalate + profile lock + foreground rehydrate) on this PR. Pending ops: 7-day soak + flag flips. |
 | `chat_sentiment` Silent Guardian signal                              | Phase 3 SG scope cap: "basic: med adherence + trend only" (CLAUDE.md)                                  | §C' Silent Guardian expansion             | Full SG signal coverage per CLAUDE.md "Silent Guardian" section    | |
 | `schedule_miss` SG signal                                            | depends on `HealthCheckCompliance` (above)                                                              | §C' + Week 13 carry-over                  | Same                                                               | |
@@ -70,6 +78,15 @@ Cardiac + respiratory `checkType` values are in the enum for forward compatibili
 | `cross_signal` SG correlator                                         | depends on other signals being live                                                                    | §C'                                       | Same                                                               | |
 | Exotel/Twilio IVR vendor wrapper                                     | belongs in SOS — never built                                                                            | §D'.1                                     | SOS stage 2 escalation                                             | **Real HTTP wired (2026-05-30)** — Exotel `Connect Application` + Twilio inline-TwiML; status webhooks flip `answered`; `SOS_IVR_NO_VENDOR` pages Sentry |
 | SOS multi-patient guardian routing + profile lock                    | not specced in phase3.md §D — gap discovered in this audit                                              | §D'.2                                     | Shared-device SOS correctness                                      | **Landed (2026-05-30)** — profile switcher locks for chain duration; SOS push uses `resolveHouseholdDelivery()` + `targetUserId`; foreground rehydrate returns to fullscreen |
+
+| Feature D — SOS (entire feature)                                    | hard-gated "4+ weeks Phase 2 stability"; gate landed but work slid                                    | Week 13 §D' (verbatim phase3.md §579+)    | Patient safety chain completeness                                  | **Scaffold landed (2026-05-28)** — server only; mobile §M.4 follows |
+| `chat_sentiment` Silent Guardian signal                              | Phase 3 SG scope cap: "basic: med adherence + trend only" (CLAUDE.md)                                  | §C' Silent Guardian expansion             | Full SG signal coverage per CLAUDE.md "Silent Guardian" section    | **Landed PR-B (2026-05-30)** — scorer + explainer + processor wired; reads `ChatMessage.flagged` in 7d window |
+| `schedule_miss` SG signal                                            | depends on `HealthCheckCompliance` (above)                                                              | §C' + Week 13 carry-over                  | Same                                                               | **Landed PR-B (2026-05-30)** — consecutive-miss threshold (≥3) enforced; reads `HealthCheckCompliance` |
+| `activity_drop` SG signal                                            | depends on `ActivityDaily` (Phase 4 Feature I)                                                          | §C'                                       | Same                                                               | **Wired-but-dormant (2026-05-30)** — scorer + enum + processor branch exist; worker returns score=0 until `ActivityDaily` table lands (Feature I) |
+| `cross_signal` SG correlator                                         | depends on other signals being live                                                                    | §C'                                       | Same                                                               | **Landed PR-B (2026-05-30)** — fires when ≥2 other sources contribute >0 in same analysis cycle |
+| Exotel/Twilio IVR vendor wrapper                                     | belongs in SOS — never built                                                                            | §D'.1                                     | SOS stage 2 escalation                                             | **Stubs landed (2026-05-28)** — safe no-ops; real HTTP in Week 14 |
+| SOS multi-patient guardian routing + profile lock                    | not specced in phase3.md §D — gap discovered in this audit                                              | §D'.2                                     | Shared-device SOS correctness                                      | Deferred to §D'.2 (separate PR) |
+
 | SOS quarterly drill protocol                                         | not specced in phase3.md §D                                                                             | §D'.3 + `docs/runbooks/sos-drill.md`      | Operational readiness                                              | **Landed (2026-05-28)** |
 
 **SOS scaffold — what shipped in chunk 3:**

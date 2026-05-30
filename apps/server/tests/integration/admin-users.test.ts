@@ -4,6 +4,7 @@ import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redi
 import request from "supertest";
 import jwt from "jsonwebtoken";
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 
 const runPrisma = (args: string[], opts: { input?: string } = {}): void => {
   const result = spawnSync("npx", ["prisma", ...args], {
@@ -148,6 +149,45 @@ describe("Admin Users Service", () => {
     expect(res.body.data.user.name).toBe("Detail Test");
     expect(res.body.data.streak).toBeDefined();
     expect(res.body.data.panels).toBeInstanceOf(Array);
+    // `devices` is always an array — empty until the user registers a token.
+    expect(res.body.data.devices).toEqual([]);
+  });
+
+  it("user-detail surfaces registered push tokens (no token strings leaked)", async () => {
+    const household = await prisma.household.create({ data: {} });
+    const user = await prisma.user.create({
+      data: {
+        phone: "+919800000099",
+        name: "Push Test",
+        age: 45,
+        householdId: household.id,
+        onboardingComplete: true,
+      },
+    });
+    const tokenStr = `ExponentPushToken[${randomUUID()}]`;
+    await prisma.pushToken.create({
+      data: {
+        userId: user.id,
+        token: tokenStr,
+        platform: "android",
+        deviceId: "samsung-sm-a536-test",
+      },
+    });
+
+    const res = await request(app)
+      .get(`/admin/users/${user.id}`)
+      .set("Authorization", `Bearer ${supportToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.devices).toHaveLength(1);
+    const device = res.body.data.devices[0];
+    expect(device.platform).toBe("android");
+    expect(device.deviceId).toBe("samsung-sm-a536-test");
+    expect(device.lastSeenAtIso).toBeTruthy();
+    expect(device.registeredAtIso).toBeTruthy();
+    // Token string must NEVER be in the admin response — anyone with
+    // it can send a push as the user.
+    expect(JSON.stringify(res.body)).not.toContain(tokenStr);
   });
 
   it("updates user tier and logs audit correctly (ops only)", async () => {
@@ -455,5 +495,54 @@ describe("Auth perimeter — deactivated users blocked", () => {
     const res = await request(app).post("/api/v1/auth/refresh").send({ refreshToken: stale });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe("USER_DEACTIVATED");
+  });
+});
+
+// Diagnostic "Send test push" endpoint. The happy-path with real
+// tokens would hit https://exp.host — we don't want CI making outbound
+// calls — so the zero-recipient path is the one we cover here. RBAC +
+// 404 + audit-log are the load-bearing assertions.
+
+describe("Admin Users — POST /:id/test-push", () => {
+  it("returns 0 tokens for a user with no devices, audit row still written", async () => {
+    const patient = await seedPatient();
+
+    const res = await request(app)
+      .post(`/admin/users/${patient.id}/test-push`)
+      .set("Authorization", `Bearer ${operatorToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.targetUserId).toBe(patient.id);
+    expect(res.body.data.tokensTried).toBe(0);
+    expect(res.body.data.successCount).toBe(0);
+    expect(res.body.data.results).toEqual([]);
+
+    // Audit row is written even on the zero-recipient path — that's the
+    // entire point of having this endpoint discoverable.
+    const audit = await request(app)
+      .get("/admin/audit?action=user.test_push_sent")
+      .set("Authorization", `Bearer ${operatorToken}`);
+    expect(audit.status).toBe(200);
+    const row = audit.body.data.records.find((r: any) => r.targetId === patient.id);
+    expect(row).toBeDefined();
+    expect(row.metadata.tokensTried).toBe(0);
+    expect(row.metadata.successCount).toBe(0);
+  });
+
+  it("support role cannot send a test push (403)", async () => {
+    const patient = await seedPatient();
+    const res = await request(app)
+      .post(`/admin/users/${patient.id}/test-push`)
+      .set("Authorization", `Bearer ${supportToken}`);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("ADMIN_FORBIDDEN");
+  });
+
+  it("404 on an unknown user id", async () => {
+    const res = await request(app)
+      .post("/admin/users/00000000-0000-0000-0000-000000000000/test-push")
+      .set("Authorization", `Bearer ${operatorToken}`);
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("ADMIN_NOT_FOUND");
   });
 });
