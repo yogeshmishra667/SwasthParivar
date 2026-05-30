@@ -3,11 +3,27 @@
 // domain-logic pure functions, and the mobile client. Mirrors the
 // pattern of `insights.ts`: keep the union small, never reuse a string.
 
-// Source of a Silent Guardian signal. Phase 3 scope is med_adherence +
-// data_anomaly only (CLAUDE.md / phase3.md C). chat_sentiment /
-// schedule_miss / activity_drop / cross_signal need data we don't yet
-// have or stable upstream features — deferred to Phase 4.
-export type SignalSource = "med_adherence" | "data_anomaly";
+// Source of a Silent Guardian signal.
+//
+// Phase 3 shipped med_adherence + data_anomaly. Phase 4 §C' expands:
+//   chat_sentiment — derived from Tier-3 chat exchanges flagged as
+//                    distressed by the safety filter (CLAUDE.md "Silent
+//                    Guardian → Signals → chat_sentiment").
+//   schedule_miss  — ≥ 3 consecutive HealthCheckCompliance.status='missed'
+//                    slots on a single schedule. Depends on the Phase 2
+//                    carry-over schedules surface that landed in PR #100.
+//   activity_drop  — wired-but-dormant: SignalSource enum + scorer
+//                    branch ship now, but the worker pulls no data
+//                    until ActivityDaily lands (Feature I).
+//   cross_signal   — meta-signal: when 2+ other sources fire in the
+//                    same analysis cycle, add a stacking-bonus row.
+export type SignalSource =
+  | "med_adherence"
+  | "data_anomaly"
+  | "chat_sentiment"
+  | "schedule_miss"
+  | "activity_drop"
+  | "cross_signal";
 
 // What a fired GuardianAlert is about. `combined` = both a
 // med-adherence and a trend concern in the same analysis window.

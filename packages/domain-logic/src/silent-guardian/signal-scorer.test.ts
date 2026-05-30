@@ -117,3 +117,120 @@ describe("scoreSignal — data_anomaly", () => {
     );
   });
 });
+
+// ─────────────────────────────────────────────────────────────
+// Phase 4 §C' — chat_sentiment / schedule_miss / activity_drop /
+// cross_signal. Each scorer is total: zero-evidence → contribution 0,
+// progressively heavier evidence → larger contribution clamped at 100.
+// ─────────────────────────────────────────────────────────────
+
+describe("scoreSignal — chat_sentiment", () => {
+  const chat = (evidence: Record<string, unknown>) =>
+    scoreSignal({ source: "chat_sentiment", evidence, userBaseline: null });
+
+  it("returns 0 when no distressed turns logged", () => {
+    expect(chat({ distressedTurns: 0, totalTurns: 5 }).contribution).toBe(0);
+    expect(chat({ distressedTurns: 0, totalTurns: 5 }).signalType).toBe("chat_sentiment_ok");
+  });
+
+  it("scales contribution by density and absolute distress count", () => {
+    // density 1/10 = 0.1, distressed < 2 → 25
+    expect(chat({ distressedTurns: 1, totalTurns: 10 }).contribution).toBe(25);
+    // density 2/10 = 0.2 → 40
+    expect(chat({ distressedTurns: 2, totalTurns: 10 }).contribution).toBe(40);
+    // distressed >= 4 → 60 regardless of density
+    expect(chat({ distressedTurns: 4, totalTurns: 20 }).contribution).toBe(60);
+    // density >= 0.4 → 60
+    expect(chat({ distressedTurns: 4, totalTurns: 10 }).contribution).toBe(60);
+  });
+
+  it("uses _persistent signal type at distressed≥4", () => {
+    expect(chat({ distressedTurns: 4, totalTurns: 10 }).signalType).toBe(
+      "chat_distress_persistent",
+    );
+    expect(chat({ distressedTurns: 2, totalTurns: 10 }).signalType).toBe("chat_distress_present");
+  });
+
+  it("guards divide-by-zero on missing totalTurns", () => {
+    expect(chat({ distressedTurns: 1 }).contribution).toBeGreaterThan(0);
+  });
+});
+
+describe("scoreSignal — schedule_miss", () => {
+  const sched = (evidence: Record<string, unknown>) =>
+    scoreSignal({ source: "schedule_miss", evidence, userBaseline: null });
+
+  it("returns 0 when no slots missed", () => {
+    expect(sched({ missedSlots: 0, missedConsecutive: 0, checkType: "glucose" }).contribution).toBe(
+      0,
+    );
+  });
+
+  it("scores by the consecutive-run band first, then absolute count", () => {
+    expect(sched({ missedSlots: 5, missedConsecutive: 5 }).contribution).toBe(70);
+    expect(sched({ missedSlots: 3, missedConsecutive: 3 }).contribution).toBe(55);
+    expect(sched({ missedSlots: 2, missedConsecutive: 2 }).contribution).toBe(38);
+    expect(sched({ missedSlots: 4, missedConsecutive: 1 }).contribution).toBe(38);
+    expect(sched({ missedSlots: 1, missedConsecutive: 1 }).contribution).toBe(22);
+  });
+
+  it("uses _streak signal type for runs of 3+, _isolated otherwise", () => {
+    expect(sched({ missedSlots: 3, missedConsecutive: 3 }).signalType).toBe("schedule_miss_streak");
+    expect(sched({ missedSlots: 2, missedConsecutive: 1 }).signalType).toBe(
+      "schedule_miss_isolated",
+    );
+  });
+
+  it("names the check type in reasoning, defaulting to 'check'", () => {
+    expect(sched({ missedSlots: 2, missedConsecutive: 2, checkType: "bp" }).reasoning).toContain(
+      "bp",
+    );
+    expect(sched({ missedSlots: 2, missedConsecutive: 2 }).reasoning).toContain("check");
+  });
+});
+
+describe("scoreSignal — activity_drop (wired-but-dormant)", () => {
+  const act = (evidence: Record<string, unknown>) =>
+    scoreSignal({ source: "activity_drop", evidence, userBaseline: null });
+
+  it("returns 0 when no evidence (default state until Feature I lands)", () => {
+    expect(act({}).contribution).toBe(0);
+  });
+
+  it("returns 0 below the 20% drop floor", () => {
+    expect(act({ pctDrop: 0.15 }).contribution).toBe(0);
+  });
+
+  it("scales in 3 bands: 25 / 40 / 60", () => {
+    expect(act({ pctDrop: 0.3 }).contribution).toBe(25);
+    expect(act({ pctDrop: 0.45 }).contribution).toBe(40);
+    expect(act({ pctDrop: 0.7 }).contribution).toBe(60);
+  });
+
+  it("uses _severe signal type at pctDrop>=0.6", () => {
+    expect(act({ pctDrop: 0.7 }).signalType).toBe("activity_drop_severe");
+    expect(act({ pctDrop: 0.45 }).signalType).toBe("activity_drop_present");
+  });
+});
+
+describe("scoreSignal — cross_signal", () => {
+  const cross = (evidence: Record<string, unknown>) =>
+    scoreSignal({ source: "cross_signal", evidence, userBaseline: null });
+
+  it("returns 0 when fewer than 2 sources contributed", () => {
+    expect(cross({ contributingSourceCount: 0 }).contribution).toBe(0);
+    expect(cross({ contributingSourceCount: 1 }).contribution).toBe(0);
+    expect(cross({ contributingSourceCount: 1 }).signalType).toBe("cross_signal_none");
+  });
+
+  it("scales 12 / 18 / 25 by stack depth", () => {
+    expect(cross({ contributingSourceCount: 2 }).contribution).toBe(12);
+    expect(cross({ contributingSourceCount: 3 }).contribution).toBe(18);
+    expect(cross({ contributingSourceCount: 4 }).contribution).toBe(25);
+    expect(cross({ contributingSourceCount: 6 }).contribution).toBe(25);
+  });
+
+  it("signal type marks the stacking when it fires", () => {
+    expect(cross({ contributingSourceCount: 2 }).signalType).toBe("cross_signal_stack");
+  });
+});

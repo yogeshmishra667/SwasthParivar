@@ -34,6 +34,35 @@ describe("classifyAlertType", () => {
   it("empty → trend_concern (degenerate; the service never calls it this way)", () => {
     expect(classifyAlertType([])).toBe("trend_concern");
   });
+
+  // Phase 4 §C' — new signal source mappings
+  it("schedule_miss-only → med_adherence (non-adherence category)", () => {
+    expect(classifyAlertType([{ source: "schedule_miss" }])).toBe("med_adherence");
+  });
+
+  it("chat_sentiment-only → trend_concern", () => {
+    expect(classifyAlertType([{ source: "chat_sentiment" }])).toBe("trend_concern");
+  });
+
+  it("activity_drop-only → trend_concern", () => {
+    expect(classifyAlertType([{ source: "activity_drop" }])).toBe("trend_concern");
+  });
+
+  it("cross_signal alone → combined (stacking meta-signal)", () => {
+    expect(classifyAlertType([{ source: "cross_signal" }])).toBe("combined");
+  });
+
+  it("schedule_miss + chat_sentiment → combined (med + trend)", () => {
+    expect(classifyAlertType([{ source: "schedule_miss" }, { source: "chat_sentiment" }])).toBe(
+      "combined",
+    );
+  });
+
+  it("med_adherence + schedule_miss → med_adherence (both non-adherence)", () => {
+    expect(classifyAlertType([{ source: "med_adherence" }, { source: "schedule_miss" }])).toBe(
+      "med_adherence",
+    );
+  });
 });
 
 describe("buildAlertContent — med_adherence", () => {
