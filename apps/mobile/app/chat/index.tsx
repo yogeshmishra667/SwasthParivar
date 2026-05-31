@@ -36,7 +36,7 @@ export default function ChatListScreen(): JSX.Element {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950">
       <View className="flex-row items-center justify-between border-b border-gray-200 px-2 py-2">
         <View className="flex-row items-center gap-1">
           <Pressable
@@ -48,7 +48,9 @@ export default function ChatListScreen(): JSX.Element {
           >
             <Icon name="chevron-back" size={24} color="#111827" />
           </Pressable>
-          <Text className="text-hero font-bold">{t("chat.title")}</Text>
+          <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
+            {t("chat.title")}
+          </Text>
         </View>
         <ActiveProfileBadge />
       </View>
@@ -59,12 +61,12 @@ export default function ChatListScreen(): JSX.Element {
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <Text className="text-body text-neutral">{t("common.loading")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">{t("common.loading")}</Text>
         </View>
       ) : sessions.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
           <Icon name="chatbubbles-outline" size={48} color="#6B7280" />
-          <Text className="mt-3 text-center text-important text-neutral">
+          <Text className="mt-3 text-center text-important text-neutral dark:text-gray-400">
             {t("chat.emptyState")}
           </Text>
         </View>
@@ -77,20 +79,23 @@ export default function ChatListScreen(): JSX.Element {
             <Pressable
               onPress={() => openThread(item.id)}
               accessibilityRole="button"
-              className="mb-2 min-h-touch flex-row items-center gap-3 rounded-2xl bg-white px-4 py-3 active:opacity-80"
+              className="mb-2 min-h-touch flex-row items-center gap-3 rounded-2xl bg-white dark:bg-gray-900 px-4 py-3 active:opacity-80"
             >
               <View className="flex-1">
                 {item.preview ? (
                   <>
-                    <Text className="text-important text-gray-900" numberOfLines={2}>
+                    <Text
+                      className="text-important text-gray-900 dark:text-gray-100"
+                      numberOfLines={2}
+                    >
                       {item.preview}
                     </Text>
-                    <Text className="mt-0.5 text-body text-neutral">
+                    <Text className="mt-0.5 text-body text-neutral dark:text-gray-400">
                       {relativeDate(item.startedAt, t)}
                     </Text>
                   </>
                 ) : (
-                  <Text className="text-important text-gray-900">
+                  <Text className="text-important text-gray-900 dark:text-gray-100">
                     {relativeDate(item.startedAt, t)}
                   </Text>
                 )}

@@ -26,7 +26,9 @@ export const ChatInputBar = ({
   if (dailyRemaining <= 0) {
     return (
       <View className="border-t border-gray-200 px-4 py-3">
-        <Text className="text-center text-body text-neutral">{t("chat.rateLimit")}</Text>
+        <Text className="text-center text-body text-neutral dark:text-gray-400">
+          {t("chat.rateLimit")}
+        </Text>
       </View>
     );
   }
@@ -47,9 +49,11 @@ export const ChatInputBar = ({
   const sendDisabled = inputBlocked || text.trim().length === 0;
 
   return (
-    <View className="border-t border-gray-200 bg-white px-3 py-2.5">
+    <View className="border-t border-gray-200 bg-white dark:bg-gray-900 px-3 py-2.5">
       {isOffline ? (
-        <Text className="px-2 pb-1.5 text-body text-neutral">{t("chat.offlineSend")}</Text>
+        <Text className="px-2 pb-1.5 text-body text-neutral dark:text-gray-400">
+          {t("chat.offlineSend")}
+        </Text>
       ) : null}
       <View className="flex-row items-end gap-2">
         {/* A finished voice transcript is appended to the draft text. */}
@@ -67,7 +71,7 @@ export const ChatInputBar = ({
           placeholderTextColor="#9CA3AF"
           placeholder={t("chat.inputPlaceholder")}
           accessibilityLabel={t("chat.inputPlaceholder")}
-          className="max-h-32 min-h-touch flex-1 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-important text-gray-900"
+          className="max-h-32 min-h-touch flex-1 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-important text-gray-900 dark:text-gray-100"
         />
         <SendButton onPress={() => void send()} loading={sending} disabled={sendDisabled} />
       </View>

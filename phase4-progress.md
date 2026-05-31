@@ -2,7 +2,7 @@
 
 > **Companion to `phase4.md`** (the original spec). This file tracks what's done, what's in flight, and what's next. Update on every merged PR. The spec stays canonical for HOW things should be built.
 >
-> Last updated: **2026-05-31** (end of Week 13 carry-over).
+> Last updated: **2026-05-31** (end of Week 13 carry-over + UI polish cleanup PR #118).
 
 ---
 
@@ -14,6 +14,7 @@
 | **Phase 1 corrigendum: emergency contacts** | 🟡 Server done (#115), mobile management screen pending | Build Settings → Emergency contacts screen + wire onboarding |
 | **SOS ramp** | 🟡 Code-complete, needs operational soak | Provision vendor creds → 7-day test-mode soak → first drill → flag flips |
 | **Push delivery hardening** | ✅ Diagnostic + auto-prune + per-user rate-limit keying landed (#113, #114, #112) | Verify the Expo token / projectId pairing in prod once #114 prunes the dead tokens |
+| **UI polish + dark mode + new settings** | ✅ Antigravity rollup (#117-121) cleaned up + shippable in #118 | Visual click-through on Light/Dark/System across all screens before EAS build |
 | **Feature E — Multi-condition health logs** | ❌ Not started (Week 14 target) | Cardiac + respiratory schema migration |
 | **Feature F — Prescription OCR** | ❌ Not started (Week 15-16) | Spec is in `phase4.md §F.1`; needs Claude Vision spend cap wiring |
 | **Feature G — Doctor portal** | ❌ Not started (Week 17) | — |
@@ -64,6 +65,25 @@ Earliest first within each cluster; most recent cluster last.
 - PR #112 (2026-05-31) — `defaultRateLimit` now keys per-userId when JWT verifiable, IP fallback otherwise. Defeats Indian carrier-NAT mass-throttling.
 - PR #113 (2026-05-31) — Surface Expo's `errors[].code` + `errors[].message` in admin UI instead of opaque `HTTP_400`.
 - PR #114 (2026-05-31) — Auto-prune push tokens that return `PushTooManyExperienceIds` or `MismatchSenderId` (was only `DeviceNotRegistered`).
+
+### UI Polish & Settings (2026-05-31) — *by Antigravity*
+- PR #117 (2026-05-31) — Complete settings screen redesign with `ReminderTimePicker` and `CheckFrequencyPicker` modal flows (by Antigravity).
+- PR #118 (2026-05-31) — NativeWind theme integration (`usePreferencesStore` linked to `setColorScheme`) with an `AnimatedThemeToggle` component for Light/Dark/System (by Antigravity).
+- PR #119 (2026-05-31) — App-wide Dark Mode support executed via a comprehensive style injection script across 60+ UI files and dynamic Tab Bar colors (by Antigravity).
+- PR #120 (2026-05-31) — Fixed generic black text overriding the dark mode theme across 35 UI files by injecting `dark:text-gray-100` into `text-hero` and `text-important` classes (by Antigravity).
+- PR #121 (2026-05-31) — Fixed a UX edge-case where the Dashboard `InsightsBadge` teased "new patterns" prior to the 14-day unlock, preventing users from getting trapped on the "Insights Locked" screen (by Antigravity).
+- **Architectural Decision (Multi-Profile Push Routing)**: Confirmed that for shared devices (e.g., 3 profiles managed on 1 phone), push notifications and SMS alerts for ALL profiles must route to the primary account's device/number. The push token is tied to the primary user's install, and the backend must route alerts for sub-profiles to this token (by Antigravity).
+- PR #118 (2026-05-31) — Cleanup pass on the Antigravity rollup (#117–#121):
+  - Dark mode rebuilt with a real 3-tier palette (page = `gray-950`, surface = `gray-900` + dark border, elevated = `gray-800`) — previously cards sat *below* the page bg, rendering as wells instead of elevated surfaces.
+  - Removed `bg-gradient-to-br` cards that don't render in React Native (`FamilyQuickSummary`, `PatternSummaryCard`, `GuardianEmptyState`), replaced with flat `bg-*-50 dark:bg-*-950/40`.
+  - Fixed class collisions (`text-critical text-gray-900`, `text-primary text-gray-900`), added missing dark variants across `InviteGuardianForm`, `EditProfileModal`, `ActiveProfileBadge` (now resolves icon colors via `useColorScheme`), `TipsCarousel`, `NotificationToggle`.
+  - `ReminderTimePicker`: fixed the `settings.reminderTime.value` i18n key leaking the literal key string into the UI; added `accessibilityLabel` on hour/minute inputs.
+  - Added ~50 missing i18n keys across `settings.*`, `insights.tips.*`, `insights.emptyState.*`, `insights.loggingProgress.*`, `guardian.emptyState.*`, `family.quickSummary.*` in both `en.json` and `hi.json` (Hindi-first, CLAUDE.md tone).
+  - `LoggingProgressCard` wired to real data: fetches `GET /readings/glucose?from=-7d`, counts distinct local calendar days, surfaces X-of-7 with tiered color (green ≥70% / amber 40-69% / red <40%) and three copy variants. Soft-hides on fetch failure.
+  - Server fix: `household.controller` was passing `req.params.id` (typed `string | string[]` under Express 5) directly to the service; `household.service` was throwing `DomainError("NOT_FOUND", …)` against an `ErrorCode` union that didn't include it. Added `HOUSEHOLD_PROFILE_NOT_FOUND` to `@swasth/shared-types` and mapped to 404 in the error handler.
+  - Cleanup: deleted the one-shot `apps/mobile/fix_dark_text.js` codemod artifact; `.gitignore` now ignores `service-account-key.json`.
+  - Lint debt closed on every touched file. Verify pipeline (`pnpm typecheck` × 5 projects, `pnpm lint`, `pnpm -r build`) green.
+
 
 ---
 

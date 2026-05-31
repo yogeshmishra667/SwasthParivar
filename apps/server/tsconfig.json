@@ -13,7 +13,8 @@
     "tests/**/*",
     "prisma/seed-admin.ts",
     "prisma/seed-flags.ts",
-    "prisma/seed-patients.ts"
+    "prisma/seed-patients.ts",
+    "prisma/seed-test-users.ts"
   ],
   "exclude": ["dist", "node_modules"]
 }

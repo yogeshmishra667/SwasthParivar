@@ -2,7 +2,10 @@ import { randomBytes } from "node:crypto";
 import { DomainError, type Condition } from "@swasth/shared-types";
 import type { Gender, Language } from "@prisma/client";
 import { prisma } from "../../shared/database.js";
-import type { AddHouseholdProfileInput } from "./household.validation.js";
+import type {
+  AddHouseholdProfileInput,
+  UpdateHouseholdProfileInput,
+} from "./household.validation.js";
 
 /**
  * Adds a profile to the caller's household.
@@ -95,3 +98,46 @@ export const addHouseholdProfile = async (
  * leaking to clients via any list endpoint that selects the column.
  */
 export const isSyntheticHouseholdPhone = (phone: string): boolean => phone.startsWith("household:");
+
+export const updateHouseholdProfile = async (
+  callerUserId: string,
+  profileId: string,
+  input: UpdateHouseholdProfileInput,
+): Promise<ProfileRow> => {
+  const caller = await prisma.user.findUniqueOrThrow({
+    where: { id: callerUserId },
+    select: { householdId: true },
+  });
+
+  // Verify the profile exists and belongs to the caller's household
+  const profile = await prisma.user.findFirst({
+    where: { id: profileId, householdId: caller.householdId },
+  });
+
+  if (!profile) {
+    throw new DomainError("HOUSEHOLD_PROFILE_NOT_FOUND", "Profile not found in household");
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: profileId },
+    data: {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.age !== undefined ? { age: input.age } : {}),
+      ...(input.gender !== undefined ? { gender: input.gender } : {}),
+      ...(input.conditions !== undefined ? { conditions: input.conditions } : {}),
+      ...(input.preferredLanguage !== undefined
+        ? { preferredLanguage: input.preferredLanguage }
+        : {}),
+    },
+    select: {
+      id: true,
+      name: true,
+      age: true,
+      gender: true,
+      conditions: true,
+      preferredLanguage: true,
+    },
+  });
+
+  return updated;
+};

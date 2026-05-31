@@ -36,28 +36,34 @@ export const MealsTodayCard = ({ mealsToday }: MealsTodayCardProps): JSX.Element
     >
       <Card>
         <View className="flex-row items-center justify-between">
-          <Text className="text-body text-neutral">{t("meals.title")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">{t("meals.title")}</Text>
           <Icon name="chevron-forward" size={16} color="#6B7280" />
         </View>
         {mealsToday.length > 0 ? (
           <>
-            <Text className="mt-1 text-2xl font-bold">
+            <Text className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">
               {t("meals.todayCount", { count: mealsToday.length })}
             </Text>
             <View className="mt-2 flex-row flex-wrap gap-2">
               {mealsToday.map((m) => (
                 <View
                   key={m.id}
-                  className="flex-row items-center gap-1 rounded-full bg-gray-100 px-3 py-1"
+                  className="flex-row items-center gap-1 rounded-full bg-gray-100 dark:bg-gray-800 px-3 py-1"
                 >
-                  <Text className="text-base">{CATEGORY_EMOJI[m.mealCategory] ?? "🍽️"}</Text>
-                  <Text className="text-body">{t(`meals.type.${m.mealType}`)}</Text>
+                  <Text className="text-base text-gray-900 dark:text-gray-100">
+                    {CATEGORY_EMOJI[m.mealCategory] ?? "🍽️"}
+                  </Text>
+                  <Text className="text-body text-gray-900 dark:text-gray-100">
+                    {t(`meals.type.${m.mealType}`)}
+                  </Text>
                 </View>
               ))}
             </View>
           </>
         ) : (
-          <Text className="mt-1 text-body text-neutral">{t("meals.noMealsToday")}</Text>
+          <Text className="mt-1 text-body text-neutral dark:text-gray-400">
+            {t("meals.noMealsToday")}
+          </Text>
         )}
       </Card>
     </Pressable>

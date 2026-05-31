@@ -50,10 +50,10 @@ export default function PatientDashboardScreen(): JSX.Element {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950">
       <Stack.Screen options={{ title: patientName, headerBackTitle: "Back" }} />
       <View className="flex-row items-center justify-between px-4 py-3">
-        <Text className="text-hero font-bold" numberOfLines={1}>
+        <Text className="text-hero font-bold text-gray-900 dark:text-gray-100" numberOfLines={1}>
           {patientName}
         </Text>
         <View className="rounded-full bg-blue-50 px-3 py-1">
@@ -73,7 +73,7 @@ export default function PatientDashboardScreen(): JSX.Element {
           <Card>
             <View className="items-center gap-3 py-4">
               <Icon name="cloud-offline" size={32} color="#D97706" />
-              <Text className="text-important text-center text-amber-900">
+              <Text className="text-important text-center text-amber-900 text-gray-900 dark:text-gray-100">
                 {t("family.loadFailed")}
               </Text>
               <Button label={t("common.retry")} onPress={() => void onRefresh()} />
@@ -88,16 +88,18 @@ export default function PatientDashboardScreen(): JSX.Element {
             />
 
             <Card>
-              <Text className="text-body text-neutral">{t("dashboard.lastReading")}</Text>
+              <Text className="text-body text-neutral dark:text-gray-400">
+                {t("dashboard.lastReading")}
+              </Text>
               {view.latestReading ? (
                 <View className="mt-1 flex-row items-baseline gap-2">
-                  <Text className="text-5xl font-bold tracking-tight text-gray-900">
+                  <Text className="text-5xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
                     {view.latestReading.valueMgDl}
                   </Text>
-                  <Text className="text-important text-neutral">mg/dL</Text>
+                  <Text className="text-important text-neutral dark:text-gray-400">mg/dL</Text>
                 </View>
               ) : (
-                <Text className="mt-2 text-important text-neutral">
+                <Text className="mt-2 text-important text-neutral dark:text-gray-400">
                   {t("dashboard.noReadings")}
                 </Text>
               )}
@@ -106,17 +108,23 @@ export default function PatientDashboardScreen(): JSX.Element {
             <View className="flex-row gap-3">
               <View className="flex-1">
                 <Card>
-                  <Text className="text-body text-neutral">{t("dashboard.todayStreak")}</Text>
+                  <Text className="text-body text-neutral dark:text-gray-400">
+                    {t("dashboard.todayStreak")}
+                  </Text>
                   <View className="mt-1 flex-row items-center gap-1.5">
                     <Icon name="flame" size={24} color="#F59E0B" />
                     <Text className="text-3xl font-bold">{view.streak.currentStreakDays}</Text>
-                    <Text className="text-body text-neutral">{t("common.days")}</Text>
+                    <Text className="text-body text-neutral dark:text-gray-400">
+                      {t("common.days")}
+                    </Text>
                   </View>
                 </Card>
               </View>
               <View className="flex-1">
                 <Card>
-                  <Text className="text-body text-neutral">{t("dashboard.todayReadings")}</Text>
+                  <Text className="text-body text-neutral dark:text-gray-400">
+                    {t("dashboard.todayReadings")}
+                  </Text>
                   <Text className="mt-1 text-3xl font-bold">{view.todayReadingCount}</Text>
                 </Card>
               </View>
@@ -134,7 +142,7 @@ export default function PatientDashboardScreen(): JSX.Element {
             )}
 
             {fetchedAtIso !== null && (
-              <Text className="text-body text-neutral">
+              <Text className="text-body text-neutral dark:text-gray-400">
                 {t("family.lastUpdated", { time: new Date(fetchedAtIso).toLocaleTimeString() })}
               </Text>
             )}
@@ -147,7 +155,7 @@ export default function PatientDashboardScreen(): JSX.Element {
           </>
         ) : (
           <Card>
-            <Text className="text-body text-neutral">{t("common.loading")}</Text>
+            <Text className="text-body text-neutral dark:text-gray-400">{t("common.loading")}</Text>
           </Card>
         )}
       </ScrollView>

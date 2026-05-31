@@ -67,9 +67,13 @@ export const GlucoseTrendChart = ({
   if (!hasAnyData) {
     return (
       <Card>
-        <Text className="text-body text-neutral">{t("dashboard.lastReading")} — 14d</Text>
+        <Text className="text-body text-neutral dark:text-gray-400">
+          {t("dashboard.lastReading")} — 14d
+        </Text>
         <View style={{ height, alignItems: "center", justifyContent: "center" }}>
-          <Text className="text-body text-neutral">{t("dashboard.noReadings")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">
+            {t("dashboard.noReadings")}
+          </Text>
         </View>
       </Card>
     );
@@ -77,7 +81,9 @@ export const GlucoseTrendChart = ({
 
   return (
     <Card>
-      <Text className="text-body text-neutral">{t("dashboard.lastReading")} — 14d</Text>
+      <Text className="text-body text-neutral dark:text-gray-400">
+        {t("dashboard.lastReading")} — 14d
+      </Text>
       <View style={{ height, marginTop: 8 }}>
         <CartesianChart
           data={data}

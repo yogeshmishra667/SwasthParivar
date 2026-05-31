@@ -4,7 +4,7 @@
 // with pull-to-refresh + acknowledge actions.
 
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, RefreshControl } from "react-native";
+import { View, Text, RefreshControl, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
@@ -15,6 +15,9 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { InsightCard } from "@/components/insights/InsightCard";
+import { PatternSummaryCard } from "@/components/insights/PatternSummaryCard";
+import { LoggingProgressCard } from "@/components/insights/LoggingProgressCard";
+import { TipsCarousel } from "@/components/insights/TipsCarousel";
 import { listInsights, type InsightEventDto } from "@/services/insights";
 import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
@@ -89,9 +92,11 @@ export default function InsightsScreen(): JSX.Element {
   const locked = userStageDays !== null && userStageDays < UNLOCK_DAY;
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950">
       <View className="flex-row items-center justify-between px-4 py-3">
-        <Text className="text-hero font-bold">{t("insights.title")}</Text>
+        <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
+          {t("insights.title")}
+        </Text>
         <ActiveProfileBadge />
       </View>
 
@@ -100,13 +105,13 @@ export default function InsightsScreen(): JSX.Element {
           <Card className="border border-celebration/30 bg-violet-50">
             <View className="items-center gap-3 py-4">
               <Icon name="lock-closed" size={48} color="#8B5CF6" />
-              <Text className="text-hero font-bold text-center">
+              <Text className="text-hero font-bold text-center text-gray-900 dark:text-gray-100">
                 {t("insights.lockedTitle", { stage: userStageDays ?? 0 })}
               </Text>
-              <Text className="text-important text-center text-gray-700">
+              <Text className="text-important text-center text-gray-700 dark:text-gray-300">
                 {t("insights.lockedBody", { stage: userStageDays ?? 0 })}
               </Text>
-              <View className="mt-2 h-3 w-full overflow-hidden rounded-full bg-white">
+              <View className="mt-2 h-3 w-full overflow-hidden rounded-full bg-white dark:bg-gray-900">
                 <View
                   className="h-full rounded-full bg-celebration"
                   style={{
@@ -121,23 +126,21 @@ export default function InsightsScreen(): JSX.Element {
       ) : loading ? (
         <View className="flex-1 items-center justify-center gap-2">
           <Icon name="hourglass-outline" size={32} color="#6B7280" />
-          <Text className="text-body text-neutral">{t("common.loading")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">{t("common.loading")}</Text>
         </View>
       ) : loadError ? (
         <View className="flex-1 items-center justify-center gap-4 px-4">
-          <Text className="text-important text-center">{t("insights.loadFailed")}</Text>
+          <Text className="text-important text-center text-gray-900 dark:text-gray-100">
+            {t("insights.loadFailed")}
+          </Text>
           <Button label={t("common.retry")} onPress={() => void onRefresh()} />
         </View>
       ) : insights.length === 0 ? (
-        <View className="flex-1 items-center justify-center gap-4 px-4">
-          <Icon name="bulb-outline" size={48} color="#6B7280" />
-          <Text className="text-important text-center text-neutral">{t("insights.empty")}</Text>
-          <Button
-            label={t("dashboard.logReading")}
-            variant="ghost"
-            onPress={() => router.push("/(tabs)/log")}
-          />
-        </View>
+        <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
+          <PatternSummaryCard />
+          <LoggingProgressCard />
+          <TipsCarousel />
+        </ScrollView>
       ) : (
         <FlashList
           data={insights}

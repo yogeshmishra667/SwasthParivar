@@ -1,5 +1,6 @@
 import { View, Text, Pressable, ScrollView } from "react-native";
 import { useProfileStore } from "@/stores/profile.store";
+import { getFirstName } from "@/utils/getFirstName";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 
 export const ProfileSwitcher = (): JSX.Element => {
@@ -23,7 +24,7 @@ export const ProfileSwitcher = (): JSX.Element => {
               disabled={locked}
               accessibilityRole="button"
               accessibilityState={{ selected: isActive, disabled: locked }}
-              accessibilityLabel={`Switch to ${p.name}`}
+              accessibilityLabel={`Switch to ${getFirstName(p.name)}`}
               style={{ minWidth: TOUCH_TARGET_MIN }}
               className={`items-center ${locked ? "opacity-40" : ""}`}
             >
@@ -38,7 +39,7 @@ export const ProfileSwitcher = (): JSX.Element => {
                 </Text>
               </View>
               <Text className="mt-1 text-body" numberOfLines={1}>
-                {p.name}
+                {getFirstName(p.name)}
               </Text>
             </Pressable>
           );

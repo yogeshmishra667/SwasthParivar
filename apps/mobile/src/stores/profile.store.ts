@@ -5,6 +5,7 @@ export interface Profile {
   name: string;
   avatarColor: string;
   conditions: string[];
+  age?: number;
 }
 
 interface ProfileState {

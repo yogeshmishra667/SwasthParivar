@@ -96,7 +96,7 @@ export const ConfirmationScreen = ({
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
@@ -108,7 +108,7 @@ export const ConfirmationScreen = ({
           <Card>
             <View className="flex-row items-center gap-2">
               <Icon name="person" size={16} color="#374151" />
-              <Text className="text-important font-semibold">
+              <Text className="text-important font-semibold text-gray-900 dark:text-gray-100">
                 {profile?.name && profile.name.trim().length > 0
                   ? t("logging.savingForProfile", { name: profile.name })
                   : t("logging.savingDefault")}
@@ -122,21 +122,23 @@ export const ConfirmationScreen = ({
           </Card>
 
           <Card>
-            <Text className="text-body text-neutral">{t("logging.glucoseReadingTag")}</Text>
+            <Text className="text-body text-neutral dark:text-gray-400">
+              {t("logging.glucoseReadingTag")}
+            </Text>
             <View className="mt-1 flex-row items-baseline gap-2">
               <Text
                 className={`text-5xl font-bold tracking-tight ${
-                  isCritical ? "text-critical" : "text-gray-900"
+                  isCritical ? "text-critical" : "text-gray-900 dark:text-gray-100"
                 }`}
               >
                 {value}
               </Text>
-              <Text className="text-important text-neutral">mg/dL</Text>
+              <Text className="text-important text-neutral dark:text-gray-400">mg/dL</Text>
             </View>
             {isCritical && (
               <View className="mt-3 flex-row items-center gap-2 rounded-lg bg-red-50 px-3 py-2">
                 <Icon name="warning" size={20} color="#DC2626" />
-                <Text className="flex-1 text-important font-bold text-critical">
+                <Text className="flex-1 text-important font-bold text-critical text-gray-900 dark:text-gray-100">
                   {value > 315 ? t("logging.extremeBannerHigh") : t("logging.extremeBannerLow")}
                 </Text>
               </View>
@@ -144,7 +146,7 @@ export const ConfirmationScreen = ({
           </Card>
 
           <Card>
-            <Text className="mb-3 text-body text-neutral">
+            <Text className="mb-3 text-body text-neutral dark:text-gray-400">
               {uncertainType ? t("logging.typeChoosePrompt") : t("logging.typeLabel")}
             </Text>
             <View className="gap-2">
@@ -158,25 +160,33 @@ export const ConfirmationScreen = ({
                     accessibilityState={{ selected: active }}
                     style={{ minHeight: TOUCH_TARGET_MIN }}
                     className={`flex-row items-center justify-between rounded-xl border px-4 py-3 ${
-                      active ? "border-blue-600 bg-blue-50" : "border-gray-200 bg-white"
+                      active
+                        ? "border-blue-600 bg-blue-50"
+                        : "border-gray-200 bg-white dark:bg-gray-900"
                     }`}
                   >
                     <View className="flex-1 pr-3">
                       <Text
                         className={`text-important font-semibold ${
-                          active ? "text-blue-700" : "text-gray-900"
+                          active ? "text-blue-700" : "text-gray-900 dark:text-gray-100"
                         }`}
                       >
                         {getTypeLabel(t, opt)}
                       </Text>
-                      <Text className="mt-0.5 text-body text-neutral">{getTypeHint(t, opt)}</Text>
+                      <Text className="mt-0.5 text-body text-neutral dark:text-gray-400">
+                        {getTypeHint(t, opt)}
+                      </Text>
                     </View>
                     <View
                       className={`h-5 w-5 items-center justify-center rounded-full border-2 ${
-                        active ? "border-blue-600 bg-blue-600" : "border-gray-300 bg-white"
+                        active
+                          ? "border-blue-600 bg-blue-600"
+                          : "border-gray-300 bg-white dark:bg-gray-900"
                       }`}
                     >
-                      {active && <View className="h-2 w-2 rounded-full bg-white" />}
+                      {active && (
+                        <View className="h-2 w-2 rounded-full bg-white dark:bg-gray-900" />
+                      )}
                     </View>
                   </Pressable>
                 );
@@ -200,17 +210,17 @@ export const ConfirmationScreen = ({
                 <View className="flex-1 pr-3">
                   <Text
                     className={`text-important font-semibold ${
-                      festiveAvailable ? "" : "text-neutral"
+                      festiveAvailable ? "" : "text-neutral dark:text-gray-400"
                     }`}
                   >
                     🎉 {t("logging.festiveToggle", { defaultValue: "Special din?" })}
                   </Text>
                   {!festiveCanUse ? (
-                    <Text className="mt-1 text-body text-neutral">
+                    <Text className="mt-1 text-body text-neutral dark:text-gray-400">
                       {t("logging.festiveLimitReached")}
                     </Text>
                   ) : (
-                    <Text className="mt-1 text-body text-neutral">
+                    <Text className="mt-1 text-body text-neutral dark:text-gray-400">
                       {t("logging.festiveAvailableHint", {
                         used: festiveUsedThisWeek,
                         max: FESTIVE_MAX_PER_WEEK,
@@ -223,7 +233,7 @@ export const ConfirmationScreen = ({
                     festiveActive ? "bg-celebration" : "bg-gray-300"
                   } ${festiveAvailable ? "" : "opacity-40"}`}
                 >
-                  <View className="h-5 w-5 rounded-full bg-white" />
+                  <View className="h-5 w-5 rounded-full bg-white dark:bg-gray-900" />
                 </View>
               </Pressable>
             </Card>

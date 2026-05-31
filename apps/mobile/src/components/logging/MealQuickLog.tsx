@@ -29,9 +29,9 @@ const CATEGORY_EMOJI: Record<MealCategory, string> = {
 };
 
 const CATEGORY_COLOR: Record<MealCategory, string> = {
-  light: "bg-green-50 border-green-600",
-  normal: "bg-blue-50 border-blue-600",
-  heavy_fried: "bg-amber-50 border-amber-600",
+  light: "bg-green-50 border-green-600 dark:bg-green-900/30 dark:border-green-500",
+  normal: "bg-blue-50 border-blue-600 dark:bg-blue-900/30 dark:border-blue-500",
+  heavy_fried: "bg-amber-50 border-amber-600 dark:bg-amber-900/30 dark:border-amber-500",
 };
 
 // Map current local hour to a default meal type — saves a tap on most
@@ -72,8 +72,12 @@ export const MealQuickLog = ({ onSave, saving = false }: MealQuickLogProps): JSX
   return (
     <View className="gap-4">
       <View>
-        <Text className="text-hero font-bold">{t("meals.title")}</Text>
-        <Text className="mt-1 text-body text-neutral">{t("meals.subtitle")}</Text>
+        <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
+          {t("meals.title")}
+        </Text>
+        <Text className="mt-1 text-body text-neutral dark:text-gray-400">
+          {t("meals.subtitle")}
+        </Text>
       </View>
 
       <Card>
@@ -88,12 +92,14 @@ export const MealQuickLog = ({ onSave, saving = false }: MealQuickLogProps): JSX
                 accessibilityState={{ selected: active }}
                 style={{ minHeight: TOUCH_TARGET_MIN }}
                 className={`flex-1 items-center justify-center rounded-xl border-2 px-3 py-2 ${
-                  active ? "border-primary bg-blue-50" : "border-gray-200 bg-white"
+                  active
+                    ? "border-primary bg-blue-50 dark:bg-blue-900/30 dark:border-primary"
+                    : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
                 }`}
               >
                 <Text
                   className={`text-important font-semibold ${
-                    active ? "text-blue-700" : "text-gray-900"
+                    active ? "text-blue-700 dark:text-blue-400" : "text-gray-900 dark:text-gray-100"
                   }`}
                 >
                   {typeLabels[tp]}
@@ -120,8 +126,12 @@ export const MealQuickLog = ({ onSave, saving = false }: MealQuickLogProps): JSX
           >
             <Text className="text-4xl">{CATEGORY_EMOJI[cat]}</Text>
             <View className="flex-1">
-              <Text className="text-important font-bold text-gray-900">{categoryLabel(cat)}</Text>
-              <Text className="mt-0.5 text-body text-neutral">{categoryHint(cat)}</Text>
+              <Text className="text-important font-bold text-gray-900 dark:text-gray-100">
+                {categoryLabel(cat)}
+              </Text>
+              <Text className="mt-0.5 text-body text-neutral dark:text-gray-400">
+                {categoryHint(cat)}
+              </Text>
             </View>
           </Pressable>
         ))}

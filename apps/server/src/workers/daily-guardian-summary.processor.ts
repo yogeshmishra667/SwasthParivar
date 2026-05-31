@@ -15,6 +15,7 @@ import { prisma } from "../shared/database.js";
 import { getFlag } from "../shared/flags/index.js";
 import { logger } from "../shared/logger.js";
 import { sendExpoPush, type ExpoPushMessage } from "../shared/notifications/expo-push.js";
+import { notif } from "../shared/i18n/notifications.js";
 
 const DAY_MS = 86_400_000;
 
@@ -40,6 +41,16 @@ export const processDailyGuardianSummary = async (
   });
   const guardianIds = [...new Set(links.map((l) => l.guardianId))];
 
+  // Load the language for each guardian in a single query so the
+  // per-guardian loop renders copy in their preferred language. A
+  // guardian without a row (race condition on delete) falls through
+  // to Hindi default inside notif().
+  const guardians = await prisma.user.findMany({
+    where: { id: { in: guardianIds } },
+    select: { id: true, preferredLanguage: true },
+  });
+  const languageById = new Map(guardians.map((g) => [g.id, g.preferredLanguage]));
+
   let sent = 0;
   let failures = 0;
   for (const guardianId of guardianIds) {
@@ -56,10 +67,15 @@ export const processDailyGuardianSummary = async (
       if (tokens.length === 0) continue;
 
       const notificationId = randomUUID();
+      const copy = notif(
+        "daily_guardian_summary",
+        { yellowCount },
+        languageById.get(guardianId) ?? "hi",
+      );
       const messages: ExpoPushMessage[] = tokens.map((t) => ({
         to: t.token,
-        title: "Aaj ka summary",
-        body: `${yellowCount} baat dhyaan dene layak hai. App mein dekhein.`,
+        title: copy.title,
+        body: copy.body,
         channelId: "guardian",
         data: { notificationId, type: "guardian_daily_summary" },
       }));

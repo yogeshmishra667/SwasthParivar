@@ -103,7 +103,7 @@ export default function VerifyScreen(): JSX.Element {
   }, [otp]);
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
       <KeyboardAvoidingView
         behavior="padding"
         style={{ flex: 1 }}
@@ -131,7 +131,7 @@ export default function VerifyScreen(): JSX.Element {
             <View className="mb-4 h-24 w-24 items-center justify-center rounded-full bg-blue-50">
               <Icon name="chatbubble-ellipses" size={48} color="#2563EB" />
             </View>
-            <Text className="text-3xl font-bold tracking-tight text-gray-900">
+            <Text className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
               {t("auth.otpSentTitle", { defaultValue: "OTP Sent" })}
             </Text>
             <Text className="mt-2 text-center text-body text-gray-500">
@@ -142,7 +142,7 @@ export default function VerifyScreen(): JSX.Element {
           </View>
 
           <View className="mb-6">
-            <Text className="mb-2 text-important font-semibold text-gray-800">
+            <Text className="mb-2 text-important font-semibold text-gray-800 dark:text-gray-100">
               {t("auth.enterOtp")}
             </Text>
             <TextInput
@@ -158,7 +158,7 @@ export default function VerifyScreen(): JSX.Element {
               autoComplete="sms-otp"
               importantForAutofill="yes"
               style={{ minHeight: TOUCH_TARGET_MIN, letterSpacing: 8 }}
-              className="rounded-2xl border border-gray-300 bg-gray-50 px-4 py-4 text-center text-2xl font-bold tracking-widest text-gray-900"
+              className="rounded-2xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-4 text-center text-2xl font-bold tracking-widest text-gray-900 dark:text-gray-100"
             />
           </View>
 

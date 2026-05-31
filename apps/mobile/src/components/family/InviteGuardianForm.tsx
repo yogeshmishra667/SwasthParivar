@@ -69,20 +69,26 @@ export const InviteGuardianForm = ({ onSent }: InviteGuardianFormProps): JSX.Ele
 
   return (
     <Card>
-      <Text className="text-hero font-bold">{t("family.inviteTitle")}</Text>
-      <Text className="mt-1 text-body text-neutral">{t("family.inviteHint")}</Text>
+      <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
+        {t("family.inviteTitle")}
+      </Text>
+      <Text className="mt-1 text-body text-neutral dark:text-gray-400">
+        {t("family.inviteHint")}
+      </Text>
 
       {/* Which profile this invite is for — guards against linking a
           guardian to the wrong household profile on a shared phone. */}
       {activeProfile !== null && (
-        <Text className="mt-2 text-important font-semibold text-primary">
+        <Text className="mt-2 text-important font-semibold text-primary dark:text-blue-400">
           {t("family.inviteForProfile", { name: activeProfile.name })}
         </Text>
       )}
 
       <View className="mt-4 gap-3">
         <View>
-          <Text className="text-body text-neutral">{t("family.guardianPhone")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">
+            {t("family.guardianPhone")}
+          </Text>
           <TextInput
             value={phone}
             onChangeText={setPhone}
@@ -90,19 +96,21 @@ export const InviteGuardianForm = ({ onSent }: InviteGuardianFormProps): JSX.Ele
             autoComplete="tel"
             placeholder="+91 9..."
             placeholderTextColor="#9CA3AF"
-            className="mt-1 rounded-xl border border-gray-200 bg-white px-3 text-important"
+            className="mt-1 rounded-xl border border-gray-200 bg-white px-3 text-important text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
             style={{ minHeight: TOUCH_TARGET_MIN }}
           />
         </View>
 
         <View>
-          <Text className="text-body text-neutral">{t("family.relationship")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">
+            {t("family.relationship")}
+          </Text>
           <TextInput
             value={relationship}
             onChangeText={setRelationship}
             placeholder="Beta / Beti / Pati / Patni"
             placeholderTextColor="#9CA3AF"
-            className="mt-1 rounded-xl border border-gray-200 bg-white px-3 text-important"
+            className="mt-1 rounded-xl border border-gray-200 bg-white px-3 text-important text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
             style={{ minHeight: TOUCH_TARGET_MIN }}
           />
         </View>
@@ -116,16 +124,22 @@ export const InviteGuardianForm = ({ onSent }: InviteGuardianFormProps): JSX.Ele
         >
           <View
             className={`h-6 w-6 items-center justify-center rounded-md border-2 ${
-              alertEnabled ? "border-primary bg-primary" : "border-gray-300 bg-white"
+              alertEnabled
+                ? "border-primary bg-primary"
+                : "border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800"
             }`}
           >
             {alertEnabled && <Icon name="checkmark" size={16} color="#FFFFFF" />}
           </View>
-          <Text className="text-important text-gray-900">{t("family.alertEnabled")}</Text>
+          <Text className="text-important text-gray-900 dark:text-gray-100">
+            {t("family.alertEnabled")}
+          </Text>
         </Pressable>
 
         <View>
-          <Text className="text-body text-neutral">{t("family.sensitivity")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">
+            {t("family.sensitivity")}
+          </Text>
           <View className="mt-2 flex-row gap-2">
             {SENSITIVITIES.map((s) => {
               const active = s === sensitivity;
@@ -137,12 +151,16 @@ export const InviteGuardianForm = ({ onSent }: InviteGuardianFormProps): JSX.Ele
                   accessibilityState={{ selected: active }}
                   style={{ minHeight: TOUCH_TARGET_MIN }}
                   className={`flex-1 items-center justify-center rounded-xl border-2 px-2 ${
-                    active ? "border-primary bg-blue-50" : "border-gray-200 bg-white"
+                    active
+                      ? "border-primary bg-blue-50 dark:bg-blue-950/40"
+                      : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
                   }`}
                 >
                   <Text
                     className={`text-body font-semibold ${
-                      active ? "text-blue-700" : "text-gray-900"
+                      active
+                        ? "text-blue-700 dark:text-blue-300"
+                        : "text-gray-900 dark:text-gray-100"
                     }`}
                   >
                     {sensitivityLabel(s)}

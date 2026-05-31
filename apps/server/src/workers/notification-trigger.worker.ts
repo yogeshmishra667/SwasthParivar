@@ -13,6 +13,8 @@ import { logger } from "../shared/logger.js";
 import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
 import { sendExpoPush } from "../shared/notifications/expo-push.js";
 import { resolveHouseholdDelivery } from "../shared/notifications/household-delivery.js";
+import { notif, withProfilePrefix } from "../shared/i18n/notifications.js";
+import type { Language } from "@prisma/client";
 
 interface TickJob {
   tick: true;
@@ -147,49 +149,35 @@ const buildCandidates = (ctx: UserCtx, now: Date): NotificationCandidate[] => {
   return candidates;
 };
 
-const COPY: Record<
-  NotificationTriggerType,
-  (p: Record<string, string | number>) => { title: string; body: string }
-> = {
-  critical_low_high: () => ({ title: "⚠️ Critical", body: "Check reading." }),
-  best_time: () => ({ title: "Sugar check karein?", body: "Aaj ka log kar lein 🙏" }),
-  missed_day: (p) => ({
-    title: `${p.days ?? 1} din se log nahi`,
-    body: "Sab theek? Aaj ek reading le lein.",
-  }),
-  // CLAUDE.md re-engagement copy must NEVER be guilt-trippy. Tone
-  // gradually shifts from gentle nudge → caring concern → invitation.
-  // Day-7 message is intentionally short and friendly so the last
-  // push before silence isn't a downer.
-  re_engagement: (p) => {
-    const days = Number(p.days ?? 3);
-    if (days <= 3) {
-      return {
-        title: `${days} din se reading nahi`,
-        body: "Sab theek? Aaj ek baar check kar lein 🙏",
-      };
-    }
-    if (days <= 5) {
-      return {
-        title: "Hum yaad kar rahe hain",
-        body: `${days} din ho gaye — aaj jab time ho, ek reading le lein.`,
-      };
-    }
-    return {
-      title: "Wapas aane ka swagat hai",
-      body: "Jab ready ho, naya log start kar lein 💪",
-    };
-  },
-  welcome_back: () => ({
-    title: "Welcome back!",
-    body: "Naya streak shuru karein 💪",
-  }),
-  streak_risk: (p) => ({
-    title: `${p.streak ?? 7} din ki streak!`,
-    body: "Aaj bhi log karein, streak safe rahegi 🔥",
-  }),
-  generic_morning: () => ({ title: "Good morning", body: "Aaj sugar check karein" }),
-  med_reminder: () => ({ title: "Dawai ka time", body: "Dawai le lein" }),
+// Dispatch resolver triggers into the shared i18n bundle. Every trigger
+// the resolver can emit must map here; the switch is exhaustive so a
+// new trigger fails to compile if no copy was added.
+const buildCopy = (
+  trigger: NotificationTriggerType,
+  params: Record<string, string | number>,
+  language: Language,
+): { title: string; body: string } => {
+  switch (trigger) {
+    case "critical_low_high":
+      return notif("critical_low_high", undefined as never, language);
+    case "best_time":
+      return notif("best_time", undefined as never, language);
+    case "missed_day":
+      return notif("missed_day", { days: Number(params.days ?? 1) }, language);
+    case "re_engagement":
+      return notif("re_engagement", { days: Number(params.days ?? 3) }, language);
+    case "welcome_back":
+      return notif("welcome_back", undefined as never, language);
+    case "streak_risk":
+      return notif("streak_risk", { streak: Number(params.streak ?? 7) }, language);
+    case "generic_morning":
+      return notif("generic_morning", undefined as never, language);
+    case "med_reminder":
+      // The notification-trigger path never carries a real medicine
+      // name (med-reminder.worker.ts owns those); this is the resolver
+      // fallback copy. Use a generic placeholder.
+      return notif("med_reminder", { medicine: "" }, language);
+  }
 };
 
 const processUser = async (userId: string, now: Date): Promise<void> => {
@@ -216,16 +204,15 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
     return;
   }
 
-  // The profile name only labels the notification on a shared device;
-  // a single-profile household keeps the unprefixed copy untouched.
-  let profileName: string | null = null;
-  if (memberIds.length > 1) {
-    const profile = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { name: true },
-    });
-    profileName = profile?.name ?? null;
-  }
+  // Always load the profile so we know which language to render copy
+  // in. Name is only used to prefix the title on a shared-device
+  // household (memberIds > 1).
+  const profile = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, preferredLanguage: true },
+  });
+  const language: Language = profile?.preferredLanguage ?? "hi";
+  const profileName: string | null = memberIds.length > 1 ? (profile?.name ?? null) : null;
 
   const streak = await prisma.userStreak.findUnique({ where: { userId } });
 
@@ -258,8 +245,8 @@ const processUser = async (userId: string, now: Date): Promise<void> => {
     return;
   }
 
-  const copy = COPY[result.chosen.trigger](result.chosen.params);
-  const title = profileName ? `${profileName} ji: ${copy.title}` : copy.title;
+  const copy = buildCopy(result.chosen.trigger, result.chosen.params, language);
+  const title = withProfilePrefix(copy.title, profileName, language);
   const notificationId = randomUUID();
   await sendExpoPush(
     ctx.tokens.map((t) => ({

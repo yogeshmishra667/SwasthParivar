@@ -31,7 +31,9 @@ export const UndoToast = ({ visible, message, onUndo, onHide }: Props): JSX.Elem
     <View className="absolute bottom-8 left-4 right-4 flex-row items-center justify-between rounded-2xl bg-gray-800 px-4 py-3">
       <Text className="text-important text-white">{message}</Text>
       <Pressable onPress={onUndo} accessibilityRole="button" className="px-3 py-1">
-        <Text className="text-important font-bold text-streak">Undo</Text>
+        <Text className="text-important font-bold text-streak text-gray-900 dark:text-gray-100">
+          Undo
+        </Text>
       </Pressable>
     </View>
   );

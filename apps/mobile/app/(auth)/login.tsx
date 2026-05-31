@@ -54,7 +54,7 @@ export default function LoginScreen(): JSX.Element {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
       <KeyboardAvoidingView
         behavior="padding"
         style={{ flex: 1 }}
@@ -73,22 +73,26 @@ export default function LoginScreen(): JSX.Element {
             <View className="mb-4 h-24 w-24 items-center justify-center rounded-full bg-blue-50">
               <Icon name="medkit" size={48} color="#2563EB" />
             </View>
-            <Text className="text-3xl font-bold text-gray-900 tracking-tight">SwasthParivar</Text>
+            <Text className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+              SwasthParivar
+            </Text>
             <Text className="mt-2 text-center text-body text-gray-500">
               {t("auth.subtitle", { defaultValue: "" })}
             </Text>
           </View>
 
           <View className="mb-6">
-            <Text className="mb-2 text-important font-semibold text-gray-800">
+            <Text className="mb-2 text-important font-semibold text-gray-800 dark:text-gray-100">
               {t("auth.enterPhone")}
             </Text>
             <View
               style={{ minHeight: TOUCH_TARGET_MIN }}
-              className="flex-row items-center overflow-hidden rounded-2xl border border-gray-300 bg-gray-50"
+              className="flex-row items-center overflow-hidden rounded-2xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
             >
-              <View className="flex-row items-center border-r border-gray-300 px-4 py-4 bg-gray-100">
-                <Text className="text-important font-bold text-gray-700">+91</Text>
+              <View className="flex-row items-center border-r border-gray-300 px-4 py-4 bg-gray-100 dark:bg-gray-800">
+                <Text className="text-important font-bold text-gray-700 dark:text-gray-300">
+                  +91
+                </Text>
               </View>
               <TextInput
                 value={phone}
@@ -98,7 +102,7 @@ export default function LoginScreen(): JSX.Element {
                 placeholder="00000 00000"
                 placeholderTextColor="#9CA3AF"
                 accessibilityLabel="Phone number input"
-                className="flex-1 px-4 py-4 text-important font-semibold text-gray-900"
+                className="flex-1 px-4 py-4 text-important font-semibold text-gray-900 dark:text-gray-100"
               />
             </View>
           </View>

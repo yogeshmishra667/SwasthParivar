@@ -43,17 +43,21 @@ export const MessageBubble = ({
         onLongPress={onLongPress ? () => onLongPress(message.id) : undefined}
         accessibilityRole="text"
         className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-          isUser ? "rounded-br-md bg-primary" : "rounded-bl-md border border-gray-200 bg-white"
+          isUser
+            ? "rounded-br-md bg-primary"
+            : "rounded-bl-md border border-gray-200 bg-white dark:bg-gray-900"
         }`}
       >
-        <Text className={`text-important ${isUser ? "text-white" : "text-gray-900"}`}>
+        <Text
+          className={`text-important ${isUser ? "text-white" : "text-gray-900 dark:text-gray-100"}`}
+        >
           {message.content}
         </Text>
       </Pressable>
 
       <View className={`mt-1 flex-row items-center gap-1.5 ${isUser ? "pr-1" : "pl-1"}`}>
         {!isUser && tier ? <CostTierBadge tier={tier} /> : null}
-        <Text className="text-body text-neutral">
+        <Text className="text-body text-neutral dark:text-gray-400">
           {formatTime(message.createdAt, t("chat.justNow"))}
         </Text>
         {!isUser ? (

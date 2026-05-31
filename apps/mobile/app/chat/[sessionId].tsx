@@ -185,13 +185,13 @@ export default function ChatThreadScreen(): JSX.Element {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
       {/* criticalBypassActive is false until a global critical-bypass
           state store exists on mobile (follow-up). This guard is
           defense-in-depth — the server already enforces emergency-skip
           in chat.service (the canned redirect is returned regardless). */}
       <EmergencyChatGuard criticalBypassActive={false} onResolveCritical={() => router.back()}>
-        <View className="flex-row items-center justify-between border-b border-gray-200 bg-white px-3 py-2.5">
+        <View className="flex-row items-center justify-between border-b border-gray-200 bg-white dark:bg-gray-900 px-3 py-2.5">
           <View className="flex-1 flex-row items-center gap-1">
             <Pressable
               onPress={() => router.back()}
@@ -202,7 +202,9 @@ export default function ChatThreadScreen(): JSX.Element {
             >
               <Icon name="chevron-back" size={24} color="#111827" />
             </Pressable>
-            <Text className="text-important font-bold text-gray-900">{t("chat.title")}</Text>
+            <Text className="text-important font-bold text-gray-900 dark:text-gray-100">
+              {t("chat.title")}
+            </Text>
           </View>
           <ActiveProfileBadge />
         </View>
@@ -216,7 +218,7 @@ export default function ChatThreadScreen(): JSX.Element {
           className="flex-1"
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View className="flex-1 bg-gray-50">
+          <View className="flex-1 bg-gray-50 dark:bg-gray-950">
             <MessageList
               messages={messages}
               typing={typing}

@@ -25,20 +25,20 @@ export const BPCard = ({ latest }: BPCardProps): JSX.Element => {
 
   return (
     <Card>
-      <Text className="text-body text-neutral">{t("bp.latest")}</Text>
+      <Text className="text-body text-neutral dark:text-gray-400">{t("bp.latest")}</Text>
       {latest ? (
         <>
           <View className="mt-1 flex-row items-baseline gap-2">
             <Text
               className={`text-4xl font-bold tracking-tight ${
-                elevated ? "text-warning" : "text-gray-900"
+                elevated ? "text-warning" : "text-gray-900 dark:text-gray-100"
               }`}
             >
               {latest.systolic}
-              <Text className="text-2xl text-neutral">/</Text>
+              <Text className="text-2xl text-neutral dark:text-gray-400">/</Text>
               {latest.diastolic}
             </Text>
-            <Text className="text-body text-neutral">mmHg</Text>
+            <Text className="text-body text-neutral dark:text-gray-400">mmHg</Text>
           </View>
           {elevated && (
             <View className="mt-2 flex-row items-center gap-1">
@@ -48,7 +48,7 @@ export const BPCard = ({ latest }: BPCardProps): JSX.Element => {
           )}
         </>
       ) : (
-        <Text className="mt-2 text-body text-neutral">—</Text>
+        <Text className="mt-2 text-body text-neutral dark:text-gray-400">—</Text>
       )}
     </Card>
   );

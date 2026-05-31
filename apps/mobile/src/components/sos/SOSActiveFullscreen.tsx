@@ -160,7 +160,7 @@ export const SOSActiveFullscreen = ({
 
           {/* Stage indicator — pill with live region so a screen reader
               announces transitions as the escalation chain advances. */}
-          <View className="mt-6 self-center flex-row items-center gap-2 rounded-full bg-white/15 px-4 py-2">
+          <View className="mt-6 self-center flex-row items-center gap-2 rounded-full bg-white dark:bg-gray-900/15 px-4 py-2">
             <View
               style={{
                 height: 8,
@@ -178,7 +178,7 @@ export const SOSActiveFullscreen = ({
         {/* Primary-contact card — visual center of gravity. The "Call
             now" CTA lives INSIDE the card so the patient confirms WHO
             they're calling before tapping, not after. */}
-        <View className="rounded-3xl bg-white p-5 shadow-2xl">
+        <View className="rounded-3xl bg-white dark:bg-gray-900 p-5 shadow-2xl">
           <Text className="text-xs font-semibold uppercase tracking-wider text-red-700">
             {primaryContact
               ? t("sos.active.callPrimaryButton", { name: "" }).trim()
@@ -187,13 +187,18 @@ export const SOSActiveFullscreen = ({
 
           {primaryContact ? (
             <>
-              <Text className="mt-2 text-hero font-bold text-foreground" numberOfLines={1}>
+              <Text
+                className="mt-2 text-hero font-bold text-foreground text-gray-900 dark:text-gray-100"
+                numberOfLines={1}
+              >
                 {primaryContact.name}
               </Text>
               {primaryContact.relationship ? (
-                <Text className="text-body text-neutral">{primaryContact.relationship}</Text>
+                <Text className="text-body text-neutral dark:text-gray-400">
+                  {primaryContact.relationship}
+                </Text>
               ) : null}
-              <Text className="mt-1 text-important font-medium text-foreground">
+              <Text className="mt-1 text-important font-medium text-foreground text-gray-900 dark:text-gray-100">
                 {formatPhone(primaryContact.phone)}
               </Text>
               <View className="mt-4">
@@ -207,7 +212,7 @@ export const SOSActiveFullscreen = ({
             </>
           ) : (
             <>
-              <Text className="mt-2 text-important font-medium text-foreground">
+              <Text className="mt-2 text-important font-medium text-foreground text-gray-900 dark:text-gray-100">
                 {t("sos.active.subtitle")}
               </Text>
               <View className="mt-4">

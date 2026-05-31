@@ -113,9 +113,11 @@ export default function MedicationsScreen(): JSX.Element {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950">
       <View className="flex-row items-center justify-between p-4">
-        <Text className="text-hero font-bold">{t("medications.title")}</Text>
+        <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
+          {t("medications.title")}
+        </Text>
         <ActiveProfileBadge />
       </View>
 
@@ -137,17 +139,27 @@ export default function MedicationsScreen(): JSX.Element {
             <ActivityIndicator />
           ) : schedules.length === 0 && !showForm ? (
             <Card>
-              <Text className="text-important">{t("medications.noMedicines")}</Text>
-              <Text className="text-body text-neutral">{t("medications.addFromSettings")}</Text>
+              <Text className="text-important text-gray-900 dark:text-gray-100">
+                {t("medications.noMedicines")}
+              </Text>
+              <Text className="text-body text-neutral dark:text-gray-400">
+                {t("medications.addFromSettings")}
+              </Text>
             </Card>
           ) : (
             schedules.map((s) => (
               <Card key={s.id}>
                 <View className="flex-row items-start justify-between">
                   <View className="flex-1">
-                    <Text className="text-important font-semibold">{s.medicineName}</Text>
-                    {s.dosage && <Text className="text-body text-neutral">{s.dosage}</Text>}
-                    <Text className="text-body mt-1">{s.timeSlots.join(" · ")}</Text>
+                    <Text className="text-important font-semibold text-gray-900 dark:text-gray-100">
+                      {s.medicineName}
+                    </Text>
+                    {s.dosage && (
+                      <Text className="text-body text-neutral dark:text-gray-400">{s.dosage}</Text>
+                    )}
+                    <Text className="text-body mt-1">
+                      {Array.isArray(s.timeSlots) ? s.timeSlots.join(" · ") : ""}
+                    </Text>
                   </View>
                   <Pressable
                     onPress={() => handleDelete(s)}
@@ -268,7 +280,9 @@ function AddMedicineForm({ onCancel, onSaved, onError, invalidTimeMsg }: FormPro
 
   return (
     <Card>
-      <Text className="text-important font-semibold mb-3">{t("medications.addNew")}</Text>
+      <Text className="text-important font-semibold mb-3 text-gray-900 dark:text-gray-100">
+        {t("medications.addNew")}
+      </Text>
 
       <Text className="text-body mb-1">{t("medications.medicineName")}</Text>
       <TextInput
@@ -289,7 +303,9 @@ function AddMedicineForm({ onCancel, onSaved, onError, invalidTimeMsg }: FormPro
       />
 
       <Text className="text-body mb-1">{t("medications.timeSlots")}</Text>
-      <Text className="text-body text-neutral mb-2">{t("medications.timeSlotHint")}</Text>
+      <Text className="text-body text-neutral dark:text-gray-400 mb-2">
+        {t("medications.timeSlotHint")}
+      </Text>
 
       <View className="flex-row gap-2 mb-2">
         <TextInput
@@ -313,7 +329,7 @@ function AddMedicineForm({ onCancel, onSaved, onError, invalidTimeMsg }: FormPro
               onPress={() => removeSlot(s)}
               accessibilityRole="button"
               accessibilityLabel={`${s} ${t("medications.remove")}`}
-              className="flex-row items-center gap-1 bg-gray-100 rounded-full px-3 py-2"
+              className="flex-row items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-full px-3 py-2"
               style={{ minHeight: TOUCH_TARGET_MIN }}
             >
               <Text className="text-body">{s}</Text>

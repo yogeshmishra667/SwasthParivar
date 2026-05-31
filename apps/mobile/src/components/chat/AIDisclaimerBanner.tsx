@@ -24,7 +24,9 @@ export const AIDisclaimerBanner = ({ onDismiss }: AIDisclaimerBannerProps): JSX.
         className="min-h-touch min-w-touch items-center justify-center active:opacity-60"
         hitSlop={8}
       >
-        <Text className="text-important font-semibold text-amber-900">✕</Text>
+        <Text className="text-important font-semibold text-amber-900 text-gray-900 dark:text-gray-100">
+          ✕
+        </Text>
       </Pressable>
     </View>
   );

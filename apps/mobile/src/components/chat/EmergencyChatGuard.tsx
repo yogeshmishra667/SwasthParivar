@@ -21,7 +21,7 @@ export const EmergencyChatGuard = ({
       className="flex-1 items-center justify-center bg-critical/10 p-6"
       accessibilityRole="alert"
     >
-      <Text className="mb-4 text-center text-important font-semibold text-critical">
+      <Text className="mb-4 text-center text-important font-semibold text-critical text-gray-900 dark:text-gray-100">
         {t("chat.emergencySkip")}
       </Text>
       <Pressable

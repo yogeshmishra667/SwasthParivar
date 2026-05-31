@@ -157,7 +157,51 @@
     "switchToEnglish": "Switch to English",
     "switchToHindi": "Hindi par switch karein",
     "normalText": "Normal text",
-    "largeText": "Bada text (1.3x)"
+    "largeText": "Bada text (1.3x)",
+    "preferences": "App preferences",
+    "language": "Bhasha",
+    "accessibility": "Bada text",
+    "largeTextOn": "Chalu",
+    "largeTextOff": "Band",
+    "householdSection": "Is phone par parivaar",
+    "primaryProfile": "Mukhya",
+    "addProfile": "Naya profile jodein",
+    "addProfileFailed": "Profile add nahi ho paya. Phir koshish karein.",
+    "editProfile": "Profile edit karein",
+    "editProfileFailed": "Profile update nahi ho paya. Phir koshish karein.",
+    "reminderTime": {
+      "title": "Roz ka reminder",
+      "value": "{{time}}",
+      "off": "Band — koi reminder nahi",
+      "disable": "Band karein",
+      "format": "24-ghante format (jaise 07:00 ya 19:30)",
+      "hoursLabel": "Ghante",
+      "minutesLabel": "Minute"
+    },
+    "checkFrequency": {
+      "title": "Sugar check ki frequency"
+    },
+    "frequency": {
+      "daily": "Roz",
+      "dailyDesc": "Har din sugar log karein",
+      "twice_weekly": "Hafte mein 2 baar",
+      "twice_weeklyDesc": "Hafte mein 2 baar log karein",
+      "weekly": "Hafte mein 1 baar",
+      "weeklyDesc": "Hafte mein 1 baar log karein",
+      "biweekly": "Har 2 hafte",
+      "biweeklyDesc": "Har 2 hafte mein 1 baar",
+      "monthly": "Mahine mein 1 baar",
+      "monthlyDesc": "Mahine mein 1 baar"
+    },
+    "notifications": {
+      "title": "Push notifications",
+      "desc": "Reminders, alerts aur patterns jo humein dikhte hain.",
+      "errorTitle": "Notification setup mein dikkat",
+      "errorPerm": "Phone settings mein notifications chalu karein.",
+      "errorSim": "Push notifications simulator par kaam nahi karte.",
+      "errorExpo": "Push notifications ke liye standalone build chahiye, Expo Go nahi.",
+      "errorGeneric": "Device register nahi ho paya."
+    }
   },
   "critical": {
     "lowTitle": "Sugar bahut kam hai ({{value}})",
@@ -300,6 +344,43 @@
           "critical": "Jis din aapka BP zyada hota hai ({{systolicThreshold}} se upar), us din sugar bahut zyada rehti hai — lagbhag {{highBpMean}}, normal din {{normalBpMean}} (kareeb {{delta}} mg/dL zyada). BP aur sugar dono ko saath manage karne ke liye doctor se baat karein."
         }
       }
+    },
+    "emptyState": {
+      "title": "Aapke patterns theek dikh rahe hain",
+      "desc": "Hum aapki readings dekhte rehte hain. Koi dhyaan dene wali baat ho to yahan dikhayi degi."
+    },
+    "loggingProgress": {
+      "title": "Logging consistency",
+      "descGood": "Achcha hafta — {{total}} mein se {{logged}} din log kiya.",
+      "descOk": "Is hafte {{total}} mein se {{logged}} din log kiya. Roz ek baar log karne ki koshish karein.",
+      "descLow": "Is hafte sirf {{logged}} din log kiya ({{total}} mein se). Ek tap bhi madad karta hai."
+    },
+    "tips": {
+      "header": "Roz ke tips",
+      "water": {
+        "title": "Paani peete rahein",
+        "desc": "Paani peene se kidney extra sugar nikalne mein madad karti hai."
+      },
+      "walk": {
+        "title": "Khaane ke baad walk",
+        "desc": "10 minute ka walk khaane ke baad sugar spike kam karta hai."
+      },
+      "fiber": {
+        "title": "Zyada fibre khayein",
+        "desc": "Sabziyan aur whole grains sugar absorption dheere karte hain."
+      }
+    }
+  },
+  "guardian": {
+    "openFromFamily": "Parivaar ke alerts",
+    "openFromFamilyHint": "Aapke patients ke patterns dekhein.",
+    "emptyState": {
+      "title": "Sab theek hai",
+      "desc": "Abhi parivaar ke liye koi critical alert nahi hai. Hum unki readings dekh rahe hain — koi baat hui to turant batayenge.",
+      "howItWorks": "Family alerts kaise kaam karte hain",
+      "step1": "Voh apne phone par sugar ya vitals log karte hain.",
+      "step2": "Hum dhyaan dene wale patterns dhoondte hain.",
+      "step3": "Aapko turant yahan alert milta hai."
     }
   },
   "summary": {
@@ -423,6 +504,10 @@
     "pendingToYou": "{{name}} ne aapko invite kiya hai",
     "loadFailed": "Family list load nahi hui.",
     "guardianHeader": "Guardian view — read only",
-    "lastUpdated": "Last update: {{time}}"
+    "lastUpdated": "Last update: {{time}}",
+    "quickSummary": {
+      "title": "Parivaar ka health network",
+      "desc": "Apno ke saath health logs share karein aur critical patterns ke alerts payein."
+    }
   }
 }

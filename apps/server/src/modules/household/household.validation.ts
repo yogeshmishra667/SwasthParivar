@@ -24,3 +24,17 @@ export const addHouseholdProfileSchema = z.object({
 });
 
 export type AddHouseholdProfileInput = z.infer<typeof addHouseholdProfileSchema>;
+
+export const updateHouseholdProfileSchema = z.object({
+  name: z.string().min(1).max(60).trim().optional(),
+  age: z.number().int().min(0).max(120).optional(),
+  gender: z.enum(["male", "female", "other"]).optional(),
+  conditions: z
+    .array(z.enum(["diabetes", "hypertension", "asthma", "cardiac"]))
+    .min(1)
+    .max(4)
+    .optional(),
+  preferredLanguage: z.enum(["hi", "en"]).optional(),
+});
+
+export type UpdateHouseholdProfileInput = z.infer<typeof updateHouseholdProfileSchema>;

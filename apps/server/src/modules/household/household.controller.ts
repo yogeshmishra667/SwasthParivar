@@ -2,7 +2,10 @@ import type { Request, Response } from "express";
 import { ok } from "../../shared/http.js";
 import { requireHouseholdPrimary } from "../../shared/auth/household.js";
 import * as service from "./household.service.js";
-import type { AddHouseholdProfileInput } from "./household.validation.js";
+import type {
+  AddHouseholdProfileInput,
+  UpdateHouseholdProfileInput,
+} from "./household.validation.js";
 
 /**
  * `POST /api/v1/household/profiles` — adds a profile to the caller's
@@ -22,4 +25,18 @@ export const postAddProfile = async (req: Request, res: Response): Promise<void>
   const body = req.body as AddHouseholdProfileInput;
   const result = await service.addHouseholdProfile(callerUserId, body);
   ok(res, result, 201);
+};
+
+export const patchEditProfile = async (req: Request, res: Response): Promise<void> => {
+  await requireHouseholdPrimary(req.auth!);
+  const callerUserId = req.auth!.sub;
+  const rawId = req.params.id;
+  const profileId = Array.isArray(rawId) ? rawId[0] : rawId;
+  if (!profileId) {
+    res.status(400).json({ success: false, error: "Missing profile ID" });
+    return;
+  }
+  const body = req.body as UpdateHouseholdProfileInput;
+  const result = await service.updateHouseholdProfile(callerUserId, profileId, body);
+  ok(res, result);
 };

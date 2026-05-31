@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next";
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
+import { FamilyQuickSummary } from "@/components/family/FamilyQuickSummary";
 import { InviteGuardianForm } from "@/components/family/InviteGuardianForm";
 import {
   listPatientsForGuardian,
@@ -100,9 +101,11 @@ export default function FamilyScreen(): JSX.Element {
   if (!isPrimary) return <Redirect href="/(tabs)/dashboard" />;
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950">
       <View className="flex-row items-center justify-between px-4 py-3">
-        <Text className="text-hero font-bold">{t("family.title")}</Text>
+        <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
+          {t("family.title")}
+        </Text>
         <ActiveProfileBadge />
       </View>
 
@@ -112,7 +115,11 @@ export default function FamilyScreen(): JSX.Element {
           <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
         }
       >
-        <Text className="text-important text-neutral">{t("family.subtitle")}</Text>
+        <Text className="text-important text-neutral dark:text-gray-400">
+          {t("family.subtitle")}
+        </Text>
+
+        <FamilyQuickSummary />
 
         {/* Phase 3 — Silent Guardian: jump to the family-alerts surface. */}
         <Pressable
@@ -120,16 +127,18 @@ export default function FamilyScreen(): JSX.Element {
           accessibilityRole="button"
           accessibilityLabel={t("guardian.openFromFamily")}
           style={{ minHeight: TOUCH_TARGET_MIN }}
-          className="flex-row items-center gap-3 rounded-2xl bg-white p-4 active:opacity-80"
+          className="flex-row items-center gap-3 rounded-2xl bg-white dark:bg-gray-900 p-4 active:opacity-80"
         >
           <View className="h-12 w-12 items-center justify-center rounded-full bg-amber-100">
             <Icon name="notifications" size={24} color="#D97706" />
           </View>
           <View className="flex-1">
-            <Text className="text-important font-semibold text-gray-900">
+            <Text className="text-important font-semibold text-gray-900 dark:text-gray-100">
               {t("guardian.openFromFamily")}
             </Text>
-            <Text className="text-body text-neutral">{t("guardian.openFromFamilyHint")}</Text>
+            <Text className="text-body text-neutral dark:text-gray-400">
+              {t("guardian.openFromFamilyHint")}
+            </Text>
           </View>
           <Icon name="chevron-forward" size={20} color="#6B7280" />
         </Pressable>
@@ -139,10 +148,14 @@ export default function FamilyScreen(): JSX.Element {
 
         {/* Guardian: invites addressed to me — accept or decline. */}
         <View>
-          <Text className="mb-2 text-important font-semibold">{t("family.tabInvites")}</Text>
+          <Text className="mb-2 text-important font-semibold text-gray-900 dark:text-gray-100">
+            {t("family.tabInvites")}
+          </Text>
           {loaded && invites.length === 0 ? (
             <Card>
-              <Text className="text-body text-neutral">{t("family.noInvites")}</Text>
+              <Text className="text-body text-neutral dark:text-gray-400">
+                {t("family.noInvites")}
+              </Text>
             </Card>
           ) : (
             <View className="gap-2">
@@ -160,10 +173,14 @@ export default function FamilyScreen(): JSX.Element {
 
         {/* Guardian → Patient: read-only view list. */}
         <View>
-          <Text className="mb-2 text-important font-semibold">{t("family.tabPatients")}</Text>
+          <Text className="mb-2 text-important font-semibold text-gray-900 dark:text-gray-100">
+            {t("family.tabPatients")}
+          </Text>
           {loaded && patients.length === 0 ? (
             <Card>
-              <Text className="text-body text-neutral">{t("family.noPatients")}</Text>
+              <Text className="text-body text-neutral dark:text-gray-400">
+                {t("family.noPatients")}
+              </Text>
             </Card>
           ) : (
             <View className="gap-2">
@@ -203,11 +220,11 @@ const InviteRow = ({ invite, onAccept, onDecline }: InviteRowProps): JSX.Element
           <Icon name="person-add" size={24} color="#2563EB" />
         </View>
         <View className="flex-1">
-          <Text className="text-important font-semibold">
+          <Text className="text-important font-semibold text-gray-900 dark:text-gray-100">
             {t("family.pendingToYou", { name: invite.patient.name })}
           </Text>
           {invite.relationship !== null && (
-            <Text className="text-body text-neutral">{invite.relationship}</Text>
+            <Text className="text-body text-neutral dark:text-gray-400">{invite.relationship}</Text>
           )}
         </View>
       </View>
@@ -228,7 +245,9 @@ const InviteRow = ({ invite, onAccept, onDecline }: InviteRowProps): JSX.Element
           style={{ minHeight: TOUCH_TARGET_MIN }}
           className="flex-1 items-center justify-center rounded-2xl border border-gray-300 px-4"
         >
-          <Text className="text-important font-semibold text-gray-900">{t("family.decline")}</Text>
+          <Text className="text-important font-semibold text-gray-900 dark:text-gray-100">
+            {t("family.decline")}
+          </Text>
         </Pressable>
       </View>
     </Card>
@@ -250,9 +269,11 @@ const PatientRow = ({ link, onView, onRevoke }: PatientRowProps): JSX.Element =>
           <Icon name="person" size={24} color="#2563EB" />
         </View>
         <View className="flex-1">
-          <Text className="text-important font-semibold">{link.patient.name}</Text>
+          <Text className="text-important font-semibold text-gray-900 dark:text-gray-100">
+            {link.patient.name}
+          </Text>
           {link.relationship !== null && (
-            <Text className="text-body text-neutral">{link.relationship}</Text>
+            <Text className="text-body text-neutral dark:text-gray-400">{link.relationship}</Text>
           )}
         </View>
       </View>
