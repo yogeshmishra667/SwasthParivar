@@ -24,6 +24,7 @@ import { useActiveProfile } from "@/hooks/useActiveProfile";
 import { useProfileStore } from "@/stores/profile.store";
 import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
+import { getFirstName } from "@/utils/getFirstName";
 import {
   type CachedDashboard,
   type CachedDashboardSummary,
@@ -215,7 +216,8 @@ export default function DashboardScreen(): JSX.Element {
     setRefreshing(false);
   };
 
-  const profileName = profile?.name && profile.name.trim().length > 0 ? profile.name : null;
+  const profileName =
+    profile?.name && profile.name.trim().length > 0 ? getFirstName(profile.name) : null;
   const greeting = profileName
     ? t("dashboard.greeting", { name: profileName })
     : t("dashboard.greetingDefault", { defaultValue: "Namaste 🙏" });
@@ -236,9 +238,9 @@ export default function DashboardScreen(): JSX.Element {
   const showStale = stale && hydratedFromCache && cacheAgeMs >= STALE_THRESHOLD_MS;
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950">
       <View className="flex-row items-center justify-between px-4 py-3">
-        <Text className="text-hero font-bold" numberOfLines={1}>
+        <Text className="text-hero font-bold text-gray-900 dark:text-gray-100" numberOfLines={1}>
           {greeting}
         </Text>
         <View className="flex-row items-center gap-2">
@@ -256,7 +258,7 @@ export default function DashboardScreen(): JSX.Element {
         {showStale && cacheFetchedAt && (
           <View className="rounded-lg border border-warning bg-amber-50 p-3">
             <Text className="text-body text-amber-900">{t("dashboard.staleData")}</Text>
-            <Text className="mt-0.5 text-body text-neutral">
+            <Text className="mt-0.5 text-body text-neutral dark:text-gray-400">
               {t("dashboard.lastUpdated", {
                 time: formatRelativeTime(cacheFetchedAt),
                 defaultValue: `Last updated: ${formatRelativeTime(cacheFetchedAt)}`,
@@ -286,18 +288,20 @@ export default function DashboardScreen(): JSX.Element {
           />
         )}
 
-        <InsightsBadge count={data.insightsUnacknowledgedCount} />
+        {userStageDays >= 14 && <InsightsBadge count={data.insightsUnacknowledgedCount} />}
 
         {/* Hero — latest glucose reading. */}
         <Card>
-          <Text className="text-body text-neutral">{t("dashboard.lastReading")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">
+            {t("dashboard.lastReading")}
+          </Text>
           {latest ? (
             <>
               <View className="mt-1 flex-row items-baseline gap-2">
-                <Text className="text-5xl font-bold tracking-tight text-gray-900">
+                <Text className="text-5xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
                   {latest.valueMgDl}
                 </Text>
-                <Text className="text-important text-neutral">mg/dL</Text>
+                <Text className="text-important text-neutral dark:text-gray-400">mg/dL</Text>
               </View>
               <View className="mt-2 self-start rounded-full bg-blue-50 px-3 py-1">
                 <Text className="text-body font-semibold text-blue-700">
@@ -310,7 +314,9 @@ export default function DashboardScreen(): JSX.Element {
               </View>
             </>
           ) : (
-            <Text className="mt-2 text-important text-neutral">{t("dashboard.noReadings")}</Text>
+            <Text className="mt-2 text-important text-neutral dark:text-gray-400">
+              {t("dashboard.noReadings")}
+            </Text>
           )}
         </Card>
 
@@ -318,18 +324,28 @@ export default function DashboardScreen(): JSX.Element {
         <View className="flex-row gap-3">
           <View className="flex-1">
             <Card>
-              <Text className="text-body text-neutral">{t("dashboard.todayStreak")}</Text>
+              <Text className="text-body text-neutral dark:text-gray-400">
+                {t("dashboard.todayStreak")}
+              </Text>
               <View className="mt-1 flex-row items-center gap-1.5">
                 <Icon name="flame" size={24} color="#F59E0B" />
-                <Text className="text-3xl font-bold">{streak}</Text>
-                <Text className="text-body text-neutral">{t("common.days")}</Text>
+                <Text className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                  {streak}
+                </Text>
+                <Text className="text-body text-neutral dark:text-gray-400">
+                  {t("common.days")}
+                </Text>
               </View>
             </Card>
           </View>
           <View className="flex-1">
             <Card>
-              <Text className="text-body text-neutral">{t("dashboard.todayReadings")}</Text>
-              <Text className="mt-1 text-3xl font-bold">{data.todayReadingCount}</Text>
+              <Text className="text-body text-neutral dark:text-gray-400">
+                {t("dashboard.todayReadings")}
+              </Text>
+              <Text className="mt-1 text-3xl font-bold text-gray-900 dark:text-gray-100">
+                {data.todayReadingCount}
+              </Text>
             </Card>
           </View>
         </View>
@@ -360,12 +376,12 @@ export default function DashboardScreen(): JSX.Element {
           onPress={() => router.push("/chat")}
           accessibilityRole="button"
           accessibilityLabel={t("chat.dashboardEntry")}
-          className="min-h-touch flex-row items-center gap-3 rounded-2xl bg-white px-4 py-3 active:opacity-80"
+          className="min-h-touch flex-row items-center gap-3 rounded-2xl bg-white dark:bg-gray-900 px-4 py-3 active:opacity-80"
         >
           <View className="h-12 w-12 items-center justify-center rounded-full bg-blue-100">
             <Icon name="chatbubbles-outline" size={24} color="#2563EB" />
           </View>
-          <Text className="flex-1 text-important font-semibold text-gray-900">
+          <Text className="flex-1 text-important font-semibold text-gray-900 dark:text-gray-100">
             {t("chat.dashboardEntry")}
           </Text>
           <Icon name="chevron-forward" size={20} color="#6B7280" />

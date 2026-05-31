@@ -52,10 +52,10 @@ export class ErrorBoundary extends Component<Props, State> {
     const t = i18n.t.bind(i18n);
     return (
       <View className="flex-1 items-center justify-center bg-neutral-50 px-6">
-        <Text className="text-2xl font-bold text-neutral-900 mb-3 text-center">
+        <Text className="text-2xl font-bold text-neutral dark:text-gray-400-900 mb-3 text-center">
           {t("errorBoundary.title")}
         </Text>
-        <Text className="text-base text-neutral-700 mb-8 text-center leading-6">
+        <Text className="text-base text-neutral dark:text-gray-400-700 mb-8 text-center leading-6">
           {t("errorBoundary.body")}
         </Text>
         <Pressable
@@ -67,7 +67,9 @@ export class ErrorBoundary extends Component<Props, State> {
         >
           <Text className="text-white text-lg font-semibold">{t("errorBoundary.restart")}</Text>
         </Pressable>
-        <Text className="text-xs text-neutral-500 mt-6 text-center">{t("errorBoundary.hint")}</Text>
+        <Text className="text-xs text-neutral dark:text-gray-400-500 mt-6 text-center">
+          {t("errorBoundary.hint")}
+        </Text>
       </View>
     );
   }

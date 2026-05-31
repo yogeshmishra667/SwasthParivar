@@ -94,13 +94,15 @@ export const SOSButton = ({ onArmed, disabled = false }: SOSButtonProps): JSX.El
   const ringOpacity = 0.15 + 0.6 * progress;
 
   return (
-    <View className="w-full rounded-3xl border border-red-100 bg-white p-5 shadow-sm">
+    <View className="w-full rounded-3xl border border-red-100 bg-white dark:bg-gray-900 p-5 shadow-sm">
       <View className="mb-4 flex-row items-center justify-between">
         <View>
           <Text className="text-xs font-semibold uppercase tracking-wider text-red-700">
             {t("sos.button.label")}
           </Text>
-          <Text className="mt-1 text-body text-neutral">{t("sos.button.hint")}</Text>
+          <Text className="mt-1 text-body text-neutral dark:text-gray-400">
+            {t("sos.button.hint")}
+          </Text>
         </View>
         <View className="rounded-full bg-red-50 px-3 py-1">
           <Text className="text-xs font-medium text-red-700">24/7</Text>
@@ -168,7 +170,7 @@ export const SOSButton = ({ onArmed, disabled = false }: SOSButtonProps): JSX.El
           }}
         />
         <Text
-          className={`text-body ${holding ? "font-semibold text-red-700" : "text-neutral"}`}
+          className={`text-body ${holding ? "font-semibold text-red-700" : "text-neutral dark:text-gray-400"}`}
           accessibilityLiveRegion="polite"
         >
           {holding ? t("sos.button.longPressHelp") : t("sos.button.hint")}

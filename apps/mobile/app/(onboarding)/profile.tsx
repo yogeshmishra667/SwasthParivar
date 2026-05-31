@@ -73,7 +73,7 @@ export default function ProfileScreen(): JSX.Element {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
       <KeyboardAvoidingView
         behavior="padding"
         style={{ flex: 1 }}
@@ -93,7 +93,7 @@ export default function ProfileScreen(): JSX.Element {
             <View className="mb-4 h-24 w-24 items-center justify-center rounded-full bg-blue-50">
               <Icon name="person" size={48} color="#2563EB" />
             </View>
-            <Text className="text-3xl font-bold tracking-tight text-gray-900">
+            <Text className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
               {t("onboarding.tellUs")}
             </Text>
             <Text className="mt-2 text-center text-body text-gray-500">
@@ -105,7 +105,7 @@ export default function ProfileScreen(): JSX.Element {
 
           {/* Name Input */}
           <View className="mb-4">
-            <Text className="mb-2 text-important font-semibold text-gray-800">
+            <Text className="mb-2 text-important font-semibold text-gray-800 dark:text-gray-100">
               {t("onboarding.nameLabel", { defaultValue: "Aapka naam" })}
             </Text>
             <TextInput
@@ -116,13 +116,13 @@ export default function ProfileScreen(): JSX.Element {
               autoCorrect={false}
               accessibilityLabel="Name"
               style={{ minHeight: TOUCH_TARGET_MIN }}
-              className="rounded-2xl border border-gray-300 bg-gray-50 px-4 py-3 text-important font-semibold text-gray-900"
+              className="rounded-2xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-3 text-important font-semibold text-gray-900 dark:text-gray-100"
             />
           </View>
 
           {/* Age Input */}
           <View className="mb-6">
-            <Text className="mb-2 text-important font-semibold text-gray-800">
+            <Text className="mb-2 text-important font-semibold text-gray-800 dark:text-gray-100">
               {t("onboarding.ageLabel", { defaultValue: "Aapki umar" })}
             </Text>
             <TextInput
@@ -134,7 +134,7 @@ export default function ProfileScreen(): JSX.Element {
               maxLength={3}
               accessibilityLabel="Age"
               style={{ minHeight: TOUCH_TARGET_MIN }}
-              className="rounded-2xl border border-gray-300 bg-gray-50 px-4 py-3 text-important font-semibold text-gray-900"
+              className="rounded-2xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-3 text-important font-semibold text-gray-900 dark:text-gray-100"
             />
           </View>
 

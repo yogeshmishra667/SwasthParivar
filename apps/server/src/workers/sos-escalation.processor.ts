@@ -43,6 +43,8 @@ import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js
 import { sendExpoPush, type ExpoPushMessage } from "../shared/notifications/expo-push.js";
 import { sendSmsBatch } from "../shared/notifications/msg91-sms.js";
 import { resolveHouseholdDelivery } from "../shared/notifications/household-delivery.js";
+import { notif } from "../shared/i18n/notifications.js";
+import type { Language } from "@prisma/client";
 import { placeExotelIvrCall } from "../shared/calls/exotel-voice.js";
 import { placeTwilioIvrCall } from "../shared/calls/twilio-voice.js";
 import { pickIvrVendor } from "../shared/calls/types.js";
@@ -167,6 +169,7 @@ const dispatchPatientHouseholdPush = async (params: {
   sosEventId: string;
   patientUserId: string;
   patientName: string;
+  language: Language;
   testMode: boolean;
 }): Promise<DispatchLogEntry[]> => {
   const { tokens } = await resolveHouseholdDelivery(params.patientUserId);
@@ -187,10 +190,11 @@ const dispatchPatientHouseholdPush = async (params: {
     }));
   }
 
+  const copy = notif("sos_active_push", { patientName: params.patientName }, params.language);
   const messages: ExpoPushMessage[] = tokens.map((t) => ({
     to: t,
-    title: `🚨 SOS — ${params.patientName}`,
-    body: "Open the app — emergency in progress.",
+    title: copy.title,
+    body: copy.body,
     sound: "default",
     priority: "high",
     channelId: "critical",
@@ -221,13 +225,17 @@ const dispatchContact = async (params: {
   stage: SOSStage;
   sosEventId: string;
   patientName: string;
+  language: Language;
   testMode: boolean;
   ivrEnabled: boolean;
 }): Promise<DispatchLogEntry[]> => {
   const correlationId = `sos-${params.sosEventId}-${params.contact.id}-${randomUUID().slice(0, 8)}`;
+  // SMS + IVR scripts mirror the patient's preferred language so the
+  // family conversation stays consistent. The contact themselves has
+  // no language preference of their own (they may not be an app user).
   const msg = buildSOSMessage({
     patientName: params.patientName,
-    language: "hi",
+    language: params.language,
   });
 
   if (params.testMode) {
@@ -316,7 +324,9 @@ export const processSOSEscalation = async (job: Job<SOSEscalationJob>): Promise<
 
   const event = await prisma.sOSEvent.findUnique({
     where: { id: sosEventId },
-    include: { user: { select: { name: true, emergencyContacts: true } } },
+    include: {
+      user: { select: { name: true, preferredLanguage: true, emergencyContacts: true } },
+    },
   });
 
   if (!event) {
@@ -345,6 +355,7 @@ export const processSOSEscalation = async (job: Job<SOSEscalationJob>): Promise<
       sosEventId,
       patientUserId: event.userId,
       patientName: event.user.name || "Patient",
+      language: event.user.preferredLanguage,
       testMode,
     });
   }
@@ -396,6 +407,7 @@ export const processSOSEscalation = async (job: Job<SOSEscalationJob>): Promise<
           stage: transition.nextStage,
           sosEventId,
           patientName: event.user.name || "Patient",
+          language: event.user.preferredLanguage,
           testMode,
           ivrEnabled,
         });

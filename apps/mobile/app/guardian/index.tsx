@@ -12,6 +12,7 @@ import { sortPatientsByUrgency, type PatientUrgency } from "@swasth/domain-logic
 
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
 import { AlertCard, type AlertCardSeverity } from "@/components/family/AlertCard";
+import { GuardianEmptyState } from "@/components/family/GuardianEmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { listPatientsForGuardian, type PatientLinkSummary } from "@/services/family";
 import { listGuardianAlerts, type GuardianAlertDto } from "@/services/silent-guardian";
@@ -82,7 +83,7 @@ export default function GuardianHomeScreen(): JSX.Element {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950">
       <View className="flex-row items-center justify-between border-b border-gray-200 px-2 py-2">
         <View className="flex-row items-center gap-1">
           <Pressable
@@ -94,22 +95,19 @@ export default function GuardianHomeScreen(): JSX.Element {
           >
             <Icon name="chevron-back" size={24} color="#111827" />
           </Pressable>
-          <Text className="text-hero font-bold">{t("guardian.homeTitle")}</Text>
+          <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
+            {t("guardian.homeTitle")}
+          </Text>
         </View>
         <ActiveProfileBadge />
       </View>
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <Text className="text-body text-neutral">{t("guardian.loading")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">{t("guardian.loading")}</Text>
         </View>
       ) : rows.length === 0 ? (
-        <View className="flex-1 items-center justify-center px-6">
-          <Icon name="people-outline" size={48} color="#6B7280" />
-          <Text className="mt-3 text-center text-important text-neutral">
-            {t("guardian.emptyHome")}
-          </Text>
-        </View>
+        <GuardianEmptyState />
       ) : (
         <FlatList
           data={rows}
@@ -149,10 +147,10 @@ export default function GuardianHomeScreen(): JSX.Element {
               accessibilityRole="button"
               accessibilityLabel={t("guardian.history")}
               style={{ minHeight: TOUCH_TARGET_MIN }}
-              className="mt-2 flex-row items-center justify-center gap-1 rounded-2xl border border-gray-300 bg-white"
+              className="mt-2 flex-row items-center justify-center gap-1 rounded-2xl border border-gray-300 bg-white dark:bg-gray-900"
             >
               <Icon name="time-outline" size={18} color="#2563EB" />
-              <Text className="text-important font-semibold text-primary">
+              <Text className="text-important font-semibold text-primary text-gray-900 dark:text-gray-100">
                 {t("guardian.history")}
               </Text>
             </Pressable>

@@ -6,6 +6,7 @@ import { logger } from "../shared/logger.js";
 import { sendExpoPush } from "../shared/notifications/expo-push.js";
 import { resolveHouseholdDelivery } from "../shared/notifications/household-delivery.js";
 import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
+import { notif, withProfilePrefix } from "../shared/i18n/notifications.js";
 
 export interface MedReminderJob {
   scheduleId: string;
@@ -21,15 +22,9 @@ export interface MedMissedAlertJob {
 
 const missedAlertQueue = createQueue<MedMissedAlertJob>(QUEUE_NAMES.MED_MISSED_ALERT);
 
-const MED_REMINDER_COPY = (
-  medicine: string,
-  profileName: string | null,
-): { title: string; body: string } => ({
-  // On a shared-device household the profile name disambiguates whose
-  // reminder this is; a single-profile household keeps the bare title.
-  title: profileName ? `${profileName} ji: Dawai ka time` : "Dawai ka time",
-  body: `${medicine} lene ka time ho gaya. Pani ke saath lein 🙏`,
-});
+// Copy is built per-language via the shared i18n helper. The profile-name
+// prefix on a shared-device household is also language-aware (Hindi adds
+// the honorific "ji", English just a colon).
 
 export const medReminderWorker: Worker<MedReminderJob> = createWorker<MedReminderJob>(
   QUEUE_NAMES.MED_REMINDER,
@@ -43,7 +38,7 @@ export const medReminderWorker: Worker<MedReminderJob> = createWorker<MedReminde
         active: true,
         isCritical: true,
         userId: true,
-        user: { select: { name: true } },
+        user: { select: { name: true, preferredLanguage: true } },
       },
     });
     if (!schedule || !schedule.active || schedule.userId !== userId) return;
@@ -72,13 +67,15 @@ export const medReminderWorker: Worker<MedReminderJob> = createWorker<MedReminde
     }
     if (tokens.length > 0) {
       const profileName = memberIds.length > 1 ? schedule.user.name : null;
-      const copy = MED_REMINDER_COPY(schedule.medicineName, profileName);
+      const language = schedule.user.preferredLanguage;
+      const base = notif("med_reminder", { medicine: schedule.medicineName }, language);
+      const title = withProfilePrefix(base.title, profileName, language);
       const notificationId = randomUUID();
       await sendExpoPush(
         tokens.map((token) => ({
           to: token,
-          title: copy.title,
-          body: copy.body,
+          title,
+          body: base.body,
           sound: "default",
           priority: "high",
           channelId: "medications",

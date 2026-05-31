@@ -48,10 +48,12 @@ export const AlertCard = ({
   const style = SEVERITY_STYLE[severity];
 
   const inner = (
-    <View className={`rounded-2xl border border-l-4 border-gray-200 ${style.border} bg-white p-4`}>
+    <View
+      className={`rounded-2xl border border-l-4 border-gray-200 ${style.border} bg-white dark:bg-gray-900 p-4`}
+    >
       <View className="flex-row items-center gap-2">
-        <Text className="text-important">{style.emoji}</Text>
-        <Text className="flex-1 text-important font-semibold text-gray-900">
+        <Text className="text-important text-gray-900 dark:text-gray-100">{style.emoji}</Text>
+        <Text className="flex-1 text-important font-semibold text-gray-900 dark:text-gray-100">
           {relationship ? `${patientName} — ${relationship}` : patientName}
         </Text>
         {unread ? (
@@ -67,9 +69,15 @@ export const AlertCard = ({
         <Text className={`mt-1 text-body font-semibold ${style.accent}`}>{severityLabel}</Text>
       ) : null}
 
-      <Text className="mt-1 text-important font-semibold text-gray-900">{headline}</Text>
-      {body ? <Text className="mt-1 text-body text-gray-700">{body}</Text> : null}
-      {timeLabel ? <Text className="mt-1 text-body text-neutral">{timeLabel}</Text> : null}
+      <Text className="mt-1 text-important font-semibold text-gray-900 dark:text-gray-100">
+        {headline}
+      </Text>
+      {body ? (
+        <Text className="mt-1 text-body text-gray-700 dark:text-gray-300">{body}</Text>
+      ) : null}
+      {timeLabel ? (
+        <Text className="mt-1 text-body text-neutral dark:text-gray-400">{timeLabel}</Text>
+      ) : null}
 
       {ctaLabel && onPress ? (
         <View className="mt-3 flex-row items-center gap-1">

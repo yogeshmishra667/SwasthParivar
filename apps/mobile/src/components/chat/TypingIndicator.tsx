@@ -32,7 +32,9 @@ export const TypingIndicator = ({ visible, onRetry }: TypingIndicatorProps): JSX
   if (timedOut) {
     return (
       <View className="my-1 flex-row items-center px-4" accessibilityRole="alert">
-        <Text className="flex-1 text-body text-neutral">{t("chat.typingTimeout")}</Text>
+        <Text className="flex-1 text-body text-neutral dark:text-gray-400">
+          {t("chat.typingTimeout")}
+        </Text>
         <Pressable
           onPress={onRetry}
           accessibilityRole="button"
@@ -47,10 +49,10 @@ export const TypingIndicator = ({ visible, onRetry }: TypingIndicatorProps): JSX
 
   return (
     <View
-      className="my-2 ml-4 self-start rounded-2xl rounded-bl-md border border-gray-200 bg-white px-4 py-3"
+      className="my-2 ml-4 self-start rounded-2xl rounded-bl-md border border-gray-200 bg-white dark:bg-gray-900 px-4 py-3"
       accessibilityRole="text"
     >
-      <Text className="text-body text-neutral">{t("chat.typing")}</Text>
+      <Text className="text-body text-neutral dark:text-gray-400">{t("chat.typing")}</Text>
     </View>
   );
 };

@@ -37,7 +37,7 @@ export const BPConfirmationScreen = ({
   const elevated = systolic >= HIGH_SYS || diastolic >= HIGH_DIA;
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
@@ -49,7 +49,7 @@ export const BPConfirmationScreen = ({
           <Card>
             <View className="flex-row items-center gap-2">
               <Icon name="person" size={16} color="#374151" />
-              <Text className="text-important font-semibold">
+              <Text className="text-important font-semibold text-gray-900 dark:text-gray-100">
                 {profile?.name && profile.name.trim().length > 0
                   ? t("logging.profileLine", { profile: profile.name })
                   : t("logging.profileLine", { profile: "" })}
@@ -63,28 +63,31 @@ export const BPConfirmationScreen = ({
           </Card>
 
           <Card>
-            <Text className="text-body text-neutral">{t("bp.title")}</Text>
+            <Text className="text-body text-neutral dark:text-gray-400">{t("bp.title")}</Text>
             <View className="mt-1 flex-row items-baseline gap-2">
               <Text
                 className={`text-5xl font-bold tracking-tight ${
-                  elevated ? "text-warning" : "text-gray-900"
+                  elevated ? "text-warning" : "text-gray-900 dark:text-gray-100"
                 }`}
               >
                 {systolic}
-                <Text className="text-3xl text-neutral">/</Text>
+                <Text className="text-3xl text-neutral dark:text-gray-400">/</Text>
                 {diastolic}
               </Text>
-              <Text className="text-important text-neutral">mmHg</Text>
+              <Text className="text-important text-neutral dark:text-gray-400">mmHg</Text>
             </View>
             {pulse !== undefined && (
-              <Text className="mt-1 text-body text-neutral">
-                {t("bp.pulse")}: <Text className="font-semibold text-gray-900">{pulse}</Text>
+              <Text className="mt-1 text-body text-neutral dark:text-gray-400">
+                {t("bp.pulse")}:{" "}
+                <Text className="font-semibold text-gray-900 dark:text-gray-100">{pulse}</Text>
               </Text>
             )}
             {elevated && (
               <View className="mt-3 flex-row items-center gap-2 rounded-lg bg-amber-50 px-3 py-2">
                 <Icon name="warning" size={20} color="#D97706" />
-                <Text className="flex-1 text-important text-amber-900">{t("bp.highBanner")}</Text>
+                <Text className="flex-1 text-important text-amber-900 text-gray-900 dark:text-gray-100">
+                  {t("bp.highBanner")}
+                </Text>
               </View>
             )}
           </Card>

@@ -52,15 +52,15 @@ export const HbA1cCard = ({ userStageDays }: HbA1cCardProps): JSX.Element => {
       <Card className="border border-celebration/30 bg-violet-50">
         <View className="flex-row items-center gap-2">
           <Icon name="lock-closed-outline" size={18} color="#8B5CF6" />
-          <Text className="text-body text-neutral">{t("hba1c.title")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">{t("hba1c.title")}</Text>
         </View>
-        <Text className="mt-2 text-important text-gray-900">
+        <Text className="mt-2 text-important text-gray-900 dark:text-gray-100">
           {t("insights.lockedTitle", { stage: userStageDays })}
         </Text>
-        <Text className="mt-1 text-body text-neutral">
+        <Text className="mt-1 text-body text-neutral dark:text-gray-400">
           {t("insights.lockedBody", { stage: userStageDays })}
         </Text>
-        <View className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+        <View className="mt-3 h-2 overflow-hidden rounded-full bg-white dark:bg-gray-900">
           <View className="h-full rounded-full bg-celebration" style={{ width: `${pct}%` }} />
         </View>
       </Card>
@@ -73,9 +73,11 @@ export const HbA1cCard = ({ userStageDays }: HbA1cCardProps): JSX.Element => {
       <Card>
         <View className="flex-row items-center gap-2">
           <Icon name="flask-outline" size={18} color="#6B7280" />
-          <Text className="text-body text-neutral">{t("hba1c.title")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">{t("hba1c.title")}</Text>
         </View>
-        <Text className="mt-2 text-body text-neutral">{t("common.loading")}</Text>
+        <Text className="mt-2 text-body text-neutral dark:text-gray-400">
+          {t("common.loading")}
+        </Text>
       </Card>
     );
   }
@@ -86,9 +88,11 @@ export const HbA1cCard = ({ userStageDays }: HbA1cCardProps): JSX.Element => {
       <Card>
         <View className="flex-row items-center gap-2">
           <Icon name="flask-outline" size={18} color="#6B7280" />
-          <Text className="text-body text-neutral">{t("hba1c.title")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">{t("hba1c.title")}</Text>
         </View>
-        <Text className="mt-2 text-body text-neutral">{t("hba1c.insufficient")}</Text>
+        <Text className="mt-2 text-body text-neutral dark:text-gray-400">
+          {t("hba1c.insufficient")}
+        </Text>
       </Card>
     );
   }
@@ -100,17 +104,17 @@ export const HbA1cCard = ({ userStageDays }: HbA1cCardProps): JSX.Element => {
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2">
           <Icon name="flask-outline" size={18} color="#2563EB" />
-          <Text className="text-body text-neutral">{t("hba1c.title")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">{t("hba1c.title")}</Text>
         </View>
         <View className="rounded-full bg-amber-100 px-2 py-0.5">
           <Text className="text-body text-amber-900">{t("hba1c.estimateTag")}</Text>
         </View>
       </View>
-      <Text className="mt-2 text-5xl font-bold tracking-tight text-gray-900">
+      <Text className="mt-2 text-5xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
         {t("hba1c.estimate", { value: estimate.toFixed(1) })}
       </Text>
-      <Text className="mt-1 text-body text-neutral">{t("hba1c.asOf")}</Text>
-      <Text className="mt-1 text-body text-neutral">
+      <Text className="mt-1 text-body text-neutral dark:text-gray-400">{t("hba1c.asOf")}</Text>
+      <Text className="mt-1 text-body text-neutral dark:text-gray-400">
         {t("dashboard.todayReadings")}: {readingCount}
       </Text>
       <Text className="mt-2 text-body text-amber-900">{t("hba1c.learnMore")}</Text>

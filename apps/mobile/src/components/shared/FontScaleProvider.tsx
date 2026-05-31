@@ -11,10 +11,10 @@ export const FontScaleProvider = ({ children }: { children: ReactNode }): JSX.El
   const scale = largeText ? LARGE_TEXT_SCALE : 1;
 
   const themeVars = vars({
-    "--fs-body": px(FONT_SIZE.body * scale),
-    "--fs-important": px(FONT_SIZE.important * scale),
-    "--fs-number": px(FONT_SIZE.number * scale),
-    "--fs-hero": px(FONT_SIZE.hero * scale),
+    "--fs-body": px(Math.round(FONT_SIZE.body * scale)),
+    "--fs-important": px(Math.round(FONT_SIZE.important * scale)),
+    "--fs-number": px(Math.round(FONT_SIZE.number * scale)),
+    "--fs-hero": px(Math.round(FONT_SIZE.hero * scale)),
   });
 
   return <View style={[{ flex: 1 }, themeVars]}>{children}</View>;

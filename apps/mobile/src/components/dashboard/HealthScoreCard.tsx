@@ -61,7 +61,9 @@ export const HealthScoreCard = ({
     >
       <Card>
         <View className="flex-row items-center justify-between">
-          <Text className="text-body text-neutral">{t("healthScore.title")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">
+            {t("healthScore.title")}
+          </Text>
           <Icon name="information-circle-outline" size={16} color="#6B7280" />
         </View>
 
@@ -69,7 +71,9 @@ export const HealthScoreCard = ({
           <Text className={`text-5xl font-bold tracking-tight ${colorForScore(score)}`}>
             {score}
           </Text>
-          <Text className="text-body text-neutral">{t("healthScore.of100")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">
+            {t("healthScore.of100")}
+          </Text>
         </View>
 
         <View className="mt-3 gap-2">
@@ -79,12 +83,12 @@ export const HealthScoreCard = ({
             return (
               <View key={item.key}>
                 <View className="flex-row items-center justify-between">
-                  <Text className="text-body text-neutral">{item.label}</Text>
-                  <Text className="text-body text-gray-700">
+                  <Text className="text-body text-neutral dark:text-gray-400">{item.label}</Text>
+                  <Text className="text-body text-gray-700 dark:text-gray-300">
                     {value}/{item.max}
                   </Text>
                 </View>
-                <View className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100">
+                <View className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
                   <View
                     className={`h-full ${barColorForScore(score)}`}
                     style={{ width: `${pct * 100}%` }}
@@ -95,7 +99,7 @@ export const HealthScoreCard = ({
           })}
         </View>
 
-        <Text className="mt-3 text-body text-neutral">
+        <Text className="mt-3 text-body text-neutral dark:text-gray-400">
           {t("healthScore.asOf", { date: computedForDate })}
         </Text>
       </Card>

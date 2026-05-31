@@ -51,3 +51,6 @@ apps/mobile/*.mobileprovision
 
 # Claude Code transient state
 .claude/worktrees/
+
+# Service account key - DO NOT COMMIT
+service-account-key.json

@@ -74,7 +74,7 @@ export const BPInput = ({ onSubmit }: BPInputProps): JSX.Element => {
 
   return (
     <View className="gap-4">
-      <Text className="text-hero font-bold">{t("bp.title")}</Text>
+      <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">{t("bp.title")}</Text>
 
       <View className="flex-row gap-3">
         <FieldChip
@@ -111,7 +111,7 @@ export const BPInput = ({ onSubmit }: BPInputProps): JSX.Element => {
             onPress={() => handlePress(k)}
             accessibilityRole="button"
             accessibilityLabel={`Numpad ${k}`}
-            className="mb-2 w-[31%] items-center justify-center rounded-xl bg-gray-100 active:bg-gray-200"
+            className="mb-2 w-[31%] items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 active:bg-gray-200"
             style={{ minHeight: TOUCH_TARGET_MIN + 16 }}
           >
             <Text className="text-number font-semibold">{k}</Text>
@@ -132,7 +132,7 @@ export const BPInput = ({ onSubmit }: BPInputProps): JSX.Element => {
         <Text className="text-important font-bold text-white">{t("common.next")}</Text>
       </Pressable>
 
-      <Text className="text-body text-neutral">{t("bp.rangeHint")}</Text>
+      <Text className="text-body text-neutral dark:text-gray-400">{t("bp.rangeHint")}</Text>
     </View>
   );
 };
@@ -155,11 +155,11 @@ const FieldChip = ({ label, value, active, invalid, onPress }: FieldChipProps): 
         ? "border-primary bg-blue-50"
         : invalid
           ? "border-warning bg-amber-50"
-          : "border-gray-200 bg-white"
+          : "border-gray-200 bg-white dark:bg-gray-900"
     }`}
     style={{ minHeight: TOUCH_TARGET_MIN + 24 }}
   >
-    <Text className="text-body text-neutral">{label}</Text>
-    <Text className="mt-1 text-2xl font-bold text-gray-900">{value || "—"}</Text>
+    <Text className="text-body text-neutral dark:text-gray-400">{label}</Text>
+    <Text className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{value || "—"}</Text>
   </Pressable>
 );

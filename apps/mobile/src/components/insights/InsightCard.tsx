@@ -65,13 +65,13 @@ export const InsightCard = ({ insight, onAcknowledged }: InsightCardProps): JSX.
       <View className="flex-row items-center gap-2">
         <Icon name="alert-circle" size={18} color={sev.icon} />
         <Text className={`text-body font-semibold ${sev.text}`}>{t(titleKey)}</Text>
-        <View className="ml-auto rounded-full bg-white/70 px-2 py-0.5">
+        <View className="ml-auto rounded-full bg-white dark:bg-gray-900/70 px-2 py-0.5">
           <Text className={`text-body ${sev.text}`}>
             {t(`insights.severity.${insight.severityLevel}`)}
           </Text>
         </View>
       </View>
-      <Text className="mt-2 text-important text-gray-900">{body}</Text>
+      <Text className="mt-2 text-important text-gray-900 dark:text-gray-100">{body}</Text>
 
       {!insight.acknowledged && (
         <View className="mt-3 flex-row gap-2">
@@ -91,7 +91,9 @@ export const InsightCard = ({ insight, onAcknowledged }: InsightCardProps): JSX.
             style={{ minHeight: TOUCH_TARGET_MIN, minWidth: TOUCH_TARGET_MIN }}
             className="items-center justify-center rounded-2xl border border-success bg-green-50 px-4"
           >
-            <Text className="text-important text-success">{t("insights.helpfulYes")}</Text>
+            <Text className="text-important text-success text-gray-900 dark:text-gray-100">
+              {t("insights.helpfulYes")}
+            </Text>
           </Pressable>
           <Pressable
             onPress={() => void handleAck(false)}
@@ -101,7 +103,9 @@ export const InsightCard = ({ insight, onAcknowledged }: InsightCardProps): JSX.
             style={{ minHeight: TOUCH_TARGET_MIN, minWidth: TOUCH_TARGET_MIN }}
             className="items-center justify-center rounded-2xl border border-warning bg-amber-50 px-4"
           >
-            <Text className="text-important text-warning">{t("insights.helpfulNo")}</Text>
+            <Text className="text-important text-warning text-gray-900 dark:text-gray-100">
+              {t("insights.helpfulNo")}
+            </Text>
           </Pressable>
         </View>
       )}

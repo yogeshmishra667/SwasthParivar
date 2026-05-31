@@ -12,14 +12,14 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   primary: "bg-primary active:bg-blue-700",
   secondary: "bg-neutral active:bg-gray-600",
   critical: "bg-critical active:bg-red-700",
-  ghost: "bg-transparent border border-neutral active:bg-gray-100",
+  ghost: "bg-transparent border border-neutral active:bg-gray-100 dark:bg-gray-800",
 };
 
 const LABEL_CLASS: Record<ButtonVariant, string> = {
   primary: "text-white",
   secondary: "text-white",
   critical: "text-white",
-  ghost: "text-neutral",
+  ghost: "text-neutral dark:text-gray-400",
 };
 
 export const Button = ({ label, variant = "primary", ...rest }: ButtonProps): JSX.Element => (

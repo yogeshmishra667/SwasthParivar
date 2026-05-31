@@ -39,7 +39,9 @@ const VoiceUnavailable = ({ onFail }: VoiceInputProps): JSX.Element => {
       >
         <Icon name="mic-off" size={48} color="#FFFFFF" />
       </Pressable>
-      <Text className="text-important text-center px-4">{t("voice.devBuildRequired")}</Text>
+      <Text className="text-important text-center px-4 text-gray-900 dark:text-gray-100">
+        {t("voice.devBuildRequired")}
+      </Text>
     </View>
   );
 };
@@ -71,7 +73,9 @@ export const VoiceInput = (props: VoiceInputProps): JSX.Element => {
         >
           <Icon name="mic" size={48} color="#9CA3AF" />
         </View>
-        <Text className="text-important text-center">Loading...</Text>
+        <Text className="text-important text-center text-gray-900 dark:text-gray-100">
+          Loading...
+        </Text>
       </View>
     );
   }

@@ -30,9 +30,11 @@ export const NumpadInput = ({ onSubmit, initialValue = "" }: NumpadProps): JSX.E
 
   return (
     <View className="gap-3">
-      <View className="items-center rounded-2xl bg-white p-4">
-        <Text className="text-hero font-bold">{buffer || "—"}</Text>
-        <Text className="text-body text-neutral">mg/dL</Text>
+      <View className="items-center rounded-2xl bg-white dark:bg-gray-900 p-4">
+        <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
+          {buffer || "—"}
+        </Text>
+        <Text className="text-body text-neutral dark:text-gray-400">mg/dL</Text>
       </View>
 
       <View className="flex-row flex-wrap justify-between">
@@ -42,7 +44,7 @@ export const NumpadInput = ({ onSubmit, initialValue = "" }: NumpadProps): JSX.E
             onPress={() => handlePress(k)}
             accessibilityRole="button"
             accessibilityLabel={`Numpad ${k}`}
-            className="mb-2 w-[31%] items-center justify-center rounded-xl bg-gray-100 active:bg-gray-200"
+            className="mb-2 w-[31%] items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 active:bg-gray-200"
             style={{ minHeight: TOUCH_TARGET_MIN + 16 }}
           >
             <Text className="text-number font-semibold">{k}</Text>

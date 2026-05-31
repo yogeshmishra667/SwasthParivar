@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { BypassDecision } from "@swasth/domain-logic";
 import type { Job, Queue } from "bullmq";
+import type { Language } from "@prisma/client";
 import { createQueue, QUEUE_NAMES } from "../shared/queue.js";
 import { logger } from "../shared/logger.js";
 import { prisma } from "../shared/database.js";
@@ -9,6 +10,7 @@ import { captureUnhandled } from "../shared/observability/sentry.js";
 import { sendExpoPush, type ExpoPushMessage } from "../shared/notifications/expo-push.js";
 import { sendSmsBatch, type SmsMessage } from "../shared/notifications/msg91-sms.js";
 import { householdUserIds } from "../shared/notifications/household-delivery.js";
+import { notif } from "../shared/i18n/notifications.js";
 
 export interface CriticalAlertJob {
   readingId: string;
@@ -25,20 +27,28 @@ const copyForSeverity = (
   severity: "low" | "high",
   valueMgDl: number,
   patientName: string,
-): { title: string; body: string } => {
-  if (severity === "low") {
-    return {
-      title: `⚠️ ${patientName}: Sugar Bahut Kam`,
-      body: `Sugar ${valueMgDl} mg/dL hai. Turant kuch meetha dein — juice ya glucose. Call karein.`,
-    };
-  }
-  return {
-    title: `⚠️ ${patientName}: Sugar Bahut Zyada`,
-    body: `Sugar ${valueMgDl} mg/dL hai. Pani peeyein. Dawai check karein. Call karein.`,
-  };
-};
+  language: Language,
+): { title: string; body: string } =>
+  notif(
+    severity === "low" ? "critical_bypass_low" : "critical_bypass_high",
+    { patientName, valueMgDl },
+    language,
+  );
 
-const smsCopy = (severity: "low" | "high", valueMgDl: number, patientName: string): string => {
+// SMS copy goes to emergency contacts who have no language preference
+// of their own — we mirror the patient's language so the family
+// conversation stays consistent. "ALERT" prefix stays English in both
+// bundles for cross-language recognisability.
+const smsCopy = (
+  severity: "low" | "high",
+  valueMgDl: number,
+  patientName: string,
+  language: Language,
+): string => {
+  if (language === "en") {
+    const label = severity === "low" ? "VERY LOW" : "VERY HIGH";
+    return `SwasthParivar ALERT: ${patientName}'s sugar is ${label} (${valueMgDl} mg/dL). Please call now.`;
+  }
   const label = severity === "low" ? "KAM" : "ZYADA";
   return `SwasthParivar ALERT: ${patientName} ka sugar BAHUT ${label} hai (${valueMgDl} mg/dL). Turant call karein.`;
 };
@@ -108,9 +118,10 @@ export const processCriticalAlert = async (job: Job<CriticalAlertJob>): Promise<
 
   const patient = await prisma.user.findUnique({
     where: { id: userId },
-    select: { name: true },
+    select: { name: true, preferredLanguage: true },
   });
   const patientName = patient?.name ?? "Patient";
+  const language = patient?.preferredLanguage ?? "hi";
 
   const reading = await prisma.glucoseReading.findFirst({
     where: { id: readingId },
@@ -118,7 +129,7 @@ export const processCriticalAlert = async (job: Job<CriticalAlertJob>): Promise<
   });
   const value = reading?.valueMgDl ?? 0;
 
-  const copy = copyForSeverity(decision.severity, value, patientName);
+  const copy = copyForSeverity(decision.severity, value, patientName, language);
 
   let pushSuccessCount = 0;
   const pushFailures: string[] = [];
@@ -184,7 +195,7 @@ export const processCriticalAlert = async (job: Job<CriticalAlertJob>): Promise<
   if (smsTriggered) {
     const phones = await resolveSmsTargets(decision.smsTargets);
     if (phones.length > 0) {
-      const smsText = smsCopy(decision.severity, value, patientName);
+      const smsText = smsCopy(decision.severity, value, patientName, language);
       const results = await sendSmsBatch(phones.map((phone) => ({ phone, message: smsText })));
       smsSuccessCount = results.filter((r) => r.success).length;
     }

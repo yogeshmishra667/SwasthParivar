@@ -157,7 +157,51 @@
     "switchToEnglish": "Switch to English",
     "switchToHindi": "Switch to Hindi",
     "normalText": "Normal text",
-    "largeText": "Large text (1.3x)"
+    "largeText": "Large text (1.3x)",
+    "preferences": "App Preferences",
+    "language": "Language",
+    "accessibility": "Large Text",
+    "largeTextOn": "On",
+    "largeTextOff": "Off",
+    "householdSection": "Family on this device",
+    "primaryProfile": "Primary",
+    "addProfile": "Add another profile",
+    "addProfileFailed": "Could not add profile. Try again.",
+    "editProfile": "Edit Profile",
+    "editProfileFailed": "Could not update profile. Try again.",
+    "reminderTime": {
+      "title": "Daily Reminder",
+      "value": "{{time}}",
+      "off": "Off — no reminder set",
+      "disable": "Disable",
+      "format": "24-hour format (e.g. 07:00 or 19:30)",
+      "hoursLabel": "Hours",
+      "minutesLabel": "Minutes"
+    },
+    "checkFrequency": {
+      "title": "Sugar Check Frequency"
+    },
+    "frequency": {
+      "daily": "Daily",
+      "dailyDesc": "Log your sugar every day",
+      "twice_weekly": "Twice a week",
+      "twice_weeklyDesc": "Log twice a week",
+      "weekly": "Once a week",
+      "weeklyDesc": "Log once a week",
+      "biweekly": "Every two weeks",
+      "biweeklyDesc": "Log once every two weeks",
+      "monthly": "Monthly",
+      "monthlyDesc": "Log once a month"
+    },
+    "notifications": {
+      "title": "Push Notifications",
+      "desc": "Reminders, alerts, and patterns we spot.",
+      "errorTitle": "Notification setup issue",
+      "errorPerm": "Please enable notifications in your phone settings.",
+      "errorSim": "Push notifications don't work on simulators.",
+      "errorExpo": "Push notifications need a standalone build, not Expo Go.",
+      "errorGeneric": "Could not register this device for notifications."
+    }
   },
   "critical": {
     "lowTitle": "Sugar is very low ({{value}})",
@@ -300,6 +344,43 @@
           "critical": "On days your BP is higher (above {{systolicThreshold}}), your sugar runs much higher — around {{highBpMean}} compared with {{normalBpMean}}, about {{delta}} mg/dL more. Please discuss managing BP and sugar together with your doctor."
         }
       }
+    },
+    "emptyState": {
+      "title": "Your patterns look stable",
+      "desc": "We keep analysing your readings. Anything worth flagging will show up here."
+    },
+    "loggingProgress": {
+      "title": "Logging consistency",
+      "descGood": "Strong week — logged {{logged}} of {{total}} days.",
+      "descOk": "You logged {{logged}} of {{total}} days this week. Aim for a daily reading.",
+      "descLow": "Only {{logged}} of {{total}} days logged this week. Even one tap a day helps."
+    },
+    "tips": {
+      "header": "Daily health tips",
+      "water": {
+        "title": "Stay hydrated",
+        "desc": "Drinking water helps your kidneys flush out extra sugar."
+      },
+      "walk": {
+        "title": "Walk after meals",
+        "desc": "A 10-minute walk after meals lowers post-meal sugar spikes."
+      },
+      "fiber": {
+        "title": "Eat more fibre",
+        "desc": "Vegetables and whole grains slow down sugar absorption."
+      }
+    }
+  },
+  "guardian": {
+    "openFromFamily": "Family alerts",
+    "openFromFamilyHint": "View patterns we've spotted for your patients.",
+    "emptyState": {
+      "title": "All safe & sound",
+      "desc": "No critical alerts for your family right now. We're watching their logs and will notify you if anything needs attention.",
+      "howItWorks": "How family alerts work",
+      "step1": "They log sugar or vitals on their device.",
+      "step2": "We detect concerning patterns.",
+      "step3": "You get an immediate alert here."
     }
   },
   "summary": {
@@ -423,6 +504,10 @@
     "pendingToYou": "{{name}} invited you",
     "loadFailed": "Could not load family list.",
     "guardianHeader": "Guardian view — read only",
-    "lastUpdated": "Last update: {{time}}"
+    "lastUpdated": "Last update: {{time}}",
+    "quickSummary": {
+      "title": "Family health network",
+      "desc": "Connect with loved ones to share health logs and get alerts when critical patterns are detected."
+    }
   }
 }

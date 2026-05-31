@@ -62,7 +62,7 @@ export default function AlertHistoryScreen(): JSX.Element {
   }, [hasMore, cursor, loadingMore]);
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950">
       <View className="flex-row items-center justify-between border-b border-gray-200 px-2 py-2">
         <View className="flex-row items-center gap-1">
           <Pressable
@@ -74,19 +74,21 @@ export default function AlertHistoryScreen(): JSX.Element {
           >
             <Icon name="chevron-back" size={24} color="#111827" />
           </Pressable>
-          <Text className="text-hero font-bold">{t("guardian.historyTitle")}</Text>
+          <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
+            {t("guardian.historyTitle")}
+          </Text>
         </View>
         <ActiveProfileBadge />
       </View>
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <Text className="text-body text-neutral">{t("guardian.loading")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">{t("guardian.loading")}</Text>
         </View>
       ) : alerts.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
           <Icon name="time-outline" size={48} color="#6B7280" />
-          <Text className="mt-3 text-center text-important text-neutral">
+          <Text className="mt-3 text-center text-important text-neutral dark:text-gray-400">
             {t("guardian.emptyHistory")}
           </Text>
         </View>

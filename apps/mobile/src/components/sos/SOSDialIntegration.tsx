@@ -78,7 +78,7 @@ export const SOSDialIntegration = ({
       accessibilityHint={t("sos.active.cancelButton")}
       onPress={onCancel}
       style={{ minHeight: TOUCH_TARGET_MIN }}
-      className="m-4 flex-row items-center rounded-2xl bg-white/20 p-4 active:bg-white/30"
+      className="m-4 flex-row items-center rounded-2xl bg-white dark:bg-gray-900/20 p-4 active:bg-white dark:bg-gray-900/30"
     >
       <Icon name="call" size={32} color="#FFFFFF" accessibilityLabel="" />
       <View className="ml-3 flex-1">

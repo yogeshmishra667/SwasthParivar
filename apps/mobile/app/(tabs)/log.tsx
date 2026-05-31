@@ -318,9 +318,11 @@ export default function LogScreen(): JSX.Element {
 
   if (stage === "saved") {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
+      <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950">
         <View className="flex-row items-center justify-between px-4 py-3">
-          <Text className="text-hero font-bold">{t("logging.saved")}</Text>
+          <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
+            {t("logging.saved")}
+          </Text>
           <ActiveProfileBadge />
         </View>
 
@@ -335,9 +337,11 @@ export default function LogScreen(): JSX.Element {
               />
               {savedSummary && (
                 <>
-                  <Text className="text-hero font-bold">{savedSummary.headline}</Text>
+                  <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
+                    {savedSummary.headline}
+                  </Text>
                   {savedSummary.detail !== undefined && (
-                    <Text className="text-important text-center text-neutral">
+                    <Text className="text-important text-center text-neutral dark:text-gray-400">
                       {savedSummary.detail}
                     </Text>
                   )}
@@ -352,7 +356,9 @@ export default function LogScreen(): JSX.Element {
                 </View>
               )}
               {feedbackMsg !== null && mode === "glucose" && (
-                <Text className="text-important text-center">{feedbackMsg}</Text>
+                <Text className="text-important text-center text-gray-900 dark:text-gray-100">
+                  {feedbackMsg}
+                </Text>
               )}
             </View>
           </Card>
@@ -444,7 +450,7 @@ export default function LogScreen(): JSX.Element {
   // Phase 2 refactor.
   if (mode === "glucose") {
     return (
-      <SafeAreaView className="flex-1 gap-6 bg-white">
+      <SafeAreaView className="flex-1 gap-6 bg-white dark:bg-gray-900">
         <View className="flex-row items-center justify-end px-4 py-3">
           <ActiveProfileBadge />
         </View>
@@ -470,7 +476,7 @@ export default function LogScreen(): JSX.Element {
   // + 3 field chips + range hint, or meal type + 3 large category
   // cards) are taller than the screen on small phones.
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
       <View className="flex-row items-center justify-end px-4 py-3">
         <ActiveProfileBadge />
       </View>

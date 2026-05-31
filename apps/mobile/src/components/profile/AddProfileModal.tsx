@@ -102,9 +102,9 @@ export const AddProfileModal = ({ visible, onClose, onSuccess }: Props): JSX.Ele
         style={{ flex: 1 }}
       >
         <View className="flex-1 justify-end bg-black/60">
-          <View className="w-full rounded-t-3xl bg-white p-6">
+          <View className="w-full rounded-t-3xl bg-white dark:bg-gray-900 p-6">
             <View className="mb-4 flex-row items-center justify-between">
-              <Text className="text-hero font-bold">
+              <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
                 {t("settings.addProfile", { defaultValue: "Add another profile" })}
               </Text>
               <Pressable
@@ -128,7 +128,7 @@ export const AddProfileModal = ({ visible, onClose, onSuccess }: Props): JSX.Ele
                 autoCorrect={false}
                 accessibilityLabel={t("onboarding.namePlaceholder")}
                 style={{ minHeight: TOUCH_TARGET_MIN }}
-                className="mb-3 rounded-xl border border-gray-300 bg-gray-50 px-3 py-3 text-body text-gray-900"
+                className="mb-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-3 text-body text-gray-900 dark:text-gray-100"
               />
 
               <Text className="mb-1 text-body">{t("onboarding.agePlaceholder")}</Text>
@@ -141,7 +141,7 @@ export const AddProfileModal = ({ visible, onClose, onSuccess }: Props): JSX.Ele
                 maxLength={3}
                 accessibilityLabel={t("onboarding.agePlaceholder")}
                 style={{ minHeight: TOUCH_TARGET_MIN }}
-                className="mb-3 rounded-xl border border-gray-300 bg-gray-50 px-3 py-3 text-body text-gray-900"
+                className="mb-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-3 text-body text-gray-900 dark:text-gray-100"
               />
 
               <Text className="mb-1 text-body">{t("onboarding.selectCondition")}</Text>
@@ -165,7 +165,9 @@ export const AddProfileModal = ({ visible, onClose, onSuccess }: Props): JSX.Ele
                     >
                       <Text
                         className={`text-important ${
-                          selected ? "font-semibold text-primary" : "text-neutral"
+                          selected
+                            ? "font-semibold text-primary"
+                            : "text-neutral dark:text-gray-400"
                         }`}
                       >
                         {t(`onboarding.${c}`, { defaultValue: c })}

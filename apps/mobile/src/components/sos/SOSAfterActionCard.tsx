@@ -40,10 +40,13 @@ export const SOSAfterActionCard = ({ onSubmit, onSkip }: SOSAfterActionCardProps
       <View className="flex-1 p-6">
         <View className="items-center">
           <Icon name="checkmark-circle" size={56} color="#16A34A" accessibilityLabel="" />
-          <Text className="mt-3 text-hero font-bold text-foreground" accessibilityRole="header">
+          <Text
+            className="mt-3 text-hero font-bold text-foreground text-gray-900 dark:text-gray-100"
+            accessibilityRole="header"
+          >
             {t("sos.after.title")}
           </Text>
-          <Text className="mt-2 text-center text-important text-neutral">
+          <Text className="mt-2 text-center text-important text-neutral dark:text-gray-400">
             {t("sos.after.subtitle")}
           </Text>
         </View>
@@ -79,7 +82,7 @@ export const SOSAfterActionCard = ({ onSubmit, onSkip }: SOSAfterActionCardProps
             multiline
             maxLength={280}
             numberOfLines={3}
-            className="mt-2 rounded-2xl border border-neutral bg-white p-3 text-important text-foreground"
+            className="mt-2 rounded-2xl border border-neutral bg-white dark:bg-gray-900 p-3 text-important text-foreground text-gray-900 dark:text-gray-100"
             style={{ minHeight: 80, textAlignVertical: "top" }}
             accessibilityLabel={t("sos.after.noteLabel")}
           />

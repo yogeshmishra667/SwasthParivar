@@ -57,7 +57,7 @@ export default function AlertDetailScreen(): JSX.Element {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950">
       <View className="flex-row items-center justify-between border-b border-gray-200 px-2 py-2">
         <View className="flex-row items-center gap-1">
           <Pressable
@@ -69,19 +69,21 @@ export default function AlertDetailScreen(): JSX.Element {
           >
             <Icon name="chevron-back" size={24} color="#111827" />
           </Pressable>
-          <Text className="text-hero font-bold">{t("guardian.detailTitle")}</Text>
+          <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
+            {t("guardian.detailTitle")}
+          </Text>
         </View>
         <ActiveProfileBadge />
       </View>
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <Text className="text-body text-neutral">{t("guardian.loading")}</Text>
+          <Text className="text-body text-neutral dark:text-gray-400">{t("guardian.loading")}</Text>
         </View>
       ) : alert === null ? (
         <View className="flex-1 items-center justify-center px-6">
           <Icon name="cloud-offline-outline" size={48} color="#6B7280" />
-          <Text className="mt-3 text-center text-important text-neutral">
+          <Text className="mt-3 text-center text-important text-neutral dark:text-gray-400">
             {t("guardian.loadError")}
           </Text>
           <View className="mt-4">
@@ -96,23 +98,31 @@ export default function AlertDetailScreen(): JSX.Element {
                 ? t("guardian.severityOrange")
                 : t("guardian.severityYellow")}
             </Text>
-            <Text className="mt-1 text-hero font-bold text-gray-900">{alert.title}</Text>
+            <Text className="mt-1 text-hero font-bold text-gray-900 dark:text-gray-100">
+              {alert.title}
+            </Text>
           </View>
 
           <View>
-            <Text className="mb-1 text-important font-bold text-gray-900">
+            <Text className="mb-1 text-important font-bold text-gray-900 dark:text-gray-100">
               {t("guardian.whatHappened")}
             </Text>
-            <Text accessibilityRole="text" className="text-important text-gray-800">
+            <Text
+              accessibilityRole="text"
+              className="text-important text-gray-800 dark:text-gray-100"
+            >
               {alert.explanation}
             </Text>
           </View>
 
           <View>
-            <Text className="mb-1 text-important font-bold text-gray-900">
+            <Text className="mb-1 text-important font-bold text-gray-900 dark:text-gray-100">
               {t("guardian.whatToDo")}
             </Text>
-            <Text accessibilityRole="text" className="text-important text-gray-800">
+            <Text
+              accessibilityRole="text"
+              className="text-important text-gray-800 dark:text-gray-100"
+            >
               {alert.suggestedAction}
             </Text>
           </View>
@@ -125,12 +135,12 @@ export default function AlertDetailScreen(): JSX.Element {
             }
           />
 
-          <View className="rounded-2xl border border-gray-200 bg-white p-4">
+          <View className="rounded-2xl border border-gray-200 bg-white dark:bg-gray-900 p-4">
             {feedbackDone ? (
               <Text className="text-body text-success">{t("guardian.feedbackThanks")}</Text>
             ) : (
               <>
-                <Text className="mb-3 text-important font-semibold text-gray-900">
+                <Text className="mb-3 text-important font-semibold text-gray-900 dark:text-gray-100">
                   {t("guardian.feedbackQuestion")}
                 </Text>
                 <View className="flex-row gap-2">
@@ -154,7 +164,7 @@ export default function AlertDetailScreen(): JSX.Element {
                     className="flex-1 flex-row items-center justify-center gap-1 rounded-2xl border border-gray-300 px-4"
                   >
                     <Icon name="thumbs-down" size={18} color="#6B7280" />
-                    <Text className="text-important font-semibold text-gray-900">
+                    <Text className="text-important font-semibold text-gray-900 dark:text-gray-100">
                       {t("guardian.notHelpful")}
                     </Text>
                   </Pressable>

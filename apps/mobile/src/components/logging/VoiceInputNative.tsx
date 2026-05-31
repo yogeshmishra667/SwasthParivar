@@ -209,7 +209,9 @@ const VoiceInputNative = ({ onParsed, onFail }: Props): JSX.Element => {
       >
         <Icon name={recording ? "stop" : "mic"} size={48} color="#FFFFFF" />
       </Pressable>
-      <Text className="text-important text-center px-4">{status}</Text>
+      <Text className="text-important text-center px-4 text-gray-900 dark:text-gray-100">
+        {status}
+      </Text>
       {(statusKey === "tap" || statusKey === "listen") && (
         <Text className="text-center px-4 text-gray-500" style={{ fontSize: 13 }}>
           {t("voice.exampleHint")}

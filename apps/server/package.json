@@ -21,6 +21,7 @@
     "admin:seed": "tsx prisma/seed-admin.ts",
     "db:seed:flags": "tsx prisma/seed-flags.ts",
     "db:seed:patients": "tsx prisma/seed-patients.ts",
+    "db:seed:test-users": "tsx prisma/seed-test-users.ts",
     "clean": "rm -rf dist coverage *.tsbuildinfo"
   },
   "dependencies": {

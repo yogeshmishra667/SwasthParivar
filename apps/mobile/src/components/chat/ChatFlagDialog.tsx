@@ -51,9 +51,13 @@ export const ChatFlagDialog = ({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <View className="flex-1 justify-end bg-black/40">
-        <View className="rounded-t-2xl bg-white p-4">
-          <Text className="text-number font-bold text-gray-900">{t("chat.flagDialog.title")}</Text>
-          <Text className="mt-1 text-body text-neutral">{t("chat.flagDialog.subtitle")}</Text>
+        <View className="rounded-t-2xl bg-white dark:bg-gray-900 p-4">
+          <Text className="text-number font-bold text-gray-900 dark:text-gray-100">
+            {t("chat.flagDialog.title")}
+          </Text>
+          <Text className="mt-1 text-body text-neutral dark:text-gray-400">
+            {t("chat.flagDialog.subtitle")}
+          </Text>
 
           {REASONS.map((r) => {
             const selected = reason === r;
@@ -68,7 +72,7 @@ export const ChatFlagDialog = ({
                   selected ? "border-primary bg-blue-50" : "border-gray-200"
                 }`}
               >
-                <Text className="text-important text-gray-900">
+                <Text className="text-important text-gray-900 dark:text-gray-100">
                   {t(`chat.flagDialog.reasons.${r}`)}
                 </Text>
               </Pressable>
@@ -81,7 +85,7 @@ export const ChatFlagDialog = ({
             multiline
             placeholder={t("chat.flagDialog.notePlaceholder")}
             accessibilityLabel={t("chat.flagDialog.notePlaceholder")}
-            className="mt-3 max-h-24 rounded-2xl bg-gray-100 px-4 py-2 text-important text-gray-900"
+            className="mt-3 max-h-24 rounded-2xl bg-gray-100 dark:bg-gray-800 px-4 py-2 text-important text-gray-900 dark:text-gray-100"
           />
 
           <View className="mt-4 flex-row gap-2">
@@ -91,7 +95,7 @@ export const ChatFlagDialog = ({
               accessibilityLabel={t("chat.flagDialog.cancel")}
               className="min-h-touch flex-1 items-center justify-center rounded-2xl border border-neutral active:opacity-70"
             >
-              <Text className="text-important font-semibold text-neutral">
+              <Text className="text-important font-semibold text-neutral dark:text-gray-400">
                 {t("chat.flagDialog.cancel")}
               </Text>
             </Pressable>

@@ -20,7 +20,7 @@ export const CostTierBadge = ({
   if (!visible) return null;
   return (
     <View className="rounded bg-gray-200 px-1.5 py-0.5">
-      <Text className="text-body text-gray-600">{t(`chat.tier.${tier}`)}</Text>
+      <Text className="text-body text-gray-600 dark:text-gray-300">{t(`chat.tier.${tier}`)}</Text>
     </View>
   );
 };

@@ -68,12 +68,12 @@ export default function FirstReadingScreen(): JSX.Element {
   // ── Celebration state ──
   if (celebrated) {
     return (
-      <SafeAreaView className="flex-1 bg-white">
+      <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
         <View className="flex-1 items-center justify-center px-6">
           <View className="mb-6 h-28 w-28 items-center justify-center rounded-full bg-purple-50">
             <Icon name="trophy" size={64} color="#8B5CF6" accessibilityLabel="Celebration" />
           </View>
-          <Text className="text-3xl font-bold tracking-tight text-center text-gray-900">
+          <Text className="text-3xl font-bold tracking-tight text-center text-gray-900 dark:text-gray-100">
             {t("onboarding.celebrate")}
           </Text>
           <Text className="mt-3 text-center text-body text-gray-500">
@@ -100,7 +100,7 @@ export default function FirstReadingScreen(): JSX.Element {
   // ── Numpad entry state ──
   if (value === null) {
     return (
-      <SafeAreaView className="flex-1 bg-white">
+      <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
         <ScrollView
           contentContainerStyle={{ flexGrow: 1, padding: 24 }}
           keyboardShouldPersistTaps="handled"
@@ -110,7 +110,7 @@ export default function FirstReadingScreen(): JSX.Element {
             <View className="mb-4 h-24 w-24 items-center justify-center rounded-full bg-blue-50">
               <Icon name="fitness" size={48} color="#2563EB" />
             </View>
-            <Text className="text-3xl font-bold tracking-tight text-center text-gray-900">
+            <Text className="text-3xl font-bold tracking-tight text-center text-gray-900 dark:text-gray-100">
               {t("onboarding.firstReading")}
             </Text>
             <Text className="mt-2 text-center text-body text-gray-500">
@@ -126,7 +126,7 @@ export default function FirstReadingScreen(): JSX.Element {
 
   // ── Confirmation state ──
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
       <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 16 }}>
         <ConfirmationScreen
           value={value}

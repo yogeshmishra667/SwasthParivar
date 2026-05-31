@@ -1,3 +1,12 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --fs-body: 14px;
+    --fs-important: 16px;
+    --fs-number: 24px;
+    --fs-hero: 36px;
+  }
+}

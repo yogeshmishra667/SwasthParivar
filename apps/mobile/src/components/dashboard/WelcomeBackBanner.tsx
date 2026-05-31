@@ -39,10 +39,10 @@ export const WelcomeBackBanner = ({ daysSinceLatest, loggedToday }: Props): JSX.
     >
       <Icon name="sparkles" size={24} color="#8B5CF6" />
       <View className="flex-1">
-        <Text className="text-important font-semibold text-celebration">
+        <Text className="text-important font-semibold text-celebration text-gray-900 dark:text-gray-100">
           {t("dashboard.welcomeBackTitle", { defaultValue: "Welcome back!" })}
         </Text>
-        <Text className="mt-0.5 text-body text-neutral">
+        <Text className="mt-0.5 text-body text-neutral dark:text-gray-400">
           {t("dashboard.welcomeBackBody", {
             days: daysSinceLatest,
             defaultValue: `${daysSinceLatest} din ho gaye — naya streak shuru karein 💪`,

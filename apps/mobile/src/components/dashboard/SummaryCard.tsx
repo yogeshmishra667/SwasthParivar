@@ -21,15 +21,17 @@ export const SummaryCard = ({ headline, details, coldStart }: SummaryCardProps):
     <Card className={coldStart ? "border border-celebration/30 bg-violet-50" : ""}>
       <View className="flex-row items-center gap-2">
         <Icon name="sparkles" size={18} color={coldStart ? "#8B5CF6" : "#2563EB"} />
-        <Text className="text-body font-semibold text-neutral">
+        <Text className="text-body font-semibold text-neutral dark:text-gray-400">
           {coldStart ? t("summary.coldStartTag") : t("summary.headline")}
         </Text>
       </View>
-      <Text className="mt-2 text-2xl font-bold leading-7 text-gray-900">{headline}</Text>
+      <Text className="mt-2 text-2xl font-bold leading-7 text-gray-900 dark:text-gray-100">
+        {headline}
+      </Text>
       {details.length > 0 && (
         <View className="mt-3 gap-1.5">
           {details.map((line) => (
-            <Text key={line} className="text-important text-gray-700">
+            <Text key={line} className="text-important text-gray-700 dark:text-gray-300">
               • {line}
             </Text>
           ))}

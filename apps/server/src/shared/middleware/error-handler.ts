@@ -29,6 +29,7 @@ const statusFor = (code: ErrorCode): number => {
     case "INSIGHT_NOT_FOUND":
     case "FAMILY_LINK_NOT_FOUND":
     case "GUARDIAN_ALERT_NOT_FOUND":
+    case "HOUSEHOLD_PROFILE_NOT_FOUND":
     case "ADMIN_NOT_FOUND":
     case "SOS_NOT_FOUND":
     case "SCHEDULE_NOT_FOUND":

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 import { isActiveProfilePrimary, useProfileStore } from "@/stores/profile.store";
+import { usePreferencesStore } from "@/stores/preferences.store";
 
 const iconFor = (routeName: string): IconName => {
   switch (routeName) {
@@ -25,6 +26,7 @@ const iconFor = (routeName: string): IconName => {
 
 export default function TabsLayout(): JSX.Element {
   const { t } = useTranslation();
+  const theme = usePreferencesStore((s) => s.theme);
   // CLAUDE.md: "Guardian role requires login → a guardian is ALWAYS a
   // primary account." When a sub-profile is active, hide the Family tab
   // entirely (the screen itself also redirects — defense in depth).
@@ -34,10 +36,15 @@ export default function TabsLayout(): JSX.Element {
     <Tabs
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarStyle: { minHeight: TOUCH_TARGET_MIN + 16, paddingTop: 4 },
+        tabBarStyle: {
+          minHeight: TOUCH_TARGET_MIN + 16,
+          paddingTop: 4,
+          backgroundColor: theme === "dark" ? "#111827" : "#FFFFFF",
+          borderTopColor: theme === "dark" ? "#374151" : "#F3F4F6",
+        },
         tabBarLabelStyle: { fontSize: 12 },
         tabBarActiveTintColor: "#2563EB",
-        tabBarInactiveTintColor: "#6B7280",
+        tabBarInactiveTintColor: theme === "dark" ? "#9CA3AF" : "#6B7280",
         tabBarIcon: ({ color, size }) => (
           <Icon name={iconFor(route.name)} size={size} color={color} />
         ),

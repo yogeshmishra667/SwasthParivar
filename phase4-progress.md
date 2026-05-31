@@ -65,6 +65,15 @@ Earliest first within each cluster; most recent cluster last.
 - PR #113 (2026-05-31) — Surface Expo's `errors[].code` + `errors[].message` in admin UI instead of opaque `HTTP_400`.
 - PR #114 (2026-05-31) — Auto-prune push tokens that return `PushTooManyExperienceIds` or `MismatchSenderId` (was only `DeviceNotRegistered`).
 
+### UI Polish & Settings (2026-05-31) — *by Antigravity*
+- PR #117 (2026-05-31) — Complete settings screen redesign with `ReminderTimePicker` and `CheckFrequencyPicker` modal flows (by Antigravity).
+- PR #118 (2026-05-31) — NativeWind theme integration (`usePreferencesStore` linked to `setColorScheme`) with an `AnimatedThemeToggle` component for Light/Dark/System (by Antigravity).
+- PR #119 (2026-05-31) — App-wide Dark Mode support executed via a comprehensive style injection script across 60+ UI files and dynamic Tab Bar colors (by Antigravity).
+- PR #120 (2026-05-31) — Fixed generic black text overriding the dark mode theme across 35 UI files by injecting `dark:text-gray-100` into `text-hero` and `text-important` classes (by Antigravity).
+- PR #121 (2026-05-31) — Fixed a UX edge-case where the Dashboard `InsightsBadge` teased "new patterns" prior to the 14-day unlock, preventing users from getting trapped on the "Insights Locked" screen (by Antigravity).
+- **Architectural Decision (Multi-Profile Push Routing)**: Confirmed that for shared devices (e.g., 3 profiles managed on 1 phone), push notifications and SMS alerts for ALL profiles must route to the primary account's device/number. The push token is tied to the primary user's install, and the backend must route alerts for sub-profiles to this token (by Antigravity).
+
+
 ---
 
 ## Pending operational close-out (no code — gate flips + drills)
