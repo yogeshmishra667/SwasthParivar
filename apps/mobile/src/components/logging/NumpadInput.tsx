@@ -47,7 +47,7 @@ export const NumpadInput = ({ onSubmit, initialValue = "" }: NumpadProps): JSX.E
             className="mb-2 w-[31%] items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 active:bg-gray-200"
             style={{ minHeight: TOUCH_TARGET_MIN + 16 }}
           >
-            <Text className="text-number font-semibold">{k}</Text>
+            <Text className="text-number font-semibold text-gray-900 dark:text-gray-100">{k}</Text>
           </Pressable>
         ))}
       </View>
