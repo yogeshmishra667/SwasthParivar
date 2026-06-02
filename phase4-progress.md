@@ -2,7 +2,7 @@
 
 > **Companion to `phase4.md`** (the original spec). This file tracks what's done, what's in flight, and what's next. Update on every merged PR. The spec stays canonical for HOW things should be built.
 >
-> Last updated: **2026-06-03** (Phase 1/2 corrigenda + DX polish session — working tree, not yet PR'd).
+> Last updated: **2026-06-03** (Phase 1/2 corrigenda + DX polish session — PR #125 open).
 
 ---
 
@@ -11,14 +11,14 @@
 | Track | State | Next concrete action |
 |---|---|---|
 | **Carry-over from Phase 2, Phase 3, Admin** | ✅ Code-complete | None — see "operational close-out" below |
-| **Phase 1 corrigendum: emergency contacts** | 🟡 Server done (#115), mobile management screen + onboarding priority-1 seeding still pending | Build Settings → Emergency contacts screen + wire guardian-assisted onboarding to seed priority-1 row |
-| **Preferences backend persistence** | ✅ Server + mobile wired (working tree, 2026-06-03) | Land via PR + verify cross-device sync on a real install |
-| **checkFrequency local reminders** | ✅ Wired (working tree, 2026-06-03) | Land via PR |
-| **Cold-start test users** | ✅ Seed script live, 6 free-tier users at days 0/3/7/13/7/35 (working tree, 2026-06-03) | Land via PR |
-| **Rate-limit alert UI** | ✅ Glucose log surface shows prominent card on 429 (working tree, 2026-06-03) | Land via PR |
-| **Brand assets** | ✅ Real icon/splash/notification PNGs regenerated; fixes square-notification bug (working tree, 2026-06-03) | Rebuild via EAS to ship to device |
-| **Dark mode on log surfaces** | ✅ Invisible-text bugs fixed on numpad / BP field chips / confirmation warnings (working tree, 2026-06-03) | Land via PR |
-| **HbA1c response-shape type** | ✅ Mobile type aligned to domain-logic source of truth (working tree, 2026-06-03) | Land via PR; consider promoting `HbA1cEstimate` to `@swasth/shared-types` so this can't recur |
+| **Phase 1 corrigendum: emergency contacts** | 🟡 Server done (#115), mobile management screen + onboarding priority-1 seeding still pending | **NEXT SESSION PICKUP** — wire guardian-assisted onboarding to seed priority-1 row (CLAUDE.md:171); mobile CRUD screen separately |
+| **Preferences backend persistence** | 🟡 Server + mobile wired (PR #125 open) | Merge #125; verify cross-device sync on a real install |
+| **checkFrequency local reminders** | 🟡 Wired (PR #125 open) | Merge #125 |
+| **Cold-start test users** | 🟡 Seed script live, 6 free-tier users at days 0/3/7/13/7/35 (PR #125 open) | Merge #125 |
+| **Rate-limit alert UI** | 🟡 Glucose log surface shows prominent card on 429 (PR #125 open) | Merge #125 |
+| **Brand assets** | 🟡 Real icon/splash/notification PNGs regenerated; fixes square-notification bug (PR #125 open) | Merge #125 → rebuild via EAS to ship to device |
+| **Dark mode on log surfaces** | 🟡 Invisible-text bugs fixed on numpad / BP field chips / confirmation warnings (PR #125 open) | Merge #125 |
+| **HbA1c response-shape type** | 🟡 Mobile type aligned to domain-logic source of truth (PR #125 open) | Merge #125; follow-up PR to promote `HbA1cEstimate` to `@swasth/shared-types` so this can't recur |
 | **SOS ramp** | 🟡 Code-complete, needs operational soak | Provision vendor creds → 7-day test-mode soak → first drill → flag flips |
 | **Push delivery hardening** | ✅ Diagnostic + auto-prune + per-user rate-limit keying landed (#113, #114, #112) | Verify the Expo token / projectId pairing in prod once #114 prunes the dead tokens |
 | **UI polish + dark mode + new settings** | ✅ Antigravity rollup (#117-121) cleaned up + shippable in #118 | Visual click-through on Light/Dark/System across all screens before EAS build |
@@ -73,7 +73,7 @@ Earliest first within each cluster; most recent cluster last.
 - PR #113 (2026-05-31) — Surface Expo's `errors[].code` + `errors[].message` in admin UI instead of opaque `HTTP_400`.
 - PR #114 (2026-05-31) — Auto-prune push tokens that return `PushTooManyExperienceIds` or `MismatchSenderId` (was only `DeviceNotRegistered`).
 
-### Phase 1/2 corrigenda + DX polish (2026-06-03) — *working tree, not yet PR'd*
+### Phase 1/2 corrigenda + DX polish (2026-06-03) — *PR #125 open*
 
 - **Rate-limit alert UI** (`apps/mobile/app/(tabs)/log.tsx`) — glucose save flow now distinguishes `RATE_LIMITED` from other rejections. New `rateLimited` state replaces the input region with an amber card (icon + "Aaj ka limit poori ho gayi" + "Dashboard dekhein" CTA) when the daily-readings cap is hit. Critical values still bypass the cap server-side, so the card never blocks a safety alert. New `logging.rateLimited.{title,body,cta}` i18n keys in en + hi.
 - **Brand assets regenerated** — `apps/mobile/scripts/generate-icons.mjs` (new) renders real heart-with-ECG-pulse marks for all four required PNGs from a single pixel rasteriser, no native deps, 16× supersampled. Replaces the placeholder solid-color rectangles. The `notification-icon.png` fix is the highest-impact: prior file was opaque white everywhere → Android tinted the entire 96×96 rectangle as a colored square; new file is white silhouette on transparent so the tint paints only the heart shape.
@@ -129,11 +129,12 @@ Earliest first within each cluster; most recent cluster last.
 - [ ] Build Settings → Emergency Contacts mobile screen (CRUD against `/api/v1/emergency-contacts`). Reorder via priority change. 48dp targets, Hindi-first copy.
 - [ ] Wire guardian-assisted onboarding step to write an initial `EmergencyContact` row at priority 1 with `isGuardian: true` (CLAUDE.md line 171). **NEXT UP** in current session — see "Pending from 2026-06-03 session" below.
 
-### Pending from 2026-06-03 session
+### Pending — next session pickup
 
-- [ ] Land the working-tree changes (Cold-start seed, checkFrequency wiring, Preferences backend persistence, Rate-limit alert UI, Brand assets, Dark mode log surface fixes, HbA1c shape fix) as one or more PRs. Currently uncommitted; tied together because they're independent enough that a verify pipeline only needs to run once.
-- [ ] EmergencyContact priority-1 seeding on guardian-assisted onboarding — the one item from the original audit list that hasn't been touched yet this session.
-- [ ] Promote `HbA1cEstimate` to `@swasth/shared-types` so server + mobile share the type (separate small refactor; prevents this class of bug recurring).
+- [x] (2026-06-03) Land the 2026-06-03 working-tree changes as PR #125 — 8 commits, all 11 preflight gates green.
+- [ ] **EmergencyContact priority-1 seeding on guardian-assisted onboarding** (CLAUDE.md:171). Last item from the original audit list, deferred to a fresh session. Hook is in the guardian onboarding flow at the moment the patient profile is created — seed a single `EmergencyContact` row with `priority: 1`, `isGuardian: true`, `phone: guardianPhone`. ~20 LOC. Spawned PR should also unblock the "Phase 1 corrigendum: emergency contacts" row in the TL;DR.
+- [ ] Mobile Settings → Emergency Contacts CRUD screen (the other half of the Phase 1 corrigendum, separate from the seeding above).
+- [ ] Follow-up refactor: promote `HbA1cEstimate` to `@swasth/shared-types` so server + mobile share the type. Prevents this class of drift bug recurring. Small, independent — can land alongside or after the EmergencyContact PR.
 
 ---
 
