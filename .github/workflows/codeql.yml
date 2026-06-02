@@ -26,6 +26,11 @@ concurrency:
   group: codeql-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Deny-by-default at the workflow level. The analyze job below grants the
+# minimum it needs (security-events:write to upload SARIF).
+permissions:
+  contents: read
+
 jobs:
   analyze:
     name: CodeQL (javascript-typescript)
