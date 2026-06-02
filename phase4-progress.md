@@ -2,7 +2,7 @@
 
 > **Companion to `phase4.md`** (the original spec). This file tracks what's done, what's in flight, and what's next. Update on every merged PR. The spec stays canonical for HOW things should be built.
 >
-> Last updated: **2026-05-31** (end of Week 13 carry-over + UI polish cleanup PR #118).
+> Last updated: **2026-06-03** (Phase 1/2 corrigenda + DX polish session — PR #125 open).
 
 ---
 
@@ -11,7 +11,14 @@
 | Track | State | Next concrete action |
 |---|---|---|
 | **Carry-over from Phase 2, Phase 3, Admin** | ✅ Code-complete | None — see "operational close-out" below |
-| **Phase 1 corrigendum: emergency contacts** | 🟡 Server done (#115), mobile management screen pending | Build Settings → Emergency contacts screen + wire onboarding |
+| **Phase 1 corrigendum: emergency contacts** | 🟡 Server done (#115), mobile management screen + onboarding priority-1 seeding still pending | **NEXT SESSION PICKUP** — wire guardian-assisted onboarding to seed priority-1 row (CLAUDE.md:171); mobile CRUD screen separately |
+| **Preferences backend persistence** | 🟡 Server + mobile wired (PR #125 open) | Merge #125; verify cross-device sync on a real install |
+| **checkFrequency local reminders** | 🟡 Wired (PR #125 open) | Merge #125 |
+| **Cold-start test users** | 🟡 Seed script live, 6 free-tier users at days 0/3/7/13/7/35 (PR #125 open) | Merge #125 |
+| **Rate-limit alert UI** | 🟡 Glucose log surface shows prominent card on 429 (PR #125 open) | Merge #125 |
+| **Brand assets** | 🟡 Real icon/splash/notification PNGs regenerated; fixes square-notification bug (PR #125 open) | Merge #125 → rebuild via EAS to ship to device |
+| **Dark mode on log surfaces** | 🟡 Invisible-text bugs fixed on numpad / BP field chips / confirmation warnings (PR #125 open) | Merge #125 |
+| **HbA1c response-shape type** | 🟡 Mobile type aligned to domain-logic source of truth (PR #125 open) | Merge #125; follow-up PR to promote `HbA1cEstimate` to `@swasth/shared-types` so this can't recur |
 | **SOS ramp** | 🟡 Code-complete, needs operational soak | Provision vendor creds → 7-day test-mode soak → first drill → flag flips |
 | **Push delivery hardening** | ✅ Diagnostic + auto-prune + per-user rate-limit keying landed (#113, #114, #112) | Verify the Expo token / projectId pairing in prod once #114 prunes the dead tokens |
 | **UI polish + dark mode + new settings** | ✅ Antigravity rollup (#117-121) cleaned up + shippable in #118 | Visual click-through on Light/Dark/System across all screens before EAS build |
@@ -66,6 +73,16 @@ Earliest first within each cluster; most recent cluster last.
 - PR #113 (2026-05-31) — Surface Expo's `errors[].code` + `errors[].message` in admin UI instead of opaque `HTTP_400`.
 - PR #114 (2026-05-31) — Auto-prune push tokens that return `PushTooManyExperienceIds` or `MismatchSenderId` (was only `DeviceNotRegistered`).
 
+### Phase 1/2 corrigenda + DX polish (2026-06-03) — *PR #125 open*
+
+- **Rate-limit alert UI** (`apps/mobile/app/(tabs)/log.tsx`) — glucose save flow now distinguishes `RATE_LIMITED` from other rejections. New `rateLimited` state replaces the input region with an amber card (icon + "Aaj ka limit poori ho gayi" + "Dashboard dekhein" CTA) when the daily-readings cap is hit. Critical values still bypass the cap server-side, so the card never blocks a safety alert. New `logging.rateLimited.{title,body,cta}` i18n keys in en + hi.
+- **Brand assets regenerated** — `apps/mobile/scripts/generate-icons.mjs` (new) renders real heart-with-ECG-pulse marks for all four required PNGs from a single pixel rasteriser, no native deps, 16× supersampled. Replaces the placeholder solid-color rectangles. The `notification-icon.png` fix is the highest-impact: prior file was opaque white everywhere → Android tinted the entire 96×96 rectangle as a colored square; new file is white silhouette on transparent so the tint paints only the heart shape.
+- **Dark mode on log surfaces** — fixed real invisible-text bugs in `NumpadInput.tsx` (digit labels had no color → black-on-dark-gray invisible), `BPInput.tsx` (FieldChip active state was `bg-blue-50` only → white value text invisible on light blue in dark mode), `ConfirmationScreen.tsx` (5 bugs: warning text class collision, radio inner dot wrongly inheriting `dark:bg-gray-900`, festive toggle label uncolored, toggle ball dark-gray in dark mode, status card bgs missing dark variants), `BPConfirmationScreen.tsx` (high-BP warning had the same class collision), `VoiceInput.tsx` (loading placeholder `bg-gray-200` themed). `CriticalAlert.tsx` intentionally left alone (red/white safety surface, theme-independent by design).
+- **Cold-start seed script** — `apps/server/prisma/seed-coldstart-users.ts` (new). Six free-tier users at stages 0/3/7/13/7/35: Anil/Sunita/Vikram/Lakshmi for stage-isolated testing, plus Rajesh (`+918349227777`, day 7, diabetes + HTN, poorly-controlled arc) and Priya (`+917509069999`, day 35, well-controlled, past full unlock so HbA1c + 30d trend detector fire) sharing phones with `seed-test-users.ts`. Whichever seed runs last wins; both idempotent. `createdAt` offset by `-1hr` so `Math.floor((now - createdAt)/86_400_000)` lands on the right side of the day boundary. Reading `measuredAt` uses negative hour offsets so day-0 readings are never in the future. Wired as `db:seed:coldstart-users` in `apps/server/package.json`.
+- **`checkFrequency` wiring** — new `apps/mobile/src/services/check-reminders.ts`. `syncCheckReminders()` maps each frequency to the right `expo-notifications` trigger (DAILY / 2× WEEKLY Mon+Thu / WEEKLY Sun / 8× DATE for biweekly / MONTHLY day-1). Identifier prefix `check-*` so reconcile/cancel can discover everything without a separate index. `preferences.store.ts`: setters for `checkFrequency`/`notificationsEnabled`/`reminderTime` resync after `set()`. `onRehydrateStorage` resyncs on cold-start to refill the biweekly DATE-trigger queue. Server-side push reminders (best_log_time, streak-risk) remain independent — they're behaviour-aware and shouldn't be silenced by this setting. Top-level `notifications.glucoseCheck.{title,body}` i18n keys added in en + hi.
+- **Preferences backend persistence** — new `UserPreferences` model + migration `20260602200000_user_preferences` (single row per user, PK on user_id, cascade-deletes with user, defaults match mobile store defaults). Server `users` module extended with `GET /users/me/preferences` (returns defaults when row missing) + `PUT /users/me/preferences` (upsert; strips `undefined` for strict-TS). New `apps/mobile/src/services/preferences.ts` (`fetchPreferences()` + `pushPreferences()`, both swallow errors so local AsyncStorage stays source of truth on network failures). `preferences.store.ts` setters push best-effort; new `hydrateFromServer()` action (server wins on mismatch, then resyncs local reminders); wired into `app/_layout.tsx` auth-aware effect. End-to-end verified: missing row → defaults; PUT partial body → persists only sent fields; explicit `null` distinguished from `undefined` (clears vs. don't-touch). Out of scope: `language` stays on `User.preferredLanguage` (existing path).
+- **HbA1c response-shape bug** — mobile `services/health.ts` had hand-written `HbA1cEstimate` declaring `estimate`/`readingCount`/`weightedMeanMgDl`/`computedAt`; the actual `@swasth/domain-logic` shape uses `hba1cPercent`/`totalReadings`/`weightedAverageMgDl`/`computedAtIso`. TypeScript couldn't catch it because the type was a guess, not derived from source — surfaced at runtime as `estimate.toFixed is not a function (it is undefined)` on `HbA1cCard.tsx:114`. Fixed the type and cleaned up a defensive `typeof ... ? ... : "N/A"` ladder on the card. Follow-up: promote `HbA1cEstimate` to `@swasth/shared-types` so server + mobile import the same definition (separate refactor).
+
 ### UI Polish & Settings (2026-05-31) — *by Antigravity*
 - PR #117 (2026-05-31) — Complete settings screen redesign with `ReminderTimePicker` and `CheckFrequencyPicker` modal flows (by Antigravity).
 - PR #118 (2026-05-31) — NativeWind theme integration (`usePreferencesStore` linked to `setColorScheme`) with an `AnimatedThemeToggle` component for Light/Dark/System (by Antigravity).
@@ -110,7 +127,14 @@ Earliest first within each cluster; most recent cluster last.
 ### Emergency contacts go-live
 
 - [ ] Build Settings → Emergency Contacts mobile screen (CRUD against `/api/v1/emergency-contacts`). Reorder via priority change. 48dp targets, Hindi-first copy.
-- [ ] Wire guardian-assisted onboarding step to write an initial `EmergencyContact` row at priority 1 with `isGuardian: true` (CLAUDE.md line 171).
+- [ ] Wire guardian-assisted onboarding step to write an initial `EmergencyContact` row at priority 1 with `isGuardian: true` (CLAUDE.md line 171). **NEXT UP** in current session — see "Pending from 2026-06-03 session" below.
+
+### Pending — next session pickup
+
+- [x] (2026-06-03) Land the 2026-06-03 working-tree changes as PR #125 — 8 commits, all 11 preflight gates green.
+- [ ] **EmergencyContact priority-1 seeding on guardian-assisted onboarding** (CLAUDE.md:171). Last item from the original audit list, deferred to a fresh session. Hook is in the guardian onboarding flow at the moment the patient profile is created — seed a single `EmergencyContact` row with `priority: 1`, `isGuardian: true`, `phone: guardianPhone`. ~20 LOC. Spawned PR should also unblock the "Phase 1 corrigendum: emergency contacts" row in the TL;DR.
+- [ ] Mobile Settings → Emergency Contacts CRUD screen (the other half of the Phase 1 corrigendum, separate from the seeding above).
+- [ ] Follow-up refactor: promote `HbA1cEstimate` to `@swasth/shared-types` so server + mobile share the type. Prevents this class of drift bug recurring. Small, independent — can land alongside or after the EmergencyContact PR.
 
 ---
 

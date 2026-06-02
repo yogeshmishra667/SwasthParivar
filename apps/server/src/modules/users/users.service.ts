@@ -1,5 +1,5 @@
 import { prisma } from "../../shared/database.js";
-import type { UpdateProfileInput } from "./users.validation.js";
+import type { UpdatePreferencesInput, UpdateProfileInput } from "./users.validation.js";
 
 export const getProfile = async (userId: string) => {
   const user = await prisma.user.findUniqueOrThrow({
@@ -63,4 +63,68 @@ export const updateProfile = async (userId: string, input: UpdateProfileInput) =
       onboardingStep: true,
     },
   });
+};
+
+// ── Preferences ─────────────────────────────────────────────────────
+//
+// Single source of truth lives in the `user_preferences` row. A
+// missing row reads as the defaults below, which match the DB column
+// defaults AND the mobile store defaults — three places, one shape.
+
+export interface UserPreferencesView {
+  theme: "light" | "dark" | "system" | "high-contrast";
+  largeText: boolean;
+  reduceMotion: boolean;
+  checkFrequency: "daily" | "twice_weekly" | "weekly" | "biweekly" | "monthly";
+  notificationsEnabled: boolean;
+  reminderTime: string | null;
+}
+
+const DEFAULT_PREFERENCES: UserPreferencesView = {
+  theme: "system",
+  largeText: false,
+  reduceMotion: false,
+  checkFrequency: "daily",
+  notificationsEnabled: true,
+  reminderTime: "07:00",
+};
+
+const toView = (row: {
+  theme: string;
+  largeText: boolean;
+  reduceMotion: boolean;
+  checkFrequency: string;
+  notificationsEnabled: boolean;
+  reminderTime: string | null;
+}): UserPreferencesView => ({
+  theme: row.theme as UserPreferencesView["theme"],
+  largeText: row.largeText,
+  reduceMotion: row.reduceMotion,
+  checkFrequency: row.checkFrequency as UserPreferencesView["checkFrequency"],
+  notificationsEnabled: row.notificationsEnabled,
+  reminderTime: row.reminderTime,
+});
+
+export const getPreferences = async (userId: string): Promise<UserPreferencesView> => {
+  const row = await prisma.userPreferences.findUnique({ where: { userId } });
+  return row === null ? DEFAULT_PREFERENCES : toView(row);
+};
+
+export const updatePreferences = async (
+  userId: string,
+  input: UpdatePreferencesInput,
+): Promise<UserPreferencesView> => {
+  // Strip `undefined` keys so Prisma's exact-optional input types
+  // accept the partial body. `null` is preserved (used to clear
+  // `reminderTime`).
+  const data = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
+
+  // Upsert so the first PUT creates the row. Only fields the client
+  // sent are written — column defaults handle the rest on create.
+  const row = await prisma.userPreferences.upsert({
+    where: { userId },
+    create: { userId, ...data },
+    update: data,
+  });
+  return toView(row);
 };

@@ -114,7 +114,7 @@ export const BPInput = ({ onSubmit }: BPInputProps): JSX.Element => {
             className="mb-2 w-[31%] items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 active:bg-gray-200"
             style={{ minHeight: TOUCH_TARGET_MIN + 16 }}
           >
-            <Text className="text-number font-semibold">{k}</Text>
+            <Text className="text-number font-semibold text-gray-900 dark:text-gray-100">{k}</Text>
           </Pressable>
         ))}
       </View>
@@ -152,10 +152,10 @@ const FieldChip = ({ label, value, active, invalid, onPress }: FieldChipProps): 
     accessibilityState={{ selected: active }}
     className={`flex-1 rounded-2xl border-2 p-3 ${
       active
-        ? "border-primary bg-blue-50"
+        ? "border-primary bg-blue-50 dark:bg-blue-950/40"
         : invalid
-          ? "border-warning bg-amber-50"
-          : "border-gray-200 bg-white dark:bg-gray-900"
+          ? "border-warning bg-amber-50 dark:bg-amber-950/40"
+          : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
     }`}
     style={{ minHeight: TOUCH_TARGET_MIN + 24 }}
   >

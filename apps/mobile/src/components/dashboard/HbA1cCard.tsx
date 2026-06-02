@@ -98,7 +98,7 @@ export const HbA1cCard = ({ userStageDays }: HbA1cCardProps): JSX.Element => {
   }
 
   // ── 4. Estimate available ─────────────────────────────────
-  const { estimate, readingCount } = result.estimate;
+  const { hba1cPercent, totalReadings } = result.estimate;
   return (
     <Card>
       <View className="flex-row items-center justify-between">
@@ -111,11 +111,11 @@ export const HbA1cCard = ({ userStageDays }: HbA1cCardProps): JSX.Element => {
         </View>
       </View>
       <Text className="mt-2 text-5xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
-        {t("hba1c.estimate", { value: estimate.toFixed(1) })}
+        {t("hba1c.estimate", { value: hba1cPercent.toFixed(1) })}
       </Text>
       <Text className="mt-1 text-body text-neutral dark:text-gray-400">{t("hba1c.asOf")}</Text>
       <Text className="mt-1 text-body text-neutral dark:text-gray-400">
-        {t("dashboard.todayReadings")}: {readingCount}
+        {t("dashboard.todayReadings")}: {totalReadings}
       </Text>
       <Text className="mt-2 text-body text-amber-900">{t("hba1c.learnMore")}</Text>
     </Card>

@@ -65,7 +65,7 @@ export const VoiceInput = (props: VoiceInputProps): JSX.Element => {
     return (
       <View className="items-center gap-3">
         <View
-          className="items-center justify-center rounded-full bg-gray-200"
+          className="items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700"
           style={{
             width: TOUCH_TARGET_MIN * 2.5,
             height: TOUCH_TARGET_MIN * 2.5,

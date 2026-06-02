@@ -302,6 +302,7 @@ model User {
   streak                 UserStreak?
   feedbackEvents         FeedbackEvent[]
   notificationState      NotificationState?
+  preferences            UserPreferences?
   emergencyContacts      EmergencyContact[]
   pushTokens             PushToken[]
   healthScores           HealthScore[]
@@ -671,6 +672,38 @@ model NotificationState {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_states")
+}
+
+// ─────────────────────────────────────────────────────────────
+// User preferences (cross-device sync)
+//
+// Settings the user can edit from the Settings screen and that should
+// survive a reinstall: theme, large-text, reduce-motion, glucose check
+// frequency, master notifications toggle, glucose reminder time. The
+// AsyncStorage copy on the device stays the source of truth for
+// fast/offline reads — this table is the canonical store the mobile
+// client hydrates from on login and pushes to on every change.
+//
+// `language` lives on `User.preferredLanguage` already (pinned at
+// onboarding, mirrored to this table on language changes).
+//
+// Defaults match the mobile store defaults so a missing row reads
+// equivalently to "user never opened settings".
+// ─────────────────────────────────────────────────────────────
+
+model UserPreferences {
+  userId               String   @id @map("user_id") @db.Uuid
+  theme                String   @default("system") @map("theme")
+  largeText            Boolean  @default(false) @map("large_text")
+  reduceMotion         Boolean  @default(false) @map("reduce_motion")
+  checkFrequency       String   @default("daily") @map("check_frequency")
+  notificationsEnabled Boolean  @default(true) @map("notifications_enabled")
+  reminderTime         String?  @default("07:00") @map("reminder_time")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
 }
 
 // ─────────────────────────────────────────────────────────────

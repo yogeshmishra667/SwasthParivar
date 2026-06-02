@@ -83,9 +83,9 @@ export const BPConfirmationScreen = ({
               </Text>
             )}
             {elevated && (
-              <View className="mt-3 flex-row items-center gap-2 rounded-lg bg-amber-50 px-3 py-2">
+              <View className="mt-3 flex-row items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 dark:bg-amber-950/40">
                 <Icon name="warning" size={20} color="#D97706" />
-                <Text className="flex-1 text-important text-amber-900 text-gray-900 dark:text-gray-100">
+                <Text className="flex-1 text-important text-amber-900 dark:text-amber-200">
                   {t("bp.highBanner")}
                 </Text>
               </View>

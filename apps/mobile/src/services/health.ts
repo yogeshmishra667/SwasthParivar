@@ -8,14 +8,10 @@ import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
 
 export interface HbA1cEstimate {
-  /** Estimated HbA1c percentage, rounded to 1 decimal. */
-  estimate: number;
-  /** Weighted mean glucose used in the formula. */
-  weightedMeanMgDl: number;
-  /** Number of readings used in the estimate. */
-  readingCount: number;
-  /** ISO date of the most-recent reading included. */
-  computedAt: string;
+  hba1cPercent: number;
+  weightedAverageMgDl: number;
+  totalReadings: number;
+  computedAtIso: string;
 }
 
 export type HbA1cResult =

@@ -136,9 +136,9 @@ export const ConfirmationScreen = ({
               <Text className="text-important text-neutral dark:text-gray-400">mg/dL</Text>
             </View>
             {isCritical && (
-              <View className="mt-3 flex-row items-center gap-2 rounded-lg bg-red-50 px-3 py-2">
+              <View className="mt-3 flex-row items-center gap-2 rounded-lg bg-red-50 px-3 py-2 dark:bg-red-950/40">
                 <Icon name="warning" size={20} color="#DC2626" />
-                <Text className="flex-1 text-important font-bold text-critical text-gray-900 dark:text-gray-100">
+                <Text className="flex-1 text-important font-bold text-critical dark:text-red-200">
                   {value > 315 ? t("logging.extremeBannerHigh") : t("logging.extremeBannerLow")}
                 </Text>
               </View>
@@ -161,14 +161,16 @@ export const ConfirmationScreen = ({
                     style={{ minHeight: TOUCH_TARGET_MIN }}
                     className={`flex-row items-center justify-between rounded-xl border px-4 py-3 ${
                       active
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-gray-200 bg-white dark:bg-gray-900"
+                        ? "border-blue-600 bg-blue-50 dark:bg-blue-950/40"
+                        : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
                     }`}
                   >
                     <View className="flex-1 pr-3">
                       <Text
                         className={`text-important font-semibold ${
-                          active ? "text-blue-700" : "text-gray-900 dark:text-gray-100"
+                          active
+                            ? "text-blue-700 dark:text-blue-300"
+                            : "text-gray-900 dark:text-gray-100"
                         }`}
                       >
                         {getTypeLabel(t, opt)}
@@ -184,9 +186,7 @@ export const ConfirmationScreen = ({
                           : "border-gray-300 bg-white dark:bg-gray-900"
                       }`}
                     >
-                      {active && (
-                        <View className="h-2 w-2 rounded-full bg-white dark:bg-gray-900" />
-                      )}
+                      {active && <View className="h-2 w-2 rounded-full bg-white" />}
                     </View>
                   </Pressable>
                 );
@@ -210,7 +210,9 @@ export const ConfirmationScreen = ({
                 <View className="flex-1 pr-3">
                   <Text
                     className={`text-important font-semibold ${
-                      festiveAvailable ? "" : "text-neutral dark:text-gray-400"
+                      festiveAvailable
+                        ? "text-gray-900 dark:text-gray-100"
+                        : "text-neutral dark:text-gray-400"
                     }`}
                   >
                     🎉 {t("logging.festiveToggle", { defaultValue: "Special din?" })}
@@ -233,7 +235,7 @@ export const ConfirmationScreen = ({
                     festiveActive ? "bg-celebration" : "bg-gray-300"
                   } ${festiveAvailable ? "" : "opacity-40"}`}
                 >
-                  <View className="h-5 w-5 rounded-full bg-white dark:bg-gray-900" />
+                  <View className="h-5 w-5 rounded-full bg-white" />
                 </View>
               </Pressable>
             </Card>
