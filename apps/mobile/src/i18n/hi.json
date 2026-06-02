@@ -208,6 +208,12 @@
       "errorGeneric": "Device register nahi ho paya."
     }
   },
+  "notifications": {
+    "glucoseCheck": {
+      "title": "Sugar check ka time",
+      "body": "Aaj ki reading log karein 🙏"
+    }
+  },
   "critical": {
     "lowTitle": "Sugar bahut kam hai ({{value}})",
     "lowBody": "Abhi kuch meetha khayein — juice, glucose, mithai. Agar chakkar aa rahe hain to turant {{contact}} ko call karein.",

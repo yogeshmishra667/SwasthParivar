@@ -68,6 +68,11 @@ export default function RootLayout(): JSX.Element | null {
     if (!ready || !accessToken) return;
     const setPushTokenStatus = usePreferencesStore.getState().setPushTokenStatus;
 
+    // Reconcile preferences with the server (server wins). Runs once
+    // per auth-token change, in parallel with push-token registration
+    // since neither depends on the other.
+    void usePreferencesStore.getState().hydrateFromServer();
+
     if (isExpoGo) {
       setPushTokenStatus("expo_go");
       return;

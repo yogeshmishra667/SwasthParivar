@@ -208,6 +208,12 @@
       "errorGeneric": "Could not register this device for notifications."
     }
   },
+  "notifications": {
+    "glucoseCheck": {
+      "title": "Sugar check time",
+      "body": "Log today's reading 🙏"
+    }
+  },
   "critical": {
     "lowTitle": "Sugar is very low ({{value}})",
     "lowBody": "Eat something sweet now — juice, glucose, mithai. If dizzy, call {{contact}}.",
