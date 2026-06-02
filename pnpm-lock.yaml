@@ -21,6 +21,7 @@ overrides:
   '@hono/node-server': ^1.19.13
   '@babel/runtime': ^7.26.10
   ws: ^8.20.1
+  cookie: ^0.7.0
 
 importers:
 
@@ -5436,10 +5437,6 @@ packages:
   cookie-signature@1.2.2:
     resolution: {integrity: sha512-D76uU73ulSXrD1UXF4KE2TMxVVwhsnCgfAyTg9k8P6KGZjlXKrOLe4dJQKI3Bxi5wjesZoFXJWElNWBjPZMbhg==}
     engines: {node: '>=6.6.0'}
-
-  cookie@0.4.0:
-    resolution: {integrity: sha512-+Hp8fLp57wnUSt0tY0tHEXh4voZRDnoIrZPqlo3DPiI4y9lwg/jqx+1Om94/W6ZaPDOUbnjOt/99w66zk+l1Xg==}
-    engines: {node: '>= 0.6'}
 
   cookie@0.7.2:
     resolution: {integrity: sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w==}
@@ -16640,8 +16637,6 @@ snapshots:
 
   cookie-signature@1.2.2: {}
 
-  cookie@0.4.0: {}
-
   cookie@0.7.2: {}
 
   cookiejar@2.1.4: {}
@@ -16765,7 +16760,7 @@ snapshots:
 
   csurf@1.11.0:
     dependencies:
-      cookie: 0.4.0
+      cookie: 0.7.2
       cookie-signature: 1.0.6
       csrf: 3.1.0
       http-errors: 1.7.3
