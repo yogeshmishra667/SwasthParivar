@@ -8,5 +8,5 @@ export const getEstimate = async (req: Request, res: Response): Promise<void> =>
   const q = req.query as { targetUserId?: string };
   const userId = await resolveHouseholdMember(req.auth!, q.targetUserId);
   const estimate = await service.getHbA1cEstimate({ userId });
-  ok(res, { estimate });
+  ok(res, estimate);
 };
