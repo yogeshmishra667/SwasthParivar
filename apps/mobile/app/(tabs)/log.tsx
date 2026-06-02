@@ -77,6 +77,10 @@ export default function LogScreen(): JSX.Element {
   const [undoVisible, setUndoVisible] = useState(false);
   const [savedOffline, setSavedOffline] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Glucose daily-cap state. Persists for the session so a switch
+  // away to BP/Meal and back still shows the cap card — the server
+  // counter doesn't reset until the next 3 AM IST boundary.
+  const [rateLimited, setRateLimited] = useState(false);
   const [savedSummary, setSavedSummary] = useState<{
     headline: string;
     detail?: string;
@@ -176,6 +180,14 @@ export default function LogScreen(): JSX.Element {
         return;
       }
 
+      // result.kind === "rejected" — branch on code so the user gets
+      // the right copy. Rate-limit gets its own full-screen card; other
+      // rejections fall through to the generic inline warning.
+      if (result.kind === "rejected" && result.code === "RATE_LIMITED") {
+        setRateLimited(true);
+        track("rate_limit_hit", { surface: "readings", value: parsedGlucose.value });
+        return;
+      }
       if (isCriticalGlucose(parsedGlucose.value)) {
         const dir = parsedGlucose.value < 65 ? "low" : "high";
         setCriticalAlert({ visible: true, value: parsedGlucose.value, direction: dir });
@@ -455,19 +467,46 @@ export default function LogScreen(): JSX.Element {
           <ActiveProfileBadge />
         </View>
         {modeChooser}
-        <View className="flex-1 gap-6 px-6">
-          {inputMethod === "voice" ? (
-            <VoiceInput onParsed={handleVoice} onFail={() => setInputMethod("numpad")} />
-          ) : (
-            <NumpadInput onSubmit={handleNumpad} />
-          )}
-          <Button
-            label={inputMethod === "voice" ? t("logging.useNumpad") : t("logging.useVoice")}
-            variant="ghost"
-            onPress={() => setInputMethod((m) => (m === "voice" ? "numpad" : "voice"))}
-          />
-          {saveError !== null && <Text className="text-body text-warning">{saveError}</Text>}
-        </View>
+        {rateLimited ? (
+          // Daily-cap reached. Replace the input surface entirely so the
+          // user can't keep tapping the mic / numpad to no effect, but
+          // leave the mode chooser visible — BP and meals are still
+          // available and the cap only applies to glucose.
+          <View className="flex-1 justify-center gap-4 px-6">
+            <Card className="border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
+              <View className="items-center gap-3 py-4">
+                <Icon name="time-outline" size={48} color="#D97706" />
+                <Text
+                  className="text-hero font-bold text-center text-gray-900 dark:text-gray-100"
+                  accessibilityRole="header"
+                >
+                  {t("logging.rateLimited.title")}
+                </Text>
+                <Text className="text-important text-center text-gray-700 dark:text-gray-300">
+                  {t("logging.rateLimited.body")}
+                </Text>
+              </View>
+            </Card>
+            <Button
+              label={t("logging.rateLimited.cta")}
+              onPress={() => router.replace("/(tabs)/dashboard")}
+            />
+          </View>
+        ) : (
+          <View className="flex-1 gap-6 px-6">
+            {inputMethod === "voice" ? (
+              <VoiceInput onParsed={handleVoice} onFail={() => setInputMethod("numpad")} />
+            ) : (
+              <NumpadInput onSubmit={handleNumpad} />
+            )}
+            <Button
+              label={inputMethod === "voice" ? t("logging.useNumpad") : t("logging.useVoice")}
+              variant="ghost"
+              onPress={() => setInputMethod((m) => (m === "voice" ? "numpad" : "voice"))}
+            />
+            {saveError !== null && <Text className="text-body text-warning">{saveError}</Text>}
+          </View>
+        )}
       </SafeAreaView>
     );
   }

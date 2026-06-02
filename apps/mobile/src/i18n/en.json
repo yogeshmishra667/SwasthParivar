@@ -84,6 +84,11 @@
     "saved": "Saved",
     "savedOffline": "Saved locally — will sync when you're back online.",
     "saveFailed": "Could not save — data is safe locally, will sync later.",
+    "rateLimited": {
+      "title": "Daily limit reached",
+      "body": "You've reached today's reading limit. You can log again tomorrow morning. Critical-low and critical-high readings always go through.",
+      "cta": "View Dashboard"
+    },
     "streakCount": "{{count}} day streak",
     "readingSaved": "Reading saved",
     "festiveToggle": "Special day?",

@@ -84,6 +84,11 @@
     "saved": "Save ho gaya",
     "savedOffline": "Locally save ho gaya — internet aane par sync ho jaayega.",
     "saveFailed": "Save nahi ho paya — data locally safe hai, sync baad mein hoga.",
+    "rateLimited": {
+      "title": "Aaj ka limit poori ho gayi",
+      "body": "Aap aaj ki reading limit poori kar chuke hain. Kal subah firse log kar sakte hain. Bahut kam ya bahut zyada (critical) readings hamesha save hoti hain.",
+      "cta": "Dashboard dekhein"
+    },
     "streakCount": "{{count}} din ka streak",
     "readingSaved": "Reading save hui",
     "festiveToggle": "Special din?",
