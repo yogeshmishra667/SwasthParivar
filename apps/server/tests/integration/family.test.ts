@@ -367,7 +367,7 @@ describe("POST /api/v1/family/invites/:linkId/respond", () => {
         relationship: "son",
         visibleConditions: [],
         alertEnabled: true,
-        alertSensitivity: "balanced",
+        alertSensitivity: "medium",
       },
     });
     const res = await request(app)
