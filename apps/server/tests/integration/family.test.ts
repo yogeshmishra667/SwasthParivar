@@ -342,6 +342,16 @@ describe("POST /api/v1/family/invites/:linkId/respond", () => {
         householdId: householdB.id,
       },
     });
+    // Mirror real signup: each household's primary is the first User
+    // created in it. `requirePrimary` on /family routes reads this.
+    await prisma.household.update({
+      where: { id: householdA.id },
+      data: { primaryUserId: localPatient.id },
+    });
+    await prisma.household.update({
+      where: { id: householdB.id },
+      data: { primaryUserId: localGuardian.id },
+    });
     // Patient already picked their own #1.
     await prisma.emergencyContact.create({
       data: {
@@ -354,7 +364,7 @@ describe("POST /api/v1/family/invites/:linkId/respond", () => {
       },
     });
     const localGuardianToken = jwt.sign(
-      { sub: localGuardian.id, role: "user" },
+      { sub: localGuardian.id, householdId: householdB.id, role: "user" },
       process.env.JWT_SECRET!,
       { expiresIn: "1h" },
     );
