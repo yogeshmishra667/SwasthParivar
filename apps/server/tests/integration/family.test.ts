@@ -301,6 +301,87 @@ describe("POST /api/v1/family/invites/:linkId/respond", () => {
     expect(res.body.data.link.acceptedAt).toBeTruthy();
   });
 
+  it("seeds the guardian as the patient's priority-1 EmergencyContact on accept", async () => {
+    // Side effect of the preceding accept — closes the Phase 1
+    // corrigendum gap (bypass chain had nowhere to dial). Run as a
+    // separate `it` so the assertion failure surfaces clearly instead
+    // of being attributed to the accept itself.
+    const top = await prisma.emergencyContact.findFirst({
+      where: { userId: patientId, priority: 1 },
+    });
+    expect(top).not.toBeNull();
+    expect(top.phone).toBe(GUARDIAN_PHONE);
+    expect(top.isGuardian).toBe(true);
+  });
+
+  it("does NOT overwrite a pre-existing priority-1 EmergencyContact on accept", async () => {
+    // Fresh patient + fresh guardian so the link is pending again.
+    const householdA = await prisma.household.create({ data: {} });
+    const householdB = await prisma.household.create({ data: {} });
+    const localPatient = await prisma.user.create({
+      data: {
+        phone: `+91${Math.floor(9_700_000_000 + Math.random() * 1e8).toString()}`,
+        name: "Anita",
+        age: 60,
+        preferredLanguage: "hi",
+        conditions: ["diabetes"],
+        timezone: "Asia/Kolkata",
+        onboardingComplete: true,
+        householdId: householdA.id,
+      },
+    });
+    const localGuardian = await prisma.user.create({
+      data: {
+        phone: `+91${Math.floor(9_700_000_000 + Math.random() * 1e8).toString()}`,
+        name: "Sunil",
+        age: 35,
+        preferredLanguage: "hi",
+        conditions: [],
+        timezone: "Asia/Kolkata",
+        onboardingComplete: true,
+        householdId: householdB.id,
+      },
+    });
+    // Patient already picked their own #1.
+    await prisma.emergencyContact.create({
+      data: {
+        userId: localPatient.id,
+        name: "Best friend",
+        phone: "+919999999999",
+        relationship: "friend",
+        priority: 1,
+        isGuardian: false,
+      },
+    });
+    const localGuardianToken = jwt.sign(
+      { sub: localGuardian.id, role: "user" },
+      process.env.JWT_SECRET!,
+      { expiresIn: "1h" },
+    );
+
+    const link = await prisma.familyLink.create({
+      data: {
+        patientId: localPatient.id,
+        guardianId: localGuardian.id,
+        status: "pending",
+        relationship: "son",
+        visibleConditions: [],
+        alertEnabled: true,
+        alertSensitivity: "balanced",
+      },
+    });
+    const res = await request(app)
+      .post(`/api/v1/family/invites/${link.id}/respond`)
+      .set("Authorization", `Bearer ${localGuardianToken}`)
+      .send({ decision: "accept" });
+    expect(res.status).toBe(200);
+
+    const top = await prisma.emergencyContact.findFirst({
+      where: { userId: localPatient.id, priority: 1 },
+    });
+    expect(top.phone).toBe("+919999999999"); // patient's choice intact
+  });
+
   it("cannot accept twice (status no longer pending)", async () => {
     const link = await prisma.familyLink.findUnique({
       where: { patientId_guardianId: { patientId, guardianId } },
