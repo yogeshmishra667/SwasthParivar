@@ -18,8 +18,8 @@
 // of EmergencyContact are out of sync with what the patient
 // remembers as their actual emergency number.
 
-import { useEffect, useState } from "react";
-import { Linking, Text, View } from "react-native";
+import { useEffect, useState, useRef } from "react";
+import { Animated, Easing, Linking, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useTranslation } from "react-i18next";
@@ -82,15 +82,36 @@ export const SOSActiveFullscreen = ({
     return Math.max(0, Math.ceil((CRITICAL_FULLSCREEN_LOCK_MS - elapsed) / 1000));
   });
 
+  // Slow breathing glow behind the icon badge
+  const glowOpacity = useRef(new Animated.Value(0.15)).current;
+
   useEffect(() => {
     void activateKeepAwakeAsync(KEEP_AWAKE_TAG);
     hapticCritical();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowOpacity, {
+          toValue: 0.35,
+          duration: 1400,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowOpacity, {
+          toValue: 0.1,
+          duration: 1400,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+
     return () => {
       // Newer expo-keep-awake returns a Promise; older returned void.
       // Wrap so both shapes lint clean.
       void Promise.resolve(deactivateKeepAwake(KEEP_AWAKE_TAG));
     };
-  }, []);
+  }, [glowOpacity]);
 
   useEffect(() => {
     if (cancelUnlockedIn <= 0) return;
@@ -123,82 +144,98 @@ export const SOSActiveFullscreen = ({
   const canCancel = cancelUnlockedIn === 0;
 
   return (
-    <SafeAreaView className="flex-1 bg-critical">
-      <View className="flex-1 justify-between p-5">
-        {/* Top — test-mode chip (when applicable), big iconography,
-            title + subtitle, stage chip. */}
-        <View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#0A0A0F" }}>
+      <View className="flex-1 justify-between px-6 py-6">
+        {/* ── Top section: badge + headline ── */}
+        <View className="items-center">
           {event.testMode ? (
-            <View className="self-center rounded-full bg-amber-100 px-3 py-1.5">
-              <Text className="text-xs font-bold uppercase tracking-wider text-amber-800">
+            <View className="mb-3 flex-row items-center gap-2 rounded-full bg-amber-950/50 border border-amber-800/30 px-4 py-1.5">
+              <View className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              <Text className="text-xs font-bold uppercase tracking-wider text-amber-400">
                 {t("sos.active.testModeBadge")}
               </Text>
             </View>
           ) : null}
 
-          <View className="mt-6 items-center">
+          {/* Glowing icon */}
+          <View className="items-center justify-center" style={{ height: 110, width: 110 }}>
+            <Animated.View
+              style={{
+                position: "absolute",
+                height: 110,
+                width: 110,
+                borderRadius: 55,
+                backgroundColor: "#DC2626",
+                opacity: glowOpacity,
+              }}
+            />
             <View
               style={{
-                height: 88,
-                width: 88,
-                borderRadius: 44,
-                backgroundColor: "rgba(255,255,255,0.15)",
-                borderWidth: 2,
-                borderColor: "rgba(255,255,255,0.4)",
+                height: 72,
+                width: 72,
+                borderRadius: 36,
+                backgroundColor: "#DC2626",
               }}
               className="items-center justify-center"
             >
-              <Icon name="warning" size={48} color="#FFFFFF" accessibilityLabel="" />
+              <Icon name="warning" size={36} color="#FFFFFF" accessibilityLabel="" />
             </View>
-            <Text className="mt-5 text-hero font-bold text-white" accessibilityRole="header">
-              {t("sos.active.title")}
-            </Text>
-            <Text className="mt-2 text-center text-important text-white/90">
-              {t("sos.active.subtitle")}
-            </Text>
           </View>
 
-          {/* Stage indicator — pill with live region so a screen reader
-              announces transitions as the escalation chain advances. */}
-          <View className="mt-6 self-center flex-row items-center gap-2 rounded-full bg-white dark:bg-gray-900/15 px-4 py-2">
+          <Text
+            className="mt-4 text-center text-2xl font-black tracking-tight text-white"
+            accessibilityRole="header"
+          >
+            {t("sos.active.title")}
+          </Text>
+          <Text className="mt-1.5 text-center text-sm text-slate-400 px-4">
+            {t("sos.active.subtitle")}
+          </Text>
+
+          {/* Stage pill */}
+          <View className="mt-4 flex-row items-center gap-2 rounded-full bg-slate-900 border border-slate-800 px-4 py-2">
             <View
               style={{
-                height: 8,
-                width: 8,
+                height: 7,
+                width: 7,
                 borderRadius: 4,
-                backgroundColor: "#FFFFFF",
+                backgroundColor: "#EF4444",
               }}
             />
-            <Text className="text-body font-medium text-white" accessibilityLiveRegion="polite">
+            <Text
+              className="text-xs font-bold uppercase tracking-wider text-slate-300"
+              accessibilityLiveRegion="polite"
+            >
               {t(stageLabelKey(event.escalationStage))}
             </Text>
           </View>
         </View>
 
-        {/* Primary-contact card — visual center of gravity. The "Call
-            now" CTA lives INSIDE the card so the patient confirms WHO
-            they're calling before tapping, not after. */}
-        <View className="rounded-3xl bg-white dark:bg-gray-900 p-5 shadow-2xl">
-          <Text className="text-xs font-semibold uppercase tracking-wider text-red-700">
-            {primaryContact
-              ? t("sos.active.callPrimaryButton", { name: "" }).trim()
-              : t("sos.active.stageFullscreen")}
-          </Text>
-
+        {/* ── Contact card ── */}
+        <View
+          style={{
+            backgroundColor: "#111118",
+            borderWidth: 1,
+            borderColor: "#1E1E2A",
+            borderRadius: 20,
+            padding: 20,
+          }}
+        >
           {primaryContact ? (
             <>
-              <Text
-                className="mt-2 text-hero font-bold text-foreground text-gray-900 dark:text-gray-100"
-                numberOfLines={1}
-              >
+              <Text className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                {t("sos.active.callPrimaryButton", { name: "" }).trim()}
+              </Text>
+              <Text className="mt-2 text-xl font-bold text-white" numberOfLines={1}>
                 {primaryContact.name}
               </Text>
               {primaryContact.relationship ? (
-                <Text className="text-body text-neutral dark:text-gray-400">
-                  {primaryContact.relationship}
-                </Text>
+                <Text className="mt-0.5 text-sm text-slate-400">{primaryContact.relationship}</Text>
               ) : null}
-              <Text className="mt-1 text-important font-medium text-foreground text-gray-900 dark:text-gray-100">
+              <Text
+                className="mt-1 text-base font-semibold text-slate-300"
+                style={{ letterSpacing: 0.5 }}
+              >
                 {formatPhone(primaryContact.phone)}
               </Text>
               <View className="mt-4">
@@ -206,31 +243,40 @@ export const SOSActiveFullscreen = ({
                   label={t("sos.active.callPrimaryButton", { name: primaryContact.name })}
                   variant="critical"
                   onPress={handleCallPrimary}
-                  style={{ minHeight: 64 }}
+                  style={{
+                    minHeight: 60,
+                    borderRadius: 14,
+                    backgroundColor: "#DC2626",
+                  }}
+                  textStyle={{ fontSize: 16, fontWeight: "700" }}
                 />
               </View>
             </>
           ) : (
             <>
-              <Text className="mt-2 text-important font-medium text-foreground text-gray-900 dark:text-gray-100">
-                {t("sos.active.subtitle")}
+              <Text className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                {t("sos.active.stageFullscreen")}
               </Text>
+              <Text className="mt-2 text-base text-slate-300">{t("sos.active.subtitle")}</Text>
               <View className="mt-4">
                 <Button
                   label={t("sos.active.callGenericButton")}
                   variant="critical"
                   onPress={handleCallGeneric}
-                  style={{ minHeight: 64 }}
+                  style={{
+                    minHeight: 60,
+                    borderRadius: 14,
+                    backgroundColor: "#DC2626",
+                  }}
+                  textStyle={{ fontSize: 16, fontWeight: "700" }}
                 />
               </View>
             </>
           )}
         </View>
 
-        {/* Cancel — gated by the 30s lock. Disabled state shows the
-            remaining seconds + a live region so a screen reader
-            announces the countdown. */}
-        <View>
+        {/* ── Cancel (time-gated) ── */}
+        <View className="w-full">
           <Button
             label={
               canCancel
@@ -241,9 +287,17 @@ export const SOSActiveFullscreen = ({
             disabled={!canCancel}
             onPress={canCancel ? onCancel : undefined}
             style={{
-              backgroundColor: "rgba(255,255,255,0.95)",
-              opacity: canCancel ? 1 : 0.65,
-              minHeight: 52,
+              backgroundColor: canCancel ? "#FFFFFF" : "#111118",
+              borderColor: canCancel ? "#FFFFFF" : "#1E1E2A",
+              borderWidth: 1,
+              minHeight: 56,
+              borderRadius: 14,
+              opacity: canCancel ? 1 : 0.5,
+            }}
+            textStyle={{
+              color: canCancel ? "#0A0A0F" : "#64748B",
+              fontSize: 16,
+              fontWeight: "700",
             }}
             accessibilityLiveRegion="polite"
           />

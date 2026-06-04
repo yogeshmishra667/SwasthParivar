@@ -15,7 +15,9 @@
     "skip": "Abhi skip",
     "days": "din",
     "dashboard": "Dashboard",
-    "logout": "Logout"
+    "logout": "Logout",
+    "delete": "Delete karein",
+    "back": "Wapas"
   },
   "auth": {
     "enterPhone": "Apna phone number dalein",
@@ -492,7 +494,9 @@
     "tabInvites": "Pending invites",
     "inviteTitle": "Guardian ko invite karein",
     "inviteHint": "Guardian ka phone number — wo pehle app install kar lein.",
-    "inviteForProfile": "👤 {{name}} ji ke liye guardian invite kar rahe hain",
+    "inviteForProfile": "{{name}} ji ke liye guardian invite kar rahe hain",
+    "inviteForCaption": "Iske liye guardian invite",
+    "inviteForLine": "{{name}} ke liye",
     "inviteSend": "Invite bhejein",
     "inviteSent": "Invite bhej diya gaya 🙏",
     "inviteFailed": "Invite nahi ja paya — phone number check karein.",
@@ -519,6 +523,67 @@
     "quickSummary": {
       "title": "Parivaar ka health network",
       "desc": "Apno ke saath health logs share karein aur critical patterns ke alerts payein."
+    }
+  },
+  "nextReminder": {
+    "label": "Agla {{subject}} check reminder",
+    "today": "Aaj",
+    "tomorrow": "Kal",
+    "subject": {
+      "sugar": "Sugar",
+      "bp": "BP",
+      "both": "Sugar aur BP"
+    },
+    "weekday": {
+      "0": "Ravivaar",
+      "1": "Somvaar",
+      "2": "Mangalvaar",
+      "3": "Budhvaar",
+      "4": "Guruvaar",
+      "5": "Shukravaar",
+      "6": "Shanivaar"
+    },
+    "cadence": {
+      "daily": "Roz",
+      "twice_weekly": "Som + Guru",
+      "weekly": "Hafte mein",
+      "biweekly": "2 hafte mein",
+      "monthly": "Maheene mein"
+    }
+  },
+  "emergencyContacts": {
+    "title": "Emergency Contacts",
+    "settingsHint": "Critical alert mein jinhe call kiya jayega",
+    "introTitle": "Critical alerts mein inhe call kiya jayega",
+    "introBody": "Priority #1 sabse pehle. Maximum 5 contacts add kar sakte hain.",
+    "emptyTitle": "Abhi koi contact nahi hai",
+    "emptyBody": "Pehla contact add karein — emergency mein madad milegi.",
+    "loadFailed": "Load nahi ho paya. Phir try karein.",
+    "saveFailed": "Save nahi ho paya. Phir try karein.",
+    "addTitle": "Naya contact add karein",
+    "editTitle": "Contact edit karein",
+    "add": "Naya contact",
+    "capReached": "{{max}} contacts ho gaye",
+    "deleteConfirmTitle": "Contact delete karein?",
+    "deleteConfirmBody": "{{name}} hat jayenge. Critical alert mein call nahi honge.",
+    "moveUp": "Upar le jaayein",
+    "moveDown": "Neeche le jaayein",
+    "nameLabel": "Naam",
+    "namePlaceholder": "Jaise: Suresh ji",
+    "phoneLabel": "Phone (+91…)",
+    "phoneInvalid": "Sahi phone number daalein (+91…)",
+    "relationshipLabel": "Rishta",
+    "isGuardianLabel": "Guardian hai?",
+    "isGuardianHint": "Guardians ko critical alerts bheji jaayengi.",
+    "guardianBadge": "Guardian",
+    "relationship": {
+      "spouse": "Patni/Pati",
+      "child": "Beta/Beti",
+      "parent": "Maa/Papa",
+      "sibling": "Bhai/Behen",
+      "friend": "Dost",
+      "doctor": "Doctor",
+      "guardian": "Guardian"
     }
   }
 }

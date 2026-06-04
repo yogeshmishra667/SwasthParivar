@@ -15,7 +15,9 @@
     "skip": "Skip for now",
     "days": "days",
     "dashboard": "Dashboard",
-    "logout": "Logout"
+    "logout": "Logout",
+    "delete": "Delete",
+    "back": "Back"
   },
   "auth": {
     "enterPhone": "Enter your phone number",
@@ -492,7 +494,9 @@
     "tabInvites": "Pending invites",
     "inviteTitle": "Invite a guardian",
     "inviteHint": "Enter the guardian's phone — they should already have the app.",
-    "inviteForProfile": "Inviting a guardian for 👤 {{name}} ji",
+    "inviteForProfile": "Inviting a guardian for {{name}} ji",
+    "inviteForCaption": "Inviting guardian for",
+    "inviteForLine": "for {{name}}",
     "inviteSend": "Send invite",
     "inviteSent": "Invite sent 🙏",
     "inviteFailed": "Could not send invite — check the phone number.",
@@ -519,6 +523,67 @@
     "quickSummary": {
       "title": "Family health network",
       "desc": "Connect with loved ones to share health logs and get alerts when critical patterns are detected."
+    }
+  },
+  "nextReminder": {
+    "label": "Next {{subject}} check reminder",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "subject": {
+      "sugar": "sugar",
+      "bp": "BP",
+      "both": "sugar and BP"
+    },
+    "weekday": {
+      "0": "Sun",
+      "1": "Mon",
+      "2": "Tue",
+      "3": "Wed",
+      "4": "Thu",
+      "5": "Fri",
+      "6": "Sat"
+    },
+    "cadence": {
+      "daily": "Daily",
+      "twice_weekly": "Mon + Thu",
+      "weekly": "Weekly",
+      "biweekly": "Every 2 weeks",
+      "monthly": "Monthly"
+    }
+  },
+  "emergencyContacts": {
+    "title": "Emergency Contacts",
+    "settingsHint": "Who gets called on a critical alert",
+    "introTitle": "These people get called on critical alerts",
+    "introBody": "Priority #1 is called first. Up to 5 contacts.",
+    "emptyTitle": "No contacts yet",
+    "emptyBody": "Add the first one — it can save time in an emergency.",
+    "loadFailed": "Couldn't load contacts. Try again.",
+    "saveFailed": "Save didn't work. Try again.",
+    "addTitle": "Add a new contact",
+    "editTitle": "Edit contact",
+    "add": "New contact",
+    "capReached": "{{max}} contacts reached",
+    "deleteConfirmTitle": "Delete contact?",
+    "deleteConfirmBody": "{{name}} will be removed and won't be called on critical alerts.",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g. Suresh",
+    "phoneLabel": "Phone (+91…)",
+    "phoneInvalid": "Enter a valid phone (+91…)",
+    "relationshipLabel": "Relationship",
+    "isGuardianLabel": "Is a guardian?",
+    "isGuardianHint": "Guardians also receive critical alerts.",
+    "guardianBadge": "Guardian",
+    "relationship": {
+      "spouse": "Spouse",
+      "child": "Child",
+      "parent": "Parent",
+      "sibling": "Sibling",
+      "friend": "Friend",
+      "doctor": "Doctor",
+      "guardian": "Guardian"
     }
   }
 }

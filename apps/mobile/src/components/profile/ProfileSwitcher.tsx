@@ -30,7 +30,9 @@ export const ProfileSwitcher = (): JSX.Element => {
             >
               <View
                 className={`h-14 w-14 items-center justify-center rounded-full ${
-                  isActive ? "border-4 border-primary" : "border-2 border-gray-300"
+                  isActive
+                    ? "border-4 border-primary"
+                    : "border-2 border-gray-300 dark:border-gray-600"
                 }`}
                 style={{ backgroundColor: p.avatarColor }}
               >
@@ -38,7 +40,14 @@ export const ProfileSwitcher = (): JSX.Element => {
                   {p.name.charAt(0).toUpperCase()}
                 </Text>
               </View>
-              <Text className="mt-1 text-body" numberOfLines={1}>
+              <Text
+                className={`mt-1 text-body ${
+                  isActive
+                    ? "font-semibold text-gray-900 dark:text-gray-100"
+                    : "text-gray-700 dark:text-gray-300"
+                }`}
+                numberOfLines={1}
+              >
                 {getFirstName(p.name)}
               </Text>
             </Pressable>

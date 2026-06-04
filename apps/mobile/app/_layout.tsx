@@ -12,6 +12,8 @@ import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { useAuthStore } from "@/stores/auth.store";
 import { usePreferencesStore } from "@/stores/preferences.store";
+import { useProfileStore, selectActiveProfile } from "@/stores/profile.store";
+import { syncCheckReminders } from "@/services/check-reminders";
 import { useColorScheme } from "nativewind";
 import { useAccessibility } from "@/hooks/useAccessibility";
 import { useProfileInactivity } from "@/hooks/useProfileInactivity";
@@ -45,6 +47,29 @@ export default function RootLayout(): JSX.Element | null {
   useAccessibility();
   useProfileInactivity();
   useSyncDrain();
+
+  // Resync local check-frequency reminders whenever the active profile
+  // (and therefore its conditions) changes. Without this, switching
+  // from a diabetes profile to a hypertension profile would leave the
+  // notification copy stuck on "Sugar check ka time" until the next
+  // preference change. The schedule itself is identical — we just
+  // re-render the title/body via composeReminderCopy.
+  const activeProfile = useProfileStore(selectActiveProfile);
+  // Listen on id+conditions; depending on the whole `activeProfile`
+  // object would resync on every unrelated profile-store mutation
+  // (lastActiveAt, lock flags, …).
+  const profileId = activeProfile?.id;
+  const conditions = activeProfile?.conditions;
+  useEffect(() => {
+    if (!profileId) return;
+    const prefs = usePreferencesStore.getState();
+    void syncCheckReminders({
+      enabled: prefs.notificationsEnabled,
+      frequency: prefs.checkFrequency,
+      reminderTime: prefs.reminderTime,
+      conditions,
+    });
+  }, [profileId, conditions]);
 
   useEffect(() => {
     setOnMaintenanceMode(setMaintenanceActive);
@@ -107,6 +132,7 @@ export default function RootLayout(): JSX.Element | null {
                 <Stack.Screen name="chat" />
                 <Stack.Screen name="guardian" />
                 <Stack.Screen name="patient/[id]" options={{ headerShown: true }} />
+                <Stack.Screen name="settings/emergency-contacts" options={{ headerShown: true }} />
                 <Stack.Screen name="sos" options={{ presentation: "fullScreenModal" }} />
               </Stack>
             </ThemeProvider>

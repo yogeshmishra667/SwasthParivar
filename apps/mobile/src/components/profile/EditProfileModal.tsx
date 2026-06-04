@@ -116,7 +116,7 @@ export const EditProfileModal = ({
                 style={{ minHeight: TOUCH_TARGET_MIN, minWidth: TOUCH_TARGET_MIN }}
                 className="items-center justify-center"
               >
-                <Icon name="close" size={24} color="#6B7280" />
+                <Icon name="close" size={24} color="#9CA3AF" />
               </Pressable>
             </View>
 

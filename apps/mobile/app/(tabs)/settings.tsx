@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Pressable, Switch } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { AddProfileModal } from "@/components/profile/AddProfileModal";
 import { EditProfileModal } from "@/components/profile/EditProfileModal";
 import { CheckFrequencyPicker } from "@/components/settings/CheckFrequencyPicker";
@@ -183,6 +184,38 @@ export default function SettingsScreen(): JSX.Element {
               variant="secondary"
               onPress={() => setShowAddProfile(true)}
             />
+          </View>
+        </View>
+
+        <View className="mb-8">
+          <Text className="text-important font-bold text-gray-900 dark:text-gray-100 mb-2">
+            {t("settings.safetySection", { defaultValue: "Safety" })}
+          </Text>
+          <View className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800">
+            <Pressable
+              onPress={() => router.push("/settings/emergency-contacts")}
+              accessibilityRole="button"
+              accessibilityLabel={t("emergencyContacts.title", {
+                defaultValue: "Emergency Contacts",
+              })}
+              style={{ minHeight: TOUCH_TARGET_MIN }}
+              className="flex-row items-center gap-3 p-4"
+            >
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/40">
+                <Icon name="alert-circle" size={22} color="#DC2626" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-important font-semibold text-gray-900 dark:text-gray-100">
+                  {t("emergencyContacts.title", { defaultValue: "Emergency Contacts" })}
+                </Text>
+                <Text className="text-body text-neutral dark:text-gray-400">
+                  {t("emergencyContacts.settingsHint", {
+                    defaultValue: "Critical alert mein jinhe call kiya jayega",
+                  })}
+                </Text>
+              </View>
+              <Icon name="chevron-forward" size={20} color="#9CA3AF" />
+            </Pressable>
           </View>
         </View>
 

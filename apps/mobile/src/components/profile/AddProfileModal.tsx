@@ -114,12 +114,14 @@ export const AddProfileModal = ({ visible, onClose, onSuccess }: Props): JSX.Ele
                 style={{ minHeight: TOUCH_TARGET_MIN, minWidth: TOUCH_TARGET_MIN }}
                 className="items-center justify-center"
               >
-                <Icon name="close" size={24} color="#6B7280" />
+                <Icon name="close" size={24} color="#9CA3AF" />
               </Pressable>
             </View>
 
             <ScrollView keyboardShouldPersistTaps="handled">
-              <Text className="mb-1 text-body">{t("onboarding.namePlaceholder")}</Text>
+              <Text className="mb-1 text-body text-neutral dark:text-gray-400">
+                {t("onboarding.namePlaceholder")}
+              </Text>
               <TextInput
                 value={name}
                 onChangeText={setName}
@@ -131,7 +133,9 @@ export const AddProfileModal = ({ visible, onClose, onSuccess }: Props): JSX.Ele
                 className="mb-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-3 text-body text-gray-900 dark:text-gray-100"
               />
 
-              <Text className="mb-1 text-body">{t("onboarding.agePlaceholder")}</Text>
+              <Text className="mb-1 text-body text-neutral dark:text-gray-400">
+                {t("onboarding.agePlaceholder")}
+              </Text>
               <TextInput
                 value={age}
                 onChangeText={(v) => setAge(v.replace(/[^0-9]/g, ""))}
@@ -144,7 +148,9 @@ export const AddProfileModal = ({ visible, onClose, onSuccess }: Props): JSX.Ele
                 className="mb-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-3 text-body text-gray-900 dark:text-gray-100"
               />
 
-              <Text className="mb-1 text-body">{t("onboarding.selectCondition")}</Text>
+              <Text className="mb-1 text-body text-neutral dark:text-gray-400">
+                {t("onboarding.selectCondition")}
+              </Text>
               <View className="mb-3 flex-row flex-wrap gap-2">
                 {PHASE_1_CONDITIONS.map((c) => {
                   const selected = conditions.includes(c);
@@ -160,13 +166,15 @@ export const AddProfileModal = ({ visible, onClose, onSuccess }: Props): JSX.Ele
                       }}
                       style={{ minHeight: TOUCH_TARGET_MIN }}
                       className={`rounded-full border px-4 py-2 ${
-                        selected ? "border-primary bg-blue-50" : "border-gray-300"
+                        selected
+                          ? "border-primary bg-blue-50 dark:bg-blue-950/40"
+                          : "border-gray-300 dark:border-gray-700"
                       }`}
                     >
                       <Text
                         className={`text-important ${
                           selected
-                            ? "font-semibold text-primary"
+                            ? "font-semibold text-primary dark:text-blue-400"
                             : "text-neutral dark:text-gray-400"
                         }`}
                       >

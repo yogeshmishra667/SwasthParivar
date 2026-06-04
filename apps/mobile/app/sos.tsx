@@ -32,6 +32,19 @@ import {
   type EmergencyContactDto,
 } from "@/services/sos";
 
+/** Safe wrapper — prevents "GO_BACK is not handled" crash when the
+ *  navigation stack has already been emptied (e.g. a double-dismiss
+ *  race between the idle-phase useEffect and an explicit back()). */
+const safeGoBack = (router: ReturnType<typeof useRouter>): void => {
+  if (router.canGoBack()) {
+    router.back();
+  } else {
+    // Fallback: navigate to the tabs root so the patient always
+    // lands somewhere safe instead of seeing a blank screen.
+    router.replace("/(tabs)/dashboard");
+  }
+};
+
 export default function SOSScreen(): JSX.Element | null {
   const { t } = useTranslation();
   const router = useRouter();
@@ -87,13 +100,13 @@ export default function SOSScreen(): JSX.Element | null {
         },
         { text: t("sos.close"), style: "cancel" },
       ]);
-      router.back();
+      safeGoBack(router);
     }
   }, [setActive, cancelConfirming, t, router]);
 
   const onConfirmCancel = useCallback(() => {
     cancelConfirming();
-    router.back();
+    safeGoBack(router);
   }, [cancelConfirming, router]);
 
   const onActiveCancel = useCallback(async () => {
@@ -112,7 +125,7 @@ export default function SOSScreen(): JSX.Element | null {
         void input.note;
       }
       reset();
-      router.back();
+      safeGoBack(router);
     },
     [active, reset, router],
   );
@@ -120,7 +133,7 @@ export default function SOSScreen(): JSX.Element | null {
   const onAfterSkip = useCallback(async () => {
     if (active) await resolveSOS(active.id, "patient");
     reset();
-    router.back();
+    safeGoBack(router);
   }, [active, reset, router]);
 
   // The screen guards against being mounted in an idle state — this
@@ -128,7 +141,7 @@ export default function SOSScreen(): JSX.Element | null {
   // SOSButton. Render nothing and bounce back; never start a
   // confirmation the patient didn't initiate.
   useEffect(() => {
-    if (phase === "idle") router.back();
+    if (phase === "idle") safeGoBack(router);
   }, [phase, router]);
 
   if (phase === "idle") return null;
@@ -147,7 +160,7 @@ export default function SOSScreen(): JSX.Element | null {
 
   if (phase === "active" && active) {
     return (
-      <View className="flex-1 bg-critical">
+      <View style={{ flex: 1, backgroundColor: "#0A0A0F" }}>
         <SOSActiveFullscreen
           event={active}
           // Pass the priority-1 contact (or null when the fetch

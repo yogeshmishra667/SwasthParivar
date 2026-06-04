@@ -5,6 +5,17 @@ import { i18n } from "@/i18n/config";
 import type { CheckFrequency } from "@/utils/checkFrequency";
 import { syncCheckReminders } from "@/services/check-reminders";
 import { fetchPreferences, pushPreferences } from "@/services/preferences";
+import { useProfileStore } from "@/stores/profile.store";
+
+// Pull the active profile's conditions so the reminder copy can adapt
+// (sugar / BP / both). Returns undefined on cold-start before the
+// household has hydrated, which check-reminders.ts treats as
+// "fall back to generic sugar copy".
+const activeConditions = (): readonly string[] | undefined => {
+  const state = useProfileStore.getState();
+  const profile = state.profiles.find((p) => p.id === state.activeProfileId);
+  return profile?.conditions;
+};
 
 export type Language = "hi" | "en";
 export type Theme = "light" | "dark" | "system" | "high-contrast";
@@ -74,6 +85,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           enabled: notificationsEnabled,
           frequency: checkFrequency,
           reminderTime,
+          conditions: activeConditions(),
         });
         void pushPreferences({ checkFrequency });
       },
@@ -84,6 +96,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           enabled: notificationsEnabled,
           frequency: checkFrequency,
           reminderTime,
+          conditions: activeConditions(),
         });
         void pushPreferences({ notificationsEnabled });
       },
@@ -94,6 +107,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           enabled: notificationsEnabled,
           frequency: checkFrequency,
           reminderTime,
+          conditions: activeConditions(),
         });
         void pushPreferences({ reminderTime });
       },
@@ -127,6 +141,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           enabled: server.notificationsEnabled,
           frequency: server.checkFrequency,
           reminderTime: server.reminderTime,
+          conditions: activeConditions(),
         });
       },
     }),
@@ -155,6 +170,7 @@ export const usePreferencesStore = create<PreferencesState>()(
             enabled: state.notificationsEnabled,
             frequency: state.checkFrequency,
             reminderTime: state.reminderTime,
+            conditions: activeConditions(),
           });
         }
       },

@@ -6,19 +6,29 @@ import { useState } from "react";
 import { View, Text, TextInput, Pressable } from "react-native";
 import { useTranslation } from "react-i18next";
 
-import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 import { inviteGuardian, type AlertSensitivity } from "@/services/family";
 import { useActiveProfile } from "@/hooks/useActiveProfile";
 import { normalizeIndianPhone } from "@/utils/phone";
+import { getFirstName } from "@/utils/getFirstName";
 
 interface InviteGuardianFormProps {
   onSent: () => void;
 }
 
-const SENSITIVITIES: readonly AlertSensitivity[] = ["low", "medium", "high"] as const;
+interface SensitivityOption {
+  value: AlertSensitivity;
+  color: string;
+  dot: string;
+}
+
+const SENSITIVITIES: readonly SensitivityOption[] = [
+  { value: "low", color: "#16A34A", dot: "bg-green-500" },
+  { value: "medium", color: "#2563EB", dot: "bg-blue-500" },
+  { value: "high", color: "#DC2626", dot: "bg-red-500" },
+] as const;
 
 export const InviteGuardianForm = ({ onSent }: InviteGuardianFormProps): JSX.Element => {
   const { t } = useTranslation();
@@ -68,94 +78,144 @@ export const InviteGuardianForm = ({ onSent }: InviteGuardianFormProps): JSX.Ele
         : t("family.sensitivityHigh");
 
   return (
-    <Card>
-      <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
-        {t("family.inviteTitle")}
-      </Text>
-      <Text className="mt-1 text-body text-neutral dark:text-gray-400">
-        {t("family.inviteHint")}
-      </Text>
+    <View className="overflow-hidden rounded-3xl border border-blue-100 bg-white dark:border-blue-900/60 dark:bg-gray-900">
+      {/* Hero — the active profile's avatar IS the header icon, so the
+          "who is this invite for?" context lives in the title block
+          instead of a separate card below. Falls back to a generic
+          person-add icon when there's no active profile (edge case). */}
+      <View className="flex-row items-center gap-3 bg-blue-50 px-5 py-4 dark:bg-blue-950/30">
+        {activeProfile !== null ? (
+          <View
+            className="h-14 w-14 items-center justify-center rounded-full shadow-sm"
+            style={{ backgroundColor: activeProfile.avatarColor }}
+          >
+            <Text className="text-hero font-bold text-white">
+              {activeProfile.name.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        ) : (
+          <View className="h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm dark:bg-blue-900/60">
+            <Icon name="person-add" size={26} color="#2563EB" />
+          </View>
+        )}
+        <View className="flex-1">
+          <Text className="text-important font-bold text-gray-900 dark:text-gray-100">
+            {t("family.inviteTitle")}
+          </Text>
+          {activeProfile !== null ? (
+            <Text
+              className="mt-0.5 text-important font-semibold text-primary dark:text-blue-400"
+              numberOfLines={1}
+            >
+              {t("family.inviteForLine", {
+                name: `${getFirstName(activeProfile.name)}${t("profile.suffix") ? ` ${t("profile.suffix")}` : ""}`,
+                defaultValue: `for ${getFirstName(activeProfile.name)}`,
+              })}
+            </Text>
+          ) : (
+            <Text className="mt-0.5 text-sm text-gray-700 dark:text-gray-300">
+              {t("family.inviteHint")}
+            </Text>
+          )}
+        </View>
+      </View>
 
-      {/* Which profile this invite is for — guards against linking a
-          guardian to the wrong household profile on a shared phone. */}
-      {activeProfile !== null && (
-        <Text className="mt-2 text-important font-semibold text-primary dark:text-blue-400">
-          {t("family.inviteForProfile", { name: activeProfile.name })}
-        </Text>
-      )}
-
-      <View className="mt-4 gap-3">
+      <View className="gap-4 px-5 py-5">
+        {/* Phone with icon prefix — bigger touch target, clearer affordance.
+            The "guardian must already have the app" hint lives here (next
+            to the input it explains) now that the header carries the
+            profile name instead. */}
         <View>
-          <Text className="text-body text-neutral dark:text-gray-400">
+          <Text className="mb-1.5 text-sm font-semibold text-gray-700 dark:text-gray-300">
             {t("family.guardianPhone")}
           </Text>
-          <TextInput
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-            autoComplete="tel"
-            placeholder="+91 9..."
-            placeholderTextColor="#9CA3AF"
-            className="mt-1 rounded-xl border border-gray-200 bg-white px-3 text-important text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          <View
+            className="flex-row items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 dark:border-gray-700 dark:bg-gray-800"
             style={{ minHeight: TOUCH_TARGET_MIN }}
-          />
+          >
+            <Icon name="call-outline" size={18} color="#9CA3AF" />
+            <TextInput
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              placeholder="+91 9..."
+              placeholderTextColor="#9CA3AF"
+              className="flex-1 text-important text-gray-900 dark:text-gray-100"
+            />
+          </View>
+          <Text className="mt-1.5 text-sm text-neutral dark:text-gray-400">
+            {t("family.inviteHint")}
+          </Text>
         </View>
 
+        {/* Relationship with icon prefix */}
         <View>
-          <Text className="text-body text-neutral dark:text-gray-400">
+          <Text className="mb-1.5 text-sm font-semibold text-gray-700 dark:text-gray-300">
             {t("family.relationship")}
           </Text>
-          <TextInput
-            value={relationship}
-            onChangeText={setRelationship}
-            placeholder="Beta / Beti / Pati / Patni"
-            placeholderTextColor="#9CA3AF"
-            className="mt-1 rounded-xl border border-gray-200 bg-white px-3 text-important text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          <View
+            className="flex-row items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 dark:border-gray-700 dark:bg-gray-800"
             style={{ minHeight: TOUCH_TARGET_MIN }}
-          />
+          >
+            <Icon name="heart-outline" size={18} color="#9CA3AF" />
+            <TextInput
+              value={relationship}
+              onChangeText={setRelationship}
+              placeholder="Beta / Beti / Pati / Patni"
+              placeholderTextColor="#9CA3AF"
+              className="flex-1 text-important text-gray-900 dark:text-gray-100"
+            />
+          </View>
         </View>
 
+        {/* Alert toggle — softer container makes it feel like a setting,
+            not a stray checkbox below a form field. */}
         <Pressable
           onPress={() => setAlertEnabled((v) => !v)}
-          accessibilityRole="checkbox"
+          accessibilityRole="switch"
           accessibilityState={{ checked: alertEnabled }}
           style={{ minHeight: TOUCH_TARGET_MIN }}
-          className="flex-row items-center gap-3"
+          className="flex-row items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-700 dark:bg-gray-800"
         >
           <View
             className={`h-6 w-6 items-center justify-center rounded-md border-2 ${
               alertEnabled
                 ? "border-primary bg-primary"
-                : "border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800"
+                : "border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-900"
             }`}
           >
             {alertEnabled && <Icon name="checkmark" size={16} color="#FFFFFF" />}
           </View>
-          <Text className="text-important text-gray-900 dark:text-gray-100">
+          <Text className="flex-1 text-important font-semibold text-gray-900 dark:text-gray-100">
             {t("family.alertEnabled")}
           </Text>
+          <Icon name="notifications-outline" size={18} color="#9CA3AF" />
         </Pressable>
 
+        {/* Sensitivity — color-coded radio cards so the meaning of
+            low/medium/high reads visually (green = quiet, red = noisy). */}
         <View>
-          <Text className="text-body text-neutral dark:text-gray-400">
+          <Text className="mb-1.5 text-sm font-semibold text-gray-700 dark:text-gray-300">
             {t("family.sensitivity")}
           </Text>
-          <View className="mt-2 flex-row gap-2">
+          <View className="flex-row gap-2">
             {SENSITIVITIES.map((s) => {
-              const active = s === sensitivity;
+              const active = s.value === sensitivity;
               return (
                 <Pressable
-                  key={s}
-                  onPress={() => setSensitivity(s)}
+                  key={s.value}
+                  onPress={() => setSensitivity(s.value)}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: active }}
                   style={{ minHeight: TOUCH_TARGET_MIN }}
-                  className={`flex-1 items-center justify-center rounded-xl border-2 px-2 ${
+                  className={`flex-1 items-center justify-center gap-1.5 rounded-xl border-2 px-2 py-2 ${
                     active
                       ? "border-primary bg-blue-50 dark:bg-blue-950/40"
                       : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
                   }`}
                 >
+                  <View className={`h-2.5 w-2.5 rounded-full ${s.dot}`} />
                   <Text
                     className={`text-body font-semibold ${
                       active
@@ -163,7 +223,7 @@ export const InviteGuardianForm = ({ onSent }: InviteGuardianFormProps): JSX.Ele
                         : "text-gray-900 dark:text-gray-100"
                     }`}
                   >
-                    {sensitivityLabel(s)}
+                    {sensitivityLabel(s.value)}
                   </Text>
                 </Pressable>
               );
@@ -171,8 +231,18 @@ export const InviteGuardianForm = ({ onSent }: InviteGuardianFormProps): JSX.Ele
           </View>
         </View>
 
-        {error !== null && <Text className="text-body text-warning">{error}</Text>}
-        {success && <Text className="text-body text-success">{t("family.inviteSent")}</Text>}
+        {error !== null && (
+          <View className="flex-row items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 dark:bg-amber-950/30">
+            <Icon name="alert-circle" size={18} color="#D97706" />
+            <Text className="flex-1 text-body text-warning">{error}</Text>
+          </View>
+        )}
+        {success && (
+          <View className="flex-row items-center gap-2 rounded-xl bg-green-50 px-3 py-2 dark:bg-green-950/30">
+            <Icon name="checkmark-circle" size={18} color="#16A34A" />
+            <Text className="flex-1 text-body text-success">{t("family.inviteSent")}</Text>
+          </View>
+        )}
 
         <Button
           label={submitting ? t("common.loading") : t("family.inviteSend")}
@@ -180,6 +250,6 @@ export const InviteGuardianForm = ({ onSent }: InviteGuardianFormProps): JSX.Ele
           onPress={() => void handleSubmit()}
         />
       </View>
-    </Card>
+    </View>
   );
 };

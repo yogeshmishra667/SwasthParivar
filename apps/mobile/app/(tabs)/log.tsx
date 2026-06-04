@@ -14,6 +14,8 @@ import type { VoiceParseResult } from "@swasth/domain-logic";
 import { useTranslation } from "react-i18next";
 
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
+import { CheckScheduleChip } from "@/components/logging/CheckScheduleChip";
+import { NextCheckReminderCard } from "@/components/logging/NextCheckReminderCard";
 import { VoiceInput } from "@/components/logging/VoiceInput";
 import { NumpadInput } from "@/components/logging/NumpadInput";
 import { ConfirmationScreen } from "@/components/logging/ConfirmationScreen";
@@ -375,6 +377,12 @@ export default function LogScreen(): JSX.Element {
             </View>
           </Card>
 
+          {/* Habit-loop reinforcement: tell the user when the next
+              check-frequency reminder will fire. Closes the loop on
+              the cadence they chose in Settings. Hides itself when
+              notifications are off. */}
+          <NextCheckReminderCard />
+
           <View className="gap-2">
             <Button
               label={
@@ -467,6 +475,7 @@ export default function LogScreen(): JSX.Element {
           <ActiveProfileBadge />
         </View>
         {modeChooser}
+        <CheckScheduleChip />
         {rateLimited ? (
           // Daily-cap reached. Replace the input surface entirely so the
           // user can't keep tapping the mic / numpad to no effect, but
@@ -520,6 +529,7 @@ export default function LogScreen(): JSX.Element {
         <ActiveProfileBadge />
       </View>
       {modeChooser}
+      <CheckScheduleChip />
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}>
         {mode === "bp" ? (

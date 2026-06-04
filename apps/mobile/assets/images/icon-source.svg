@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SwasthParivar app launcher icon — source SVG.
+
+  Rasterize with `pnpm icon:build` (see scripts/build-icon.mjs).
+  DO NOT hand-edit the PNG outputs — change this file and re-run.
+
+  Design intent:
+    - Squircle (rounded square) on brand blue #2563EB.
+    - White lotus-pulse emblem in the centre: two leaves of a stylised
+      lotus, with a single ECG beat cutting horizontally across the
+      base — health + family + Indian-ness in one motion.
+    - Saffron tilak dot (#F59E0B) on top as a warm accent point.
+    - Composition is centred and shape-tight so it survives the
+      Android adaptive-icon crop (the foreground gets masked to a
+      circle on some launchers) — the lotus + pulse fits inside the
+      66% safe zone.
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1024"
+  height="1024"
+  viewBox="0 0 1024 1024"
+  fill="none"
+>
+  <!-- Brand-blue squircle background. iOS uses an exact superellipse;
+       we use a generous corner-radius (≈22% of side) which renders
+       indistinguishably at icon sizes. -->
+  <rect width="1024" height="1024" rx="224" ry="224" fill="#2563EB" />
+
+  <!-- Tilak / spark accent above the lotus. -->
+  <circle cx="512" cy="262" r="34" fill="#F59E0B" />
+
+  <!-- Lotus: two outward-curving petals meeting at the centre. White
+       on blue gives the cleanest read at 48dp launcher size. -->
+  <g fill="#FFFFFF">
+    <!-- Left petal -->
+    <path d="
+      M 512 360
+      C 380 360, 300 480, 300 600
+      C 300 700, 380 760, 480 760
+      C 500 760, 510 750, 512 730
+      Z
+    " />
+    <!-- Right petal -->
+    <path d="
+      M 512 360
+      C 644 360, 724 480, 724 600
+      C 724 700, 644 760, 544 760
+      C 524 760, 514 750, 512 730
+      Z
+    " />
+  </g>
+
+  <!-- ECG pulse — single beat across the lotus base. Stroked white
+       round-cap line, slightly translucent so the lotus reads as the
+       primary shape and the heartbeat as a supporting layer. -->
+  <path
+    d="
+      M 220 760
+      L 380 760
+      L 430 700
+      L 480 820
+      L 540 660
+      L 600 820
+      L 650 760
+      L 804 760
+    "
+    stroke="#FFFFFF"
+    stroke-width="22"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+    opacity="0.55"
+  />
+</svg>
