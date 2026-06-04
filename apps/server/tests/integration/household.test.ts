@@ -123,6 +123,19 @@ describe("POST /api/v1/household/profiles", () => {
     expect(newProfile.householdId).toBe(primaryHouseholdId);
     // Synthetic phone uses the `household:` prefix so analytics can filter.
     expect(newProfile.phone.startsWith("household:")).toBe(true);
+
+    // Guardian-assisted onboarding (phase4.md §D' / CLAUDE.md:171):
+    // the new sub-profile must have a priority-1 EmergencyContact
+    // seeded with the household primary as the dial target, so the
+    // critical-bypass chain + SOS escalation have somewhere to call
+    // from day one.
+    const seeded = await prisma.emergencyContact.findFirst({
+      where: { userId: res.body.data.id, priority: 1 },
+    });
+    expect(seeded).not.toBeNull();
+    expect(seeded.phone).toBe(PRIMARY_PHONE);
+    expect(seeded.isGuardian).toBe(true);
+    expect(seeded.relationship).toBe("guardian");
   });
 
   it("rejects when over the 8-profile cap with HOUSEHOLD_PROFILE_LIMIT", async () => {

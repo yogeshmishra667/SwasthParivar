@@ -1,23 +1,5 @@
-// Phase 4 Feature D' — SOSConfirmationScreen.
-//
-// Visual: soft red background with a single elevated white card holding
-// the countdown and the description. Less "panic alarm" than the
-// previous solid-red full bleed; an elderly patient who tapped by
-// accident should still recognise this as serious but not feel they're
-// already in an irreversible flow.
-//
-// Behaviour (unchanged from initial PR):
-//  - 3-second countdown; auto-confirms at 0 (silence = consent because
-//    the patient already long-pressed SOS to get here)
-//  - "Cancel" is the easier / more prominent action — it's on the left
-//    and uses a white surface
-//  - "Send now" is the explicit positive action — patient may not want
-//    to wait the full 3 seconds
-//  - Test-mode badge surfaces above the countdown so internal users
-//    drilling SOS can tell the difference at a glance
-
 import { useEffect, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { Animated, Easing, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
@@ -43,6 +25,28 @@ export const SOSConfirmationScreen = ({
   const [elapsed, setElapsed] = useState(0);
   const firedRef = useRef(false);
 
+  // Steady breathing ring glow — not distracting, just alive
+  const ringGlow = useRef(new Animated.Value(0.15)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(ringGlow, {
+          toValue: 0.45,
+          duration: 900,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(ringGlow, {
+          toValue: 0.15,
+          duration: 900,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, [ringGlow]);
+
   useEffect(() => {
     const startedAt = Date.now();
     const tick = setInterval(() => {
@@ -64,92 +68,100 @@ export const SOSConfirmationScreen = ({
     };
   }, [onConfirm]);
 
-  const progressPct = Math.round(elapsed * 100);
+  // Progress: thin red arc indicator (elapsed as a percentage for width)
+  const progressWidth = `${Math.round(elapsed * 100)}%` as const;
 
   return (
-    <SafeAreaView className="flex-1 bg-red-50">
-      <View className="flex-1 items-center justify-between p-6">
-        {/* Header chip — sets the tone without screaming. */}
-        <View className="w-full flex-row items-center justify-center gap-2 rounded-full bg-white dark:bg-gray-900 py-2 shadow-sm">
-          <Icon name="warning" size={16} color="#DC2626" accessibilityLabel="" />
-          <Text className="text-xs font-semibold uppercase tracking-wider text-red-700">
-            {t("sos.confirm.title")}
-          </Text>
-        </View>
+    <SafeAreaView className="flex-1 bg-slate-950">
+      <View className="flex-1 items-center justify-between px-6 py-8">
+        {/* Header */}
+        <View className="w-full items-center">
+          <View className="flex-row items-center gap-2 rounded-full bg-red-950/50 border border-red-900/40 px-5 py-2">
+            <Icon name="warning" size={14} color="#EF4444" accessibilityLabel="" />
+            <Text className="text-xs font-bold uppercase tracking-widest text-red-400">
+              {t("sos.confirm.title")}
+            </Text>
+          </View>
 
-        {/* Centerpiece — countdown card. */}
-        <View className="w-full items-center rounded-3xl border border-red-100 bg-white dark:bg-gray-900 p-6 shadow-md">
           {testMode ? (
-            <View className="mb-4 flex-row items-center gap-1 rounded-full bg-amber-100 px-3 py-1">
-              <View
-                style={{
-                  height: 6,
-                  width: 6,
-                  borderRadius: 3,
-                  backgroundColor: "#D97706",
-                }}
-              />
-              <Text className="text-xs font-semibold uppercase text-amber-700">
+            <View className="mt-3 flex-row items-center gap-2 rounded-full bg-amber-950/50 border border-amber-800/30 px-4 py-1.5">
+              <View className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              <Text className="text-xs font-bold uppercase tracking-wider text-amber-400">
                 {t("sos.confirm.testMode")}
               </Text>
             </View>
           ) : null}
-
-          {/* Countdown disc — solid red surface with a white inner ring
-              that shrinks as time elapses. The visual metaphor is a
-              draining timer, not a ticking bomb. */}
-          <View
-            style={{
-              height: 160,
-              width: 160,
-              borderRadius: 80,
-              backgroundColor: "#DC2626",
-              shadowColor: "#7F1D1D",
-              shadowOpacity: 0.3,
-              shadowRadius: 16,
-              shadowOffset: { width: 0, height: 8 },
-              elevation: 8,
-            }}
-            className="items-center justify-center"
-          >
-            <View
-              style={{
-                height: 140 - progressPct,
-                width: 140 - progressPct,
-                borderRadius: 80,
-                backgroundColor: "rgba(255,255,255,0.18)",
-              }}
-              className="absolute"
-              pointerEvents="none"
-            />
-            <Text
-              style={{ fontSize: 80, lineHeight: 88, color: "#FFFFFF" }}
-              className="font-bold"
-              accessibilityLiveRegion="polite"
-              accessibilityLabel={t("sos.confirm.description", { seconds: remaining })}
-            >
-              {remaining}
-            </Text>
-          </View>
-
-          <Text className="mt-6 text-center text-important font-medium text-foreground text-gray-900 dark:text-gray-100">
-            {t("sos.confirm.description", { seconds: remaining })}
-          </Text>
-          <Text className="mt-2 text-center text-body text-neutral dark:text-gray-400">
-            {t("sos.confirm.title")}
-          </Text>
         </View>
 
-        {/* Action row — cancel sized larger to bias toward the safer
-            action while still keeping "Send now" reachable for a
-            patient who knows they need help immediately. */}
+        {/* Countdown centrepiece */}
+        <View className="items-center">
+          <View className="items-center justify-center" style={{ height: 200, width: 200 }}>
+            {/* Outer breathing glow ring */}
+            <Animated.View
+              style={{
+                position: "absolute",
+                height: 200,
+                width: 200,
+                borderRadius: 100,
+                borderWidth: 3,
+                borderColor: "#EF4444",
+                opacity: ringGlow,
+              }}
+            />
+            {/* Static inner ring */}
+            <View
+              style={{
+                height: 180,
+                width: 180,
+                borderRadius: 90,
+                borderWidth: 2,
+                borderColor: "rgba(239, 68, 68, 0.25)",
+                backgroundColor: "rgba(239, 68, 68, 0.04)",
+              }}
+              className="items-center justify-center"
+            >
+              <Text
+                style={{ fontSize: 84, lineHeight: 92, color: "#FFFFFF" }}
+                className="font-black"
+                accessibilityLiveRegion="polite"
+                accessibilityLabel={t("sos.confirm.description", { seconds: remaining })}
+              >
+                {remaining}
+              </Text>
+            </View>
+          </View>
+
+          <Text
+            className="mt-6 text-center text-lg font-bold text-white px-2"
+            style={{ lineHeight: 26 }}
+          >
+            {t("sos.confirm.description", { seconds: remaining })}
+          </Text>
+
+          {/* Thin progress bar */}
+          <View className="mt-5 w-full h-1 rounded-full bg-slate-800 overflow-hidden">
+            <View
+              style={{ width: progressWidth, backgroundColor: "#EF4444" }}
+              className="h-full rounded-full"
+            />
+          </View>
+        </View>
+
+        {/* Actions — Cancel is primary (safe), Confirm is secondary (dangerous) */}
         <View className="w-full gap-3">
           <Button
             label={t("sos.confirm.cancelButton")}
             variant="ghost"
             accessibilityLabel={t("sos.confirm.cancelButton")}
             onPress={onCancel}
-            style={{ backgroundColor: "#FFFFFF", minHeight: 56 }}
+            style={{
+              backgroundColor: "#1E293B",
+              minHeight: 60,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: "#334155",
+            }}
+            textStyle={{ color: "#F1F5F9", fontSize: 17, fontWeight: "700" }}
           />
           <Button
             label={t("sos.confirm.confirmButton")}
@@ -159,7 +171,12 @@ export const SOSConfirmationScreen = ({
               firedRef.current = true;
               onConfirm();
             }}
-            style={{ minHeight: 56 }}
+            style={{
+              minHeight: 60,
+              borderRadius: 16,
+              backgroundColor: "#DC2626",
+            }}
+            textStyle={{ fontSize: 17, fontWeight: "700" }}
           />
         </View>
       </View>

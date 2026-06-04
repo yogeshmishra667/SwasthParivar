@@ -68,7 +68,59 @@ interface SyncInput {
   frequency: CheckFrequency;
   /** "HH:MM" — when in the day the reminder fires. null = 07:00 default. */
   reminderTime: string | null;
+  /**
+   * Active profile's conditions. Drives the notification copy so a
+   * hypertension-only user sees "BP check ka time" instead of "Sugar
+   * check ka time", and a multi-condition user sees both at once. The
+   * frequency/time picker remains single (per user request: reuse the
+   * existing schedule for both glucose AND BP).
+   *
+   * `undefined` is treated as legacy / unknown → fall back to the
+   * generic sugar-check copy so we don't break older callers.
+   */
+  conditions?: readonly string[] | undefined;
 }
+
+/**
+ * Pick the notification title + body based on which conditions the
+ * active profile is tracking. Pure function — easy to unit-test.
+ */
+export const composeReminderCopy = (
+  conditions: readonly string[] | undefined,
+): { title: string; body: string } => {
+  const hasGlucose =
+    conditions === undefined || conditions.length === 0 || conditions.includes("diabetes");
+  const hasBP = conditions?.includes("hypertension") ?? false;
+
+  if (hasGlucose && hasBP) {
+    return {
+      title: i18n.t("notifications.healthCheck.bothTitle", {
+        defaultValue: "Sugar aur BP check ka time",
+      }),
+      body: i18n.t("notifications.healthCheck.bothBody", {
+        defaultValue: "Aaj ki reading log karein",
+      }),
+    };
+  }
+  if (hasBP) {
+    return {
+      title: i18n.t("notifications.healthCheck.bpTitle", {
+        defaultValue: "BP check ka time",
+      }),
+      body: i18n.t("notifications.healthCheck.bpBody", {
+        defaultValue: "Aaj ki BP reading log karein",
+      }),
+    };
+  }
+  return {
+    title: i18n.t("notifications.glucoseCheck.title", {
+      defaultValue: "Sugar check ka time",
+    }),
+    body: i18n.t("notifications.glucoseCheck.body", {
+      defaultValue: "Aaj ki reading log karein",
+    }),
+  };
+};
 
 /**
  * Next occurrence of `weekday` (1=Sun…7=Sat) at `hour:minute` in the
@@ -108,12 +160,7 @@ export const syncCheckReminders = async (input: SyncInput): Promise<void> => {
 
   const time = parseSlot(input.reminderTime ?? "07:00") ?? { hour: 7, minute: 0 };
 
-  const title = i18n.t("notifications.glucoseCheck.title", {
-    defaultValue: "Sugar check ka time",
-  });
-  const body = i18n.t("notifications.glucoseCheck.body", {
-    defaultValue: "Aaj ki reading log karein 🙏",
-  });
+  const { title, body } = composeReminderCopy(input.conditions);
   const content = { title, body, sound: true };
 
   try {

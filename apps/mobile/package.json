@@ -12,6 +12,9 @@
     "lint": "eslint 'app/**/*.{ts,tsx}' 'src/**/*.{ts,tsx}' '__tests__/**/*.{ts,tsx}' --max-warnings=0",
     "lint:fix": "eslint 'app/**/*.{ts,tsx}' 'src/**/*.{ts,tsx}' '__tests__/**/*.{ts,tsx}' --fix",
     "test": "jest --passWithNoTests",
+    "icon:build": "node scripts/generate-icons-v2.mjs",
+    "icon:build:legacy": "node scripts/generate-icons.mjs",
+    "icon:derive": "node scripts/derive-companion-icons.mjs",
     "clean": "rm -rf .expo dist coverage *.tsbuildinfo"
   },
   "dependencies": {

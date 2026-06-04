@@ -122,12 +122,73 @@ export const respondToInvite = async (params: {
   if (link.status !== "pending") {
     throw new DomainError("FAMILY_INVITE_INVALID", `cannot respond to a ${link.status} invite`);
   }
-  return await prisma.familyLink.update({
-    where: { id: link.id },
-    data:
-      params.decision === "accept"
-        ? { status: "accepted", acceptedAt: new Date() }
-        : { status: "declined" },
+
+  // Decline is the simple branch — flip status, return.
+  if (params.decision === "decline") {
+    return await prisma.familyLink.update({
+      where: { id: link.id },
+      data: { status: "declined" },
+    });
+  }
+
+  // Accept is the load-bearing branch: in addition to flipping status,
+  // we seed the guardian as the patient's priority-1 EmergencyContact
+  // (Phase 1 corrigendum). The critical-bypass chain + SOS escalation
+  // both dial priority-1 first, so without this seed a guardian-assisted
+  // onboarding leaves the bypass chain with nowhere to dial. We do NOT
+  // overwrite an existing priority-1 — patient choice wins.
+  return await prisma.$transaction(async (tx) => {
+    const updated = await tx.familyLink.update({
+      where: { id: link.id },
+      data: { status: "accepted", acceptedAt: new Date() },
+    });
+
+    const existingTop = await tx.emergencyContact.findFirst({
+      where: { userId: link.patientId, priority: 1 },
+      select: { id: true },
+    });
+    if (existingTop !== null) return updated;
+
+    const guardian = await tx.user.findUnique({
+      where: { id: link.guardianId },
+      select: { name: true, phone: true },
+    });
+    if (!guardian?.phone) return updated;
+
+    // Cap the patient's contact list at 5 — drop the lowest-priority
+    // row to make room for the seeded #1 if needed. This matches the
+    // emergency-contacts.service.ts MAX_CONTACTS_PER_USER invariant.
+    const contactCount = await tx.emergencyContact.count({
+      where: { userId: link.patientId },
+    });
+    if (contactCount >= 5) {
+      const lowest = await tx.emergencyContact.findFirst({
+        where: { userId: link.patientId },
+        orderBy: { priority: "desc" },
+        select: { id: true },
+      });
+      if (lowest) await tx.emergencyContact.delete({ where: { id: lowest.id } });
+    }
+
+    // Shift every existing contact down by 1 so the seeded row owns
+    // priority=1 cleanly. Same cascade pattern as emergency-contacts.service.ts.
+    await tx.emergencyContact.updateMany({
+      where: { userId: link.patientId },
+      data: { priority: { increment: 1 } },
+    });
+
+    await tx.emergencyContact.create({
+      data: {
+        userId: link.patientId,
+        name: guardian.name,
+        phone: guardian.phone,
+        relationship: link.relationship ?? "guardian",
+        priority: 1,
+        isGuardian: true,
+      },
+    });
+
+    return updated;
   });
 };
 

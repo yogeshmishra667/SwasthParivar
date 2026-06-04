@@ -51,7 +51,16 @@ export const addHouseholdProfile = async (
 ): Promise<ProfileRow> => {
   const caller = await prisma.user.findUniqueOrThrow({
     where: { id: callerUserId },
-    select: { householdId: true, timezone: true, preferredLanguage: true },
+    select: {
+      householdId: true,
+      timezone: true,
+      preferredLanguage: true,
+      // Pull name + phone too — used to seed the new profile's
+      // priority-1 EmergencyContact below ("guardian-assisted
+      // onboarding" path, CLAUDE.md:171 / phase4.md §D').
+      name: true,
+      phone: true,
+    },
   });
 
   const existingCount = await prisma.user.count({
@@ -64,32 +73,59 @@ export const addHouseholdProfile = async (
     );
   }
 
-  const created = await prisma.user.create({
-    data: {
-      name: input.name,
-      age: input.age,
-      ...(input.gender !== undefined ? { gender: input.gender } : {}),
-      conditions: input.conditions,
-      // Inherit primary's timezone — household members share a device.
-      timezone: caller.timezone,
-      preferredLanguage: input.preferredLanguage ?? caller.preferredLanguage,
-      householdId: caller.householdId,
-      onboardingComplete: true,
-      onboardingStep: 5,
-      // Synthesized phone preserves uniqueness without altering schema.
-      phone: synthesizedPhoneFor(callerUserId),
-    },
-    select: {
-      id: true,
-      name: true,
-      age: true,
-      gender: true,
-      conditions: true,
-      preferredLanguage: true,
-    },
-  });
+  // Single transaction so a failed EmergencyContact seed rolls back the
+  // sub-profile too — we never want a household profile to exist with
+  // no priority-1 dial target, which is what the bypass chain + SOS
+  // escalation both read first.
+  return await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: {
+        name: input.name,
+        age: input.age,
+        ...(input.gender !== undefined ? { gender: input.gender } : {}),
+        conditions: input.conditions,
+        // Inherit primary's timezone — household members share a device.
+        timezone: caller.timezone,
+        preferredLanguage: input.preferredLanguage ?? caller.preferredLanguage,
+        householdId: caller.householdId,
+        onboardingComplete: true,
+        onboardingStep: 5,
+        // Synthesized phone preserves uniqueness without altering schema.
+        phone: synthesizedPhoneFor(callerUserId),
+      },
+      select: {
+        id: true,
+        name: true,
+        age: true,
+        gender: true,
+        conditions: true,
+        preferredLanguage: true,
+      },
+    });
 
-  return created;
+    // Seed the new sub-profile's priority-1 EmergencyContact with the
+    // household primary (the "guardian" who set up the device). The
+    // bypass chain + SOS escalation read priority-1 first; without
+    // this row the patient has no dial target on day one.
+    //
+    // Defensive guard: in tests / migrations a primary may exist with
+    // a synthetic phone. Skip seeding rather than persist a non-E.164
+    // number that the IVR provider would silently drop later.
+    if (!isSyntheticHouseholdPhone(caller.phone)) {
+      await tx.emergencyContact.create({
+        data: {
+          userId: created.id,
+          name: caller.name,
+          phone: caller.phone,
+          relationship: "guardian",
+          priority: 1,
+          isGuardian: true,
+        },
+      });
+    }
+
+    return created;
+  });
 };
 
 /**

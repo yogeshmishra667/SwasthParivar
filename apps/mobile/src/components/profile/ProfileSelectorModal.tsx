@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useProfileStore } from "@/stores/profile.store";
 import { getFirstName } from "@/utils/getFirstName";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
+import { Icon } from "@/components/ui/Icon";
 
 export const ProfileSelectorModal = (): JSX.Element | null => {
   const { t } = useTranslation();
@@ -38,7 +39,9 @@ export const ProfileSelectorModal = (): JSX.Element | null => {
                   accessibilityLabel={`Switch to ${getFirstName(p.name)}`}
                   style={{ minHeight: TOUCH_TARGET_MIN }}
                   className={`my-1 flex-row items-center gap-3 rounded-xl border p-3 ${
-                    isActive ? "border-primary bg-blue-50" : "border-gray-200"
+                    isActive
+                      ? "border-primary bg-blue-50 dark:border-blue-400 dark:bg-blue-950/40"
+                      : "border-gray-200 dark:border-gray-700"
                   }`}
                 >
                   <View
@@ -52,6 +55,7 @@ export const ProfileSelectorModal = (): JSX.Element | null => {
                   <Text className="flex-1 text-important font-semibold text-gray-900 dark:text-gray-100">
                     {getFirstName(p.name)}
                   </Text>
+                  {isActive && <Icon name="checkmark-circle" size={22} color="#2563EB" />}
                 </Pressable>
               );
             })}

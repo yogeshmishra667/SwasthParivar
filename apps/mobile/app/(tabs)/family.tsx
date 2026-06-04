@@ -19,7 +19,7 @@ import { useTranslation } from "react-i18next";
 
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
 import { Card } from "@/components/ui/Card";
-import { Icon } from "@/components/ui/Icon";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { FamilyQuickSummary } from "@/components/family/FamilyQuickSummary";
 import { InviteGuardianForm } from "@/components/family/InviteGuardianForm";
 import {
@@ -115,11 +115,11 @@ export default function FamilyScreen(): JSX.Element {
           <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
         }
       >
-        <Text className="text-important text-neutral dark:text-gray-400">
-          {t("family.subtitle")}
-        </Text>
-
-        <FamilyQuickSummary />
+        <FamilyQuickSummary
+          connectedCount={patients.length}
+          pendingCount={invites.length}
+          patientInitials={patients.map((p) => p.patient.name.charAt(0).toUpperCase())}
+        />
 
         {/* Phase 3 — Silent Guardian: jump to the family-alerts surface. */}
         <Pressable
@@ -127,9 +127,9 @@ export default function FamilyScreen(): JSX.Element {
           accessibilityRole="button"
           accessibilityLabel={t("guardian.openFromFamily")}
           style={{ minHeight: TOUCH_TARGET_MIN }}
-          className="flex-row items-center gap-3 rounded-2xl bg-white dark:bg-gray-900 p-4 active:opacity-80"
+          className="flex-row items-center gap-3 rounded-2xl border border-amber-100 bg-amber-50 p-4 active:opacity-80 dark:border-amber-900/60 dark:bg-amber-950/30"
         >
-          <View className="h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+          <View className="h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm dark:bg-amber-900/60">
             <Icon name="notifications" size={24} color="#D97706" />
           </View>
           <View className="flex-1">
@@ -140,7 +140,7 @@ export default function FamilyScreen(): JSX.Element {
               {t("guardian.openFromFamilyHint")}
             </Text>
           </View>
-          <Icon name="chevron-forward" size={20} color="#6B7280" />
+          <Icon name="chevron-forward" size={20} color="#9CA3AF" />
         </Pressable>
 
         {/* Patient → Guardian: invite form. */}
@@ -148,15 +148,14 @@ export default function FamilyScreen(): JSX.Element {
 
         {/* Guardian: invites addressed to me — accept or decline. */}
         <View>
-          <Text className="mb-2 text-important font-semibold text-gray-900 dark:text-gray-100">
-            {t("family.tabInvites")}
-          </Text>
+          <SectionHeader
+            icon="mail-unread"
+            label={t("family.tabInvites")}
+            count={invites.length}
+            tone="info"
+          />
           {loaded && invites.length === 0 ? (
-            <Card>
-              <Text className="text-body text-neutral dark:text-gray-400">
-                {t("family.noInvites")}
-              </Text>
-            </Card>
+            <EmptyState icon="mail-open-outline" text={t("family.noInvites")} />
           ) : (
             <View className="gap-2">
               {invites.map((inv) => (
@@ -173,15 +172,14 @@ export default function FamilyScreen(): JSX.Element {
 
         {/* Guardian → Patient: read-only view list. */}
         <View>
-          <Text className="mb-2 text-important font-semibold text-gray-900 dark:text-gray-100">
-            {t("family.tabPatients")}
-          </Text>
+          <SectionHeader
+            icon="people"
+            label={t("family.tabPatients")}
+            count={patients.length}
+            tone="primary"
+          />
           {loaded && patients.length === 0 ? (
-            <Card>
-              <Text className="text-body text-neutral dark:text-gray-400">
-                {t("family.noPatients")}
-              </Text>
-            </Card>
+            <EmptyState icon="people-outline" text={t("family.noPatients")} />
           ) : (
             <View className="gap-2">
               {patients.map((p) => (
@@ -204,6 +202,51 @@ export default function FamilyScreen(): JSX.Element {
     </SafeAreaView>
   );
 }
+
+interface SectionHeaderProps {
+  icon: IconName;
+  label: string;
+  count: number;
+  tone: "primary" | "info";
+}
+
+// Section heading with an icon chip + count badge. Keeps the list
+// surfaces visually distinct from the cards beneath them without
+// adding extra screen height.
+const SectionHeader = ({ icon, label, count, tone }: SectionHeaderProps): JSX.Element => {
+  const chipBg =
+    tone === "primary" ? "bg-blue-100 dark:bg-blue-900/40" : "bg-amber-100 dark:bg-amber-900/40";
+  const iconColor = tone === "primary" ? "#2563EB" : "#D97706";
+  return (
+    <View className="mb-2 flex-row items-center gap-2">
+      <View className={`h-8 w-8 items-center justify-center rounded-full ${chipBg}`}>
+        <Icon name={icon} size={16} color={iconColor} />
+      </View>
+      <Text className="flex-1 text-important font-semibold text-gray-900 dark:text-gray-100">
+        {label}
+      </Text>
+      {count > 0 && (
+        <View className="rounded-full bg-gray-200 px-2 py-0.5 dark:bg-gray-700">
+          <Text className="text-xs font-bold text-gray-700 dark:text-gray-200">{count}</Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+interface EmptyStateProps {
+  icon: IconName;
+  text: string;
+}
+
+const EmptyState = ({ icon, text }: EmptyStateProps): JSX.Element => (
+  <Card className="items-center py-6">
+    <View className="h-14 w-14 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+      <Icon name={icon} size={28} color="#9CA3AF" />
+    </View>
+    <Text className="mt-3 text-center text-body text-neutral dark:text-gray-400">{text}</Text>
+  </Card>
+);
 
 interface InviteRowProps {
   invite: PendingInviteSummary;
