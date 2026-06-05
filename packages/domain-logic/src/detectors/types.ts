@@ -49,6 +49,33 @@ export interface MealEntry {
 }
 
 /**
+ * Cardiac-reading shape for the cardiac-trend detector (Phase 4
+ * Feature E). Heart-rate-only by design — CLAUDE.md "Phase 4
+ * Invariants — never-mix-conditions": cardiac trend never reads
+ * BP/glucose/respiratory data. Caller maps `CardiacLog` Prisma rows
+ * to this shape at the service boundary.
+ */
+export interface TypedCardiacReading {
+  id: string;
+  heartRateBpm: number;
+  measuredAt: string;
+}
+
+/**
+ * Respiratory-reading shape for the respiratory-trend detector
+ * (Phase 4 Feature E). Peak-flow only — caller filters out rows
+ * with `peakFlow === null` before passing the array in, so the
+ * detector never has to handle a missing value. Inhaler-use and
+ * symptom severity are bypass-band signals, not trend signals,
+ * and stay out of this shape.
+ */
+export interface TypedRespiratoryReading {
+  id: string;
+  peakFlow: number;
+  measuredAt: string;
+}
+
+/**
  * Uniform output shape for every detector. Returning `null` is how a
  * detector says "not enough data" or "below confidence floor" — it is
  * NOT an error and the caller never logs it. Persisting null-results

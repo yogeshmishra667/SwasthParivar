@@ -92,6 +92,43 @@ const hi = {
     title: `🚨 SOS — ${p.patientName}`,
     body: "App kholein — emergency chal rahi hai.",
   }),
+  // Phase 4 Feature E — multi-condition critical-bypass copy. Each
+  // category has its own template so the SMS body the family sees
+  // matches the actual emergency (bradycardia vs. chest pain vs.
+  // asthma red zone). Numeric value(s) inline for situational accuracy.
+  critical_bypass_cardiac_low: (p: {
+    patientName: string;
+    heartRateBpm: number;
+  }): NotifContent => ({
+    title: `⚠️ ${p.patientName}: Dhadkan Bahut Kam`,
+    body: `Heart rate ${p.heartRateBpm} bpm — bahut kam hai. Turant doctor ko call karein.`,
+  }),
+  critical_bypass_cardiac_high: (p: {
+    patientName: string;
+    heartRateBpm: number;
+  }): NotifContent => ({
+    title: `⚠️ ${p.patientName}: Dhadkan Bahut Tez`,
+    body: `Heart rate ${p.heartRateBpm} bpm — bahut tez hai. Aaram karein, doctor ko call karein.`,
+  }),
+  critical_bypass_cardiac_chest_pain: (p: {
+    patientName: string;
+    painSeverity: number;
+  }): NotifContent => ({
+    title: `🚨 ${p.patientName}: Seene Mein Dard`,
+    body: `Seene mein bahut dard (${p.painSeverity}/10). Turant hospital le jayein ya 108 dial karein.`,
+  }),
+  critical_bypass_respiratory_peak_flow: (p: {
+    patientName: string;
+    peakFlow: number;
+    baselinePeakFlow: number;
+  }): NotifContent => ({
+    title: `⚠️ ${p.patientName}: Saans Mein Takleef`,
+    body: `Peak flow ${p.peakFlow} (normal ${p.baselinePeakFlow}) — red zone. Inhaler lein, doctor ko call karein.`,
+  }),
+  critical_bypass_respiratory_severe: (p: { patientName: string }): NotifContent => ({
+    title: `🚨 ${p.patientName}: Saans Lene Mein Takleef`,
+    body: `Bahut zyada takleef hai. Turant hospital le jayein ya 108 dial karein.`,
+  }),
 } as const;
 
 type Bundle = typeof hi;
@@ -158,6 +195,26 @@ const en: Bundle = {
   sos_active_push: (p): NotifContent => ({
     title: `🚨 SOS — ${p.patientName}`,
     body: "Open the app — emergency in progress.",
+  }),
+  critical_bypass_cardiac_low: (p): NotifContent => ({
+    title: `⚠️ ${p.patientName}: Heart Rate Very Low`,
+    body: `Heart rate is ${p.heartRateBpm} bpm — too low. Call the doctor now.`,
+  }),
+  critical_bypass_cardiac_high: (p): NotifContent => ({
+    title: `⚠️ ${p.patientName}: Heart Rate Very High`,
+    body: `Heart rate is ${p.heartRateBpm} bpm — too high. Rest, call the doctor.`,
+  }),
+  critical_bypass_cardiac_chest_pain: (p): NotifContent => ({
+    title: `🚨 ${p.patientName}: Severe Chest Pain`,
+    body: `Severe chest pain (${p.painSeverity}/10). Go to hospital immediately or dial 108.`,
+  }),
+  critical_bypass_respiratory_peak_flow: (p): NotifContent => ({
+    title: `⚠️ ${p.patientName}: Breathing Distress`,
+    body: `Peak flow ${p.peakFlow} (baseline ${p.baselinePeakFlow}) — red zone. Use inhaler, call doctor.`,
+  }),
+  critical_bypass_respiratory_severe: (p): NotifContent => ({
+    title: `🚨 ${p.patientName}: Severe Breathing Distress`,
+    body: `Severe symptoms. Go to hospital immediately or dial 108.`,
   }),
 };
 

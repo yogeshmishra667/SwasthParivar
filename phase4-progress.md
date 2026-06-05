@@ -2,7 +2,7 @@
 
 > **Companion to `phase4.md`** (the original spec). This file tracks what's done, what's in flight, and what's next. Update on every merged PR. The spec stays canonical for HOW things should be built.
 >
-> Last updated: **2026-06-04** (Mobile UX polish round 2 + SOS dark-mode fix + brand-icon refresh + dev IP refresh).
+> Last updated: **2026-06-05** (Feature E.1 chunk 1 + E.2 chunk 1 + E.3 trend detectors — schema + classifiers + server modules + critical-bypass dispatch + cardiac/respiratory trend detectors + 36 integration tests).
 
 ---
 
@@ -22,7 +22,7 @@
 | **SOS ramp** | 🟡 Code-complete, needs operational soak | Provision vendor creds → 7-day test-mode soak → first drill → flag flips |
 | **Push delivery hardening** | ✅ Diagnostic + auto-prune + per-user rate-limit keying landed (#113, #114, #112) | Verify the Expo token / projectId pairing in prod once #114 prunes the dead tokens |
 | **UI polish + dark mode + new settings** | ✅ Antigravity rollup (#117-121) cleaned up + shippable in #118 | Visual click-through on Light/Dark/System across all screens before EAS build |
-| **Feature E — Multi-condition health logs** | ❌ Not started (Week 14 target) | Cardiac + respiratory schema migration |
+| **Feature E — Multi-condition health logs** | 🟡 In progress — schema + bypass classifiers + server modules + multi-category dispatch + 36 integration tests + cardiac/respiratory trend detectors landed (2026-06-05); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + ANALYZE_READING worker wiring + mobile UI still pending | Mobile log surfaces (cardiac + respiratory), ANALYZE_READING worker wiring (all three new categories), Activity/Sleep schema for Feature I |
 | **Feature F — Prescription OCR** | ❌ Not started (Week 15-16) | Spec is in `phase4.md §F.1`; needs Claude Vision spend cap wiring |
 | **Feature G — Doctor portal** | ❌ Not started (Week 17) | — |
 | **Feature H — Indian food DB** | ❌ Not started (Week 18) | — |
@@ -72,6 +72,45 @@ Earliest first within each cluster; most recent cluster last.
 - PR #112 (2026-05-31) — `defaultRateLimit` now keys per-userId when JWT verifiable, IP fallback otherwise. Defeats Indian carrier-NAT mass-throttling.
 - PR #113 (2026-05-31) — Surface Expo's `errors[].code` + `errors[].message` in admin UI instead of opaque `HTTP_400`.
 - PR #114 (2026-05-31) — Auto-prune push tokens that return `PushTooManyExperienceIds` or `MismatchSenderId` (was only `DeviceNotRegistered`).
+
+### Feature E (chunk 3) — Cardiac + Respiratory trend detectors (2026-06-05)
+
+Third chunk of phase4.md §E. Pure pattern detectors that complete the safety-critical insight surface for the new categories. ANALYZE_READING server-side wiring is deferred (BP doesn't have it either today; it's a follow-up that can land for all three categories together).
+
+- **Detector input types `packages/domain-logic/src/detectors/types.ts`** — added `TypedCardiacReading` (id + heartRateBpm + measuredAt) and `TypedRespiratoryReading` (id + peakFlow + measuredAt). Both narrow to the trend-relevant numeric column only; the never-mix-conditions invariant becomes structural (the function literally cannot see glucose/BP fields).
+- **`packages/domain-logic/src/detectors/cardiac-trend.ts`** — linear regression on heart-rate over 5/14/30 day windows. R² > 0.5 gate, ≥ 5 points, span ≥ max(2, window/3) days. Slope thresholds calibrated for HR's tighter range (60-100 bpm typical, vs. glucose's 100-180 mg/dL): null < 0.5 bpm/day, notable ≥ 1.0, rapid ≥ 2.5. Message keys: `insight.cardiac.trend.{slow,notable,rapid}`. `conditionsInvolved: ["cardiac"]` hardcoded.
+- **`packages/domain-logic/src/detectors/respiratory-trend.ts`** — same regression skeleton over peak-flow. Thresholds: null < 5 L/min/day, notable ≥ 10, rapid ≥ 25 (calibrated to a 300-600 L/min typical range — a 70 L/min/week drift is roughly a 15% baseline shift, clinically notable). Caller responsible for filtering rows where `peakFlow === null` before passing in (input type makes peakFlow non-nullable, so the contract is enforced at compile time). Message keys: `insight.respiratory.trend.{slow,notable,rapid}`.
+- **Never-mix-conditions invariant** — structurally enforced by the input types; pinned in test by asserting `conditionsInvolved` is always exactly `["cardiac"]` / `["respiratory"]` even when ad-hoc fields are smuggled in through structural typing.
+- **Tests (28 new, 14 per detector)** — sparsity gates (< 5 readings, packed span, ancient readings excluded), three severity bands, directional sign, R² gate, constant-value null-fit case, evidence shape, confidence clamping, invariant assertions. All passing.
+- **Coverage ratchet pinned** in `vitest.config.ts`: both detectors at 100% lines / 100% functions / 94% branches / 97% statements — matches the measured values; the 6% uncovered branch is the defensive `fit === null` path which the span check makes structurally unreachable (same situation as glucose `detectors/trend.ts`).
+- **Total domain-logic** now: 660 tests across 36 files, all green. Ratchet enforced.
+
+### Feature E.2 — Cardiac + Respiratory server modules + multi-category bypass dispatch (2026-06-05)
+
+Second chunk of phase4.md §E. Server modules, critical-bypass dispatch generalisation, and full integration coverage. Mobile UI, ActivityDaily/SleepLog, and trend detectors are still deferred.
+
+- **Multi-category bypass planner `packages/domain-logic/src/critical-bypass/multi-category.ts`** — pure `planMultiCategoryBypassDispatch(input)`. Drives off the classifier `reasons[]` (no per-category domain teaching in the planner). Per-category copy-key precedence: cardiac → `chest_pain > hr_high > hr_low`; respiratory → `peak_flow > severe_symptom`. Cooldown window shared with glucose (30 min) but evaluated against the per-category last-bypass ISO, per CLAUDE.md "Phase 4 Invariants — Multi-condition Critical-Bypass Dispatch". 12 tests, **100% lines / 100% branches / 100% functions**. Ratchet pinned at 100%.
+- **Per-category Redis cooldown `apps/server/src/shared/critical-bypass-cooldown.ts`** — `getLastBypassIso(category, userId)` + `markBypassed(category, userId, iso)`. Key shape: `critical_bypass:cooldown:{category}:{userId}`, 30-min TTL. Fail-safe: Redis down → returns `null` → planner treats as "no recent bypass" → dispatch proceeds. A Redis outage can never silence a real critical alert. Glucose's historic cooldown (FeedbackEvent `critical_warn`) is untouched.
+- **Worker payload generalisation `apps/server/src/workers/critical-alert.processor.ts`** — `CriticalAlertJob` is now a discriminated union: `CriticalAlertGlucoseJob` (historical shape, no category discriminator) routes to the unchanged glucose code path; `CriticalAlertMultiCategoryJob` (new) routes to a parallel branch that reuses `resolveGuardianPushTokens` + `resolveSmsTargets` + `scheduleCriticalBypassAutoEscalation`. The chain itself is reused not re-implemented (CLAUDE.md). Glucose integration tests still pass byte-for-byte (verified — 19/19 BP + readings green after the refactor).
+- **i18n bundle extension `apps/server/src/shared/i18n/notifications.ts`** — 5 new copy keys × 2 languages (hi + en): `critical_bypass_cardiac_low/high/chest_pain` and `critical_bypass_respiratory_peak_flow/severe`. Bundle type-system enforces parity across languages.
+- **Cardiac module `apps/server/src/modules/readings/cardiac.{validation,service,controller}.ts`** — colocated with `bp.*` inside `readings/` (matches the BP convention). Routes: `POST/GET/DELETE /api/v1/readings/cardiac`. Idempotent write via the shared `checkIdempotent` helper. Validation enforces HR ∈ [30,250] and rejects `painSeverity > 0 && !chestPain` (medical correctness — that combo is always a UI bug). Concurrent-create race recovery via the P2002 catch (same shape as glucose). On critical: reads per-category cooldown via Redis, plans the dispatch, enqueues to `CRITICAL_ALERT`, then stamps the cooldown — order matters: enqueue first, then mark.
+- **Respiratory module `apps/server/src/modules/readings/respiratory.{validation,service,controller}.ts`** — symmetric. Validation: peak flow ∈ [50,800], at least one signal must be present (peakFlow OR inhalerUsed OR symptomSeverity≠none — otherwise the row is a no-op), `puffs > 0` requires `inhalerUsed=true`. Baseline peak flow is snapshotted onto the row so a later User-baseline change cannot retroactively reclassify a historical reading. Critical-bypass enqueue identical to cardiac; baseline-null falls back to symptom signal only (so severe symptom still fires bypass without a numeric reading).
+- **Kill-switch flags** — `cardiac_logging_enabled` + `respiratory_logging_enabled`, both default false. Service throws `CARDIAC_DISABLED` / `RESPIRATORY_DISABLED` (new error codes, 503) when flipped off. Default flag values added to `prisma/seed-flags.ts`. New error codes mapped in `error-handler.ts` and added to `@swasth/shared-types`.
+- **Routes mounted in `readings.routes.ts`** — all 6 new endpoints behind `requireAuth`. Routes mount unconditionally; the runtime flag check is in the service layer so a flag flip is a runtime change with no redeploy.
+- **PostHog event extension `critical_bypass_triggered`** — now carries optional `category` + `copy_key` for multi-category dispatches. Glucose emission shape unchanged (the historic `value_mg_dl + severity` fields stay required-when-present via optional discrimination). Same extension on `push_zero_recipients` for category dimensional pivots.
+- **Integration tests `tests/integration/cardiac.test.ts` + `respiratory.test.ts`** — 18 cases each, total 36, covering: happy path (normal + warn), validation (HR range, chest-pain consistency, no-signal rejection, source missing), idempotency (stale → 409, replay → 200 same id, version bump → in-place update), critical-bypass enqueue verification via BullMQ queue probe (job carries `category` + `copyKey`), per-category 30-min cooldown semantics (second critical within window → `withinCooldown=true`, no second enqueue), kill-switch (503), authz (cross-user delete → 404), unauthorised (401). **All 36 pass against real Postgres + Redis containers.**
+- **Verify gates** — `pnpm format:check` ✅ · `pnpm typecheck` ✅ (6/6 projects) · `pnpm lint` ✅ (6/6) · `pnpm -r build` ✅ · domain-logic unit tests ✅ (632 total, 12 new since chunk 1) · 36/36 new integration tests ✅ · existing BP + glucose integration tests ✅ (19/19, no regression).
+
+### Feature E.1 — Cardiac + Respiratory schema + bypass classifiers (2026-06-05)
+
+First chunk of phase4.md §E. Schema-only + the two safety-critical pure detectors. Service wiring, activity/sleep schema, activity-aggregator, sleep-quality-classifier, and the trend detectors are deferred to a follow-up PR.
+
+- **Schema (`apps/server/prisma/schema.prisma`)** — new `CardiacLog` + `RespiratoryLog` models (both TimescaleDB-hypertable-ready with composite PK on `(id, measured_at)` and `@@unique([clientUuid, measuredAt])`, identical pattern to `bp_readings` / `glucose_readings` per the CLAUDE.md note on hypertable PKs). 3 new enums: `RhythmStatus` (regular/irregular/unknown), `ExerciseTolerance` (normal/reduced/severe), `SymptomSeverity` (none/mild/moderate/severe). `User` gains `cardiacLogs` + `respiratoryLogs` relations. `prisma validate` + `prisma format` clean. **ActivityDaily + SleepLog deferred to Feature I (Week 19), per the original spec.**
+- **Migration `20260620000000_cardiac_respiratory_logs/migration.sql`** — additive DDL only, byte-matches `prisma migrate diff --from-empty` output for the cardiac/respiratory portions. Hypertable conversion (`SELECT create_hypertable('cardiac_logs', 'measured_at', if_not_exists => TRUE)` and same for respiratory) is intentionally NOT in the migration — wired in test setup + production runbook, mirroring the bp_readings convention so plain Postgres still accepts the schema.
+- **Pure detector `packages/domain-logic/src/cardiac-thresholds/`** — `classifyCardiacReading(input)` returns `{ severity: "normal" | "warn" | "critical_bypass", reason, reasons[] }`. Critical-bypass (hardcoded, CLAUDE.md "Phase 4 Invariants — Multi-condition Critical-Bypass Dispatch"): HR < 40 OR HR > 150 OR (chestPain && severity ≥ 7). Warn band: HR 40–49 / 121–150, chestPain < 7, irregular rhythm, exerciseTolerance ∈ {reduced, severe}. `painSeverity: null` is treated as 0 (conservative). `shouldTriggerCardiacBypass(input)` exported as a service-layer convenience helper. 28 tests, **100% lines / 100% branches / 100% functions**. Ratchet pinned at 100% in `vitest.config.ts`.
+- **Pure detector `packages/domain-logic/src/respiratory-thresholds/`** — `classifyRespiratoryReading({peakFlow, baselinePeakFlow, inhalerUsed, symptomSeverity})`. Critical-bypass (hardcoded): `peakFlow / baselinePeakFlow < 0.5` (asthma red zone) OR `symptomSeverity === "severe"`. Warn band: yellow zone (50–80%), moderate/mild symptoms, inhalerUsed. Defensive guards: `baselinePeakFlow ≤ 0` and missing peakFlow/baseline skip the peak-flow branches entirely, falling back to symptom + inhaler signal — important during an acute attack when the patient cannot blow into the meter. 24 tests, **100% lines / 100% branches / 100% functions**. Ratchet pinned at 100%.
+- **Shared constants** — moved hardcoded thresholds into `@swasth/shared-types` (`HR_CRITICAL_LOW`, `HR_CRITICAL_HIGH`, `CHEST_PAIN_CRITICAL_SEVERITY`, `PEAK_FLOW_RED_ZONE_RATIO`, `PEAK_FLOW_YELLOW_ZONE_RATIO`, plus valid-range bounds for upcoming Zod validators). Mirrors the existing `GLUCOSE_CRITICAL_LOW`/`HIGH` pattern so server + mobile + admin share one source of truth.
+- **Verify gates** — `pnpm format:check` ✅ · `pnpm typecheck` ✅ (6/6 projects) · `pnpm lint` ✅ (6/6) · `pnpm -r build` ✅ · domain-logic unit tests ✅ (620 total, 52 new) · per-file coverage ratchets ✅.
 
 ### Mobile UX polish round 2 + SOS dark-mode + icon refresh (2026-06-04)
 
@@ -164,27 +203,32 @@ Mobile UX polish + the remaining Phase 1 audit item closed:
 
 ---
 
-## What's next (Week 14 — first new Phase 4 surface)
+## What's next (Week 14 close-out → Week 15 ramp)
 
-Per `phase4.md` Week-14 row: **SOS real-call ramp + Feature E.1 (CardiacLog + RespiratoryLog schema + pure detectors)**.
+Per `phase4.md` Week-14 row: **SOS real-call ramp + Feature E.1 + E.2**.
 
-The "SOS real-call ramp" is operational (see checklist above) — no code unless an issue surfaces during the soak. So the code work for Week 14 is **Feature E.1**:
+SOS real-call ramp stays operational (see checklist above). Feature E.1 chunk 1 + E.2 chunk 1 (schema + bypass classifiers + server modules + dispatch + integration tests) landed 2026-06-05 above. Remaining code work for Phase 4 Feature E:
 
-### Feature E.1 — Cardiac + Respiratory schema + pure detectors
+### Feature E — mobile + remaining pure modules
 
-Spec: `phase4.md §E.1` + `§E.2`.
+Spec: `phase4.md §E.5` + `§E.2 (#3–#5)`.
 
-1. **Schema migration**: `CardiacLog` (user_id, heart_rate, rhythm_status, chest_pain, pain_severity?, exercise_tolerance, measured_at) + `RespiratoryLog` (user_id, peak_flow?, inhaler_used, inhaler_type?, puffs?, trigger_note?, symptom_severity, measured_at). Both TimescaleDB hypertables, same composite PK pattern as `GlucoseReading`.
-2. **Pure detectors** in `packages/domain-logic/src/`:
-   - `cardiac-bypass` — critical thresholds: HR < 40, HR > 150, chest_pain && severity ≥ 7.
-   - `respiratory-bypass` — peakFlow < baseline × 0.5, symptomSeverity === "severe".
-3. **Critical-bypass dispatch** must reuse the existing `critical-alert` BullMQ chain — push + SMS + fullscreen + call, all four in parallel, per-category cooldown. CLAUDE.md "Phase 4 Invariants — Multi-condition Critical-Bypass Dispatch".
-4. Coverage targets: 100% branches on each `*-bypass.ts`. Vitest ratchet pinned.
-5. Flags: `cardiac_logging_enabled`, `respiratory_logging_enabled` (both default off).
+1. **Mobile log surfaces** (`apps/mobile/`, Section M.2). Gated by the existing `cardiac_logging_enabled` / `respiratory_logging_enabled` flags via the feature-rollout resolver:
+   - Cardiac log screen (3-tap: pick HR → rhythm toggle → chest-pain toggle → save). Pre-save preview uses the pure `classifyCardiacReading` so the fullscreen alert matches the server-side outcome.
+   - Respiratory log screen (peak-flow + inhaler toggle + symptom severity radio).
+   - Activity dashboard widget + Sleep dashboard widget (placeholders until Feature I ships ActivityDaily + SleepLog).
+   - Voice fixtures + parser extension for "dil ki dhadkan 85" + "peak flow do sau" (lands in `packages/test-factories/src/voice-transcript.fixtures.ts`).
 
-### Then Feature E.2 (Week 15)
+2. **Remaining pure modules** in `packages/domain-logic/src/`:
+   - `activity-aggregator/` — `dailyActivitySummary(logs)`. Coupled to Feature I (ActivityDaily) → naturally lands Week 19.
+   - `sleep-quality-classifier/` — coupled to SleepLog → Week 19.
 
-Server modules `apps/server/src/modules/cardiac/`, `apps/server/src/modules/respiratory/`. Mobile logging UI (`Section M.2`).
+3. **ANALYZE_READING server-side wiring** — cardiac + respiratory services should enqueue `ANALYZE_READING` jobs the same way glucose does, and the processor should branch on category to call the new detectors. BP has the same gap today; this naturally lands as a single follow-up for all three categories. Pure detectors already exist (chunk 3 above); only the worker wiring is missing.
+
+4. **Cohort ramp** (operational):
+   - Flip `cardiac_logging_enabled` for a ≤10-user internal cohort.
+   - Flip `respiratory_logging_enabled` same cohort.
+   - After 7 days zero false-alarm, ramp by percentage.
 
 ---
 

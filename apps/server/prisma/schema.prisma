@@ -215,6 +215,41 @@ enum HealthCheckComplianceStatus {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Phase 4 Feature E — Cardiac + Respiratory readings
+// (CLAUDE.md "Phase 4 Invariants — Multi-condition Critical-Bypass
+//  Dispatch"; phase4.md §E.1.)
+// ─────────────────────────────────────────────────────────────
+
+// Heart-rhythm self-report. `unknown` is the patient-facing default
+// — the bypass detector treats it as a non-signal so a missing report
+// never blocks a critical-rate decision.
+enum RhythmStatus {
+  regular
+  irregular
+  unknown
+}
+
+// Self-reported tolerance for the user's usual exertion level.
+// `reduced` is a warn-only signal; `severe` rolls into the warn band
+// alongside chest-pain<7. Neither is, by itself, a bypass trigger —
+// only the hardcoded HR/chest-pain thresholds are.
+enum ExerciseTolerance {
+  normal
+  reduced
+  severe
+}
+
+// Respiratory symptom band reported alongside a peak-flow reading.
+// `severe` is a bypass trigger (CLAUDE.md asthma red zone). `none` is
+// the default for an asymptomatic device-pushed reading.
+enum SymptomSeverity {
+  none
+  mild
+  moderate
+  severe
+}
+
+// ─────────────────────────────────────────────────────────────
 // Phase 4 Feature D' — SOS (carry-over from Phase 3)
 // ─────────────────────────────────────────────────────────────
 
@@ -295,6 +330,8 @@ model User {
   household              Household               @relation(fields: [householdId], references: [id])
   glucoseReadings        GlucoseReading[]
   bpReadings             BPReading[]
+  cardiacLogs            CardiacLog[]
+  respiratoryLogs        RespiratoryLog[]
   mealLogs               MealLog[]
   insights               InsightEvent[]
   medicationSchedules    MedicationSchedule[]
@@ -463,6 +500,80 @@ model BPReading {
   @@unique([clientUuid, measuredAt])
   @@index([userId, measuredAt])
   @@map("bp_readings")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Cardiac (Phase 4 Feature E.1)
+// ─────────────────────────────────────────────────────────────
+
+model CardiacLog {
+  id                String            @default(uuid()) @db.Uuid
+  clientUuid        String            @map("client_uuid") @db.Uuid
+  userId            String            @map("user_id") @db.Uuid
+  heartRate         Int               @map("heart_rate")
+  rhythmStatus      RhythmStatus      @default(unknown) @map("rhythm_status")
+  chestPain         Boolean           @default(false) @map("chest_pain")
+  // 0–10 NRS; nullable because it is only meaningful when chestPain=true.
+  // Validation in the service layer rejects severity>0 with chestPain=false
+  // (and vice-versa) at write time; the pure classifier treats null as 0.
+  painSeverity      Int?              @map("pain_severity")
+  exerciseTolerance ExerciseTolerance @default(normal) @map("exercise_tolerance")
+  notes             String?
+  source            ReadingSource
+  measuredAt        DateTime          @map("measured_at")
+  version           Int               @default(1)
+  syncedAt          DateTime?         @map("synced_at")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Composite primary key matches the TimescaleDB hypertable pattern
+  // used on glucose_readings / bp_readings.
+  @@id([id, measuredAt])
+  @@unique([clientUuid, measuredAt])
+  @@index([userId, measuredAt])
+  @@map("cardiac_logs")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Respiratory (Phase 4 Feature E.1)
+// ─────────────────────────────────────────────────────────────
+
+model RespiratoryLog {
+  id               String          @default(uuid()) @db.Uuid
+  clientUuid       String          @map("client_uuid") @db.Uuid
+  userId           String          @map("user_id") @db.Uuid
+  // Peak expiratory flow (L/min). Nullable so an inhaler-use-only or
+  // symptom-only log still saves. The bypass detector falls back to
+  // symptomSeverity when peakFlow is missing.
+  peakFlow         Int?            @map("peak_flow")
+  // Patient's stable baseline peak flow, captured from `User`/onboarding
+  // and snapshotted onto the log so a future baseline change cannot
+  // retroactively reclassify a historical reading. Nullable for users
+  // who have not yet established a baseline.
+  baselinePeakFlow Int?            @map("baseline_peak_flow")
+  inhalerUsed      Boolean         @default(false) @map("inhaler_used")
+  // Free-text vendor name (e.g. "Asthalin", "Foracort"). Mapping to a
+  // controlled inhaler catalogue is a Feature F follow-up.
+  inhalerType      String?         @map("inhaler_type")
+  puffs            Int?
+  triggerNote      String?         @map("trigger_note")
+  symptomSeverity  SymptomSeverity @default(none) @map("symptom_severity")
+  notes            String?
+  source           ReadingSource
+  measuredAt       DateTime        @map("measured_at")
+  version          Int             @default(1)
+  syncedAt         DateTime?       @map("synced_at")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([id, measuredAt])
+  @@unique([clientUuid, measuredAt])
+  @@index([userId, measuredAt])
+  @@map("respiratory_logs")
 }
 
 // ─────────────────────────────────────────────────────────────

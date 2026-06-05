@@ -45,8 +45,15 @@ export interface EventPropsMap {
   // divides by — without it, events where SMS was never attempted
   // (push succeeded) would deflate the rate.
   critical_bypass_triggered: {
-    value_mg_dl: number;
-    severity: "low" | "high";
+    // Glucose carries `value_mg_dl + severity`; cardiac/respiratory
+    // carry `category + copy_key` (Phase 4 Feature E). All other
+    // fields are common to every dispatch shape so the developer
+    // alert (`critical_bypass_sms_success_rate`) keeps working across
+    // categories without per-category branches.
+    value_mg_dl?: number;
+    severity?: "low" | "high";
+    category?: "glucose" | "cardiac" | "respiratory";
+    copy_key?: string;
     push_targets: number;
     push_success: boolean;
     sms_targets: number;
@@ -222,6 +229,11 @@ export interface EventPropsMap {
       | "daily_guardian_summary"
       | "admin_test";
     reason: "no_tokens_in_household" | "no_tokens_for_resolved_recipients" | "no_tokens";
+    // Phase 4 Feature E — multi-condition critical-bypass shares the
+    // same `critical_alert` surface; the category disambiguates which
+    // chain ran. Optional so the historical glucose-only emission
+    // shape continues to validate unchanged.
+    category?: "glucose" | "cardiac" | "respiratory";
     household_size: number;
   };
   // Emitted by the admin "Send test push" endpoint. distinctId is the
