@@ -56,6 +56,8 @@ const statusFor = (code: ErrorCode): number => {
     case "CHAT_SPEND_CAP_REACHED":
     case "MAINTENANCE_MODE": // CC.12.7 #1 — global maintenance window, retry later
     case "SOS_DISABLED": // sos_enabled=false — call emergency services directly
+    case "CARDIAC_DISABLED": // cardiac_logging_enabled=false
+    case "RESPIRATORY_DISABLED": // respiratory_logging_enabled=false
       return 503;
     case "CHAT_UPSTREAM_TIMEOUT":
       return 504;

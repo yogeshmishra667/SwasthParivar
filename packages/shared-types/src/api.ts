@@ -64,6 +64,13 @@ export type ErrorCode =
   | "SOS_DISABLED"
   | "SOS_NOT_FOUND"
   | "SOS_FORBIDDEN"
+  // Phase 4 Feature E — multi-condition log surfaces. Each new surface
+  // has its own kill-switch flag (`cardiac_logging_enabled` /
+  // `respiratory_logging_enabled`, both default off). Mapped to 503 so
+  // the mobile client retries on a later resync rather than burning the
+  // local-queued write.
+  | "CARDIAC_DISABLED"
+  | "RESPIRATORY_DISABLED"
   | "REPORT_GENERATING"
   | "VALIDATION_ERROR"
   | "RATE_LIMITED"

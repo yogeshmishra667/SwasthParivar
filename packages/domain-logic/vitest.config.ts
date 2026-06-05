@@ -101,6 +101,13 @@ export default defineConfig({
         // the bypass chain never enqueues for a respiratory emergency.
         // Locked at 100% per phase4.md §E.2.
         "src/respiratory-thresholds/classifier.ts": { 100: true },
+        // Phase 4 Feature E.2 — multi-category bypass dispatch planner.
+        // Safety-critical: a regression here would route a cardiac
+        // chest-pain alert to the bradycardia template, or skip the
+        // per-category cooldown so two emergencies 5min apart silence
+        // each other. Locked at 100% per CLAUDE.md "Phase 4 Invariants —
+        // Multi-condition Critical-Bypass Dispatch".
+        "src/critical-bypass/multi-category.ts": { 100: true },
 
         // Ratchet floors at CURRENT measured values (2026-05-14 baseline).
         // Raise these as tests close the gap to CLAUDE.md targets.

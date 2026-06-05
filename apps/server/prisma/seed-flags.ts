@@ -22,6 +22,11 @@ const DEFAULT_FLAGS = {
   cross_condition_detector_enabled: false,
   chat_retention_sweep_enabled: false,
   sos_enabled: true,
+  // Phase 4 Feature E — multi-condition log surfaces. Default OFF per
+  // phase4.md "Phase 4 kill-switch flags". Ops flips on per cohort
+  // after Week 14 ramp.
+  cardiac_logging_enabled: false,
+  respiratory_logging_enabled: false,
 };
 
 async function main() {
