@@ -108,6 +108,25 @@ export default defineConfig({
         // each other. Locked at 100% per CLAUDE.md "Phase 4 Invariants —
         // Multi-condition Critical-Bypass Dispatch".
         "src/critical-bypass/multi-category.ts": { 100: true },
+        // Phase 4 Feature E (chunk 3) — cardiac + respiratory trend
+        // detectors. Same shape as the glucose trend detector
+        // (`detectors/trend.ts`) so pinned at the matching floor:
+        // 100% lines/functions; branches at the measured value because
+        // the `fit === null` path is structurally unreachable (span
+        // check guarantees ≥2 distinct x-coordinates). Raise if a
+        // future change makes that branch reachable.
+        "src/detectors/cardiac-trend.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 94,
+          statements: 97,
+        },
+        "src/detectors/respiratory-trend.ts": {
+          lines: 100,
+          functions: 100,
+          branches: 94,
+          statements: 97,
+        },
 
         // Ratchet floors at CURRENT measured values (2026-05-14 baseline).
         // Raise these as tests close the gap to CLAUDE.md targets.
