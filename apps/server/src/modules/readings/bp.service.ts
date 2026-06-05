@@ -1,6 +1,10 @@
 import { DomainError } from "@swasth/shared-types";
 import type { BPReading, Prisma } from "@prisma/client";
 import { prisma } from "../../shared/database.js";
+import { createQueue, QUEUE_NAMES } from "../../shared/queue.js";
+import type { AnalyzeReadingJob } from "../../workers/analyze-reading.processor.js";
+
+const analyzeQueue = createQueue<AnalyzeReadingJob>(QUEUE_NAMES.ANALYZE_READING);
 
 interface CreateBPInput {
   userId: string;
@@ -13,6 +17,7 @@ interface CreateBPInput {
   source: "manual" | "voice" | "device";
   measuredAt: string;
   version: number;
+  requestId?: string;
 }
 
 export interface CreateBPResult {
@@ -70,6 +75,18 @@ export const createBPReading = async (input: CreateBPInput): Promise<CreateBPRes
           user: { connect: { id: input.userId } },
         },
       });
+
+  // Phase 4 §E follow-up — enqueue category-aware ANALYZE_READING so
+  // the cross-condition detector fires when BP arrives, not only when
+  // glucose does. Closes the gap where a BP-leading patient never
+  // produced the glucose↔BP correlation card. Same pattern the cardiac
+  // + respiratory services use.
+  await analyzeQueue.add("analyze", {
+    category: "bp",
+    readingId: reading.id,
+    userId: input.userId,
+    ...(input.requestId ? { requestId: input.requestId } : {}),
+  });
 
   return { reading };
 };

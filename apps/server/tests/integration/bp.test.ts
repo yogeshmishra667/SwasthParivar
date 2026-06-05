@@ -259,3 +259,48 @@ describe("DELETE /api/v1/readings/bp/:id", () => {
     expect(remaining).toBeNull();
   });
 });
+
+describe("POST /api/v1/readings/bp — ANALYZE_READING enqueue", () => {
+  // Phase 4 §E follow-up — BP previously never enqueued ANALYZE_READING,
+  // so the cross-condition detector only fired when glucose arrived.
+  // This test pins the parity gap closed.
+  it("every successful write enqueues an ANALYZE_READING job with category=bp", async () => {
+    const queueModule = await import("../../src/shared/queue.js");
+    const { Queue } = await import("bullmq");
+    const { Redis } = await import("ioredis");
+    const conn = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: null });
+    const probeQueue = new Queue(queueModule.QUEUE_NAMES.ANALYZE_READING, { connection: conn });
+
+    try {
+      const clientUuid = randomUUID();
+      const postRes = await request(app)
+        .post("/api/v1/readings/bp")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({
+          clientUuid,
+          systolic: 124,
+          diastolic: 80,
+          source: "manual",
+          measuredAt: new Date().toISOString(),
+          version: 1,
+        });
+      expect(postRes.status).toBe(201);
+      const readingId = postRes.body.data.reading.id;
+
+      let foundJob = false;
+      for (let attempt = 0; attempt < 20 && !foundJob; attempt++) {
+        const jobs = await probeQueue.getJobs(
+          ["waiting", "active", "delayed", "completed"],
+          0,
+          100,
+        );
+        foundJob = jobs.some((j) => j.data?.category === "bp" && j.data?.readingId === readingId);
+        if (!foundJob) await new Promise((r) => setTimeout(r, 100));
+      }
+      expect(foundJob).toBe(true);
+    } finally {
+      await probeQueue.close();
+      await conn.quit();
+    }
+  }, 30_000);
+});

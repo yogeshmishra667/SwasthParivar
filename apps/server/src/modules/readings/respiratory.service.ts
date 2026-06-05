@@ -11,8 +11,10 @@ import type {
   CriticalAlertJob,
   CriticalAlertMultiCategoryJob,
 } from "../../workers/critical-alert.processor.js";
+import type { AnalyzeReadingJob } from "../../workers/analyze-reading.processor.js";
 
 const criticalQueue = createQueue<CriticalAlertJob>(QUEUE_NAMES.CRITICAL_ALERT);
+const analyzeQueue = createQueue<AnalyzeReadingJob>(QUEUE_NAMES.ANALYZE_READING);
 
 interface CreateRespiratoryInput {
   userId: string;
@@ -199,6 +201,16 @@ export const createRespiratoryLog = async (
       await markBypassed("respiratory", input.userId, new Date().toISOString());
     }
   }
+
+  // Phase 4 §E follow-up — ANALYZE_READING enqueue parity with glucose.
+  // Runs detectRespiratoryTrend across 5/14/30-day windows in the
+  // worker; null-peakFlow rows are filtered at the worker boundary.
+  await analyzeQueue.add("analyze", {
+    category: "respiratory",
+    readingId: reading.id,
+    userId: input.userId,
+    ...(input.requestId ? { requestId: input.requestId } : {}),
+  });
 
   return {
     reading,
