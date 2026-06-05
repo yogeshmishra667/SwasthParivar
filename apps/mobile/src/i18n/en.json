@@ -251,7 +251,91 @@
   "log": {
     "modeGlucose": "Sugar",
     "modeBp": "BP",
-    "modeMeal": "Meal"
+    "modeMeal": "Meal",
+    "modeCardiac": "Heart",
+    "modeRespiratory": "Breath"
+  },
+  "cardiac": {
+    "title": "Log heart reading",
+    "heartRate": "Heart rate",
+    "bpm": "bpm",
+    "rhythm": {
+      "label": "Rhythm",
+      "regular": "Regular",
+      "irregular": "Irregular",
+      "unknown": "Don't know"
+    },
+    "chestPain": {
+      "label": "Chest pain?",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "painSeverity": {
+      "label": "Pain severity",
+      "scale": "/ 10"
+    },
+    "exerciseTolerance": {
+      "label": "Exertion",
+      "normal": "Normal",
+      "reduced": "Tires easily",
+      "severe": "Very tired"
+    },
+    "saved": "Heart reading saved",
+    "savedOffline": "Saved locally — will sync when online.",
+    "saveFailed": "Could not save — try again.",
+    "disabled": "Heart logging is not available yet.",
+    "rangeHint": "Heart rate: 30-250 bpm",
+    "classification": {
+      "critical": "Severe — call the doctor now.",
+      "warn": "Watch this — rest and observe.",
+      "critical.hr_low": "Heart rate very low — call the doctor immediately.",
+      "critical.hr_high": "Heart rate very high — rest, then call the doctor.",
+      "critical.chest_pain_severe": "Severe chest pain — go to hospital or dial 108 now.",
+      "warn.hr_borderline_low": "Heart rate low — watch and rest.",
+      "warn.hr_borderline_high": "Heart rate high — rest and re-check.",
+      "warn.chest_pain": "Chest pain — observe and call the doctor if it worsens.",
+      "warn.rhythm_irregular": "Irregular rhythm — mention this at your next visit.",
+      "warn.exercise_intolerance": "Tiring more easily — track over a few days."
+    }
+  },
+  "respiratory": {
+    "title": "Log breathing reading",
+    "peakFlow": "Peak flow",
+    "lMin": "L/min",
+    "percentOfBaseline": "({{percent}}% of best)",
+    "symptom": {
+      "label": "Symptoms",
+      "none": "None",
+      "mild": "Mild",
+      "moderate": "Moderate",
+      "severe": "Severe"
+    },
+    "inhaler": {
+      "label": "Inhaler used?",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "puffs": {
+      "label": "Puffs",
+      "unit": "puff",
+      "unit_plural": "puffs"
+    },
+    "needsSignal": "Add a peak flow, inhaler use, or symptom to save.",
+    "saved": "Breathing reading saved",
+    "savedOffline": "Saved locally — will sync when online.",
+    "saveFailed": "Could not save — try again.",
+    "disabled": "Breathing logging is not available yet.",
+    "rangeHint": "Peak flow: 50-800 L/min",
+    "classification": {
+      "critical": "Severe — call the doctor now.",
+      "warn": "Watch this — keep your inhaler close.",
+      "critical.peak_flow_red_zone": "Peak flow in red zone — use inhaler and call the doctor.",
+      "critical.symptom_severe": "Severe breathing distress — go to hospital or dial 108 now.",
+      "warn.peak_flow_yellow_zone": "Peak flow in yellow zone — use inhaler and watch.",
+      "warn.symptom_moderate": "Moderate symptoms — rest and watch.",
+      "warn.symptom_mild": "Mild symptoms — observe.",
+      "warn.inhaler_used": "Inhaler used — track frequency over the week."
+    }
   },
   "bp": {
     "title": "Log blood pressure",
