@@ -20,7 +20,11 @@ export const postBP = async (req: Request, res: Response): Promise<void> => {
   const userId = await resolveHouseholdMember(req.auth!, body.targetUserId);
   const { targetUserId: _drop, ...rest } = body;
   void _drop;
-  const result = await service.createBPReading({ userId, ...rest });
+  const result = await service.createBPReading({
+    userId,
+    ...rest,
+    ...(req.requestId ? { requestId: req.requestId } : {}),
+  });
   ok(res, result, 201);
 };
 

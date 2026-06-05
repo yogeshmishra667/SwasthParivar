@@ -2,7 +2,7 @@
 
 > **Companion to `phase4.md`** (the original spec). This file tracks what's done, what's in flight, and what's next. Update on every merged PR. The spec stays canonical for HOW things should be built.
 >
-> Last updated: **2026-06-05** (Feature E.1 chunk 1 + E.2 chunk 1 + E.3 trend detectors — schema + classifiers + server modules + critical-bypass dispatch + cardiac/respiratory trend detectors + 36 integration tests).
+> Last updated: **2026-06-06** (Feature E ANALYZE_READING multi-category wiring — closes the trend-detector loop for cardiac/respiratory; closes the cross-condition-on-BP-insert parity gap).
 
 ---
 
@@ -22,7 +22,7 @@
 | **SOS ramp** | 🟡 Code-complete, needs operational soak | Provision vendor creds → 7-day test-mode soak → first drill → flag flips |
 | **Push delivery hardening** | ✅ Diagnostic + auto-prune + per-user rate-limit keying landed (#113, #114, #112) | Verify the Expo token / projectId pairing in prod once #114 prunes the dead tokens |
 | **UI polish + dark mode + new settings** | ✅ Antigravity rollup (#117-121) cleaned up + shippable in #118 | Visual click-through on Light/Dark/System across all screens before EAS build |
-| **Feature E — Multi-condition health logs** | 🟡 In progress — schema + bypass classifiers + server modules + multi-category dispatch + 36 integration tests + cardiac/respiratory trend detectors landed (2026-06-05); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + ANALYZE_READING worker wiring + mobile UI still pending | Mobile log surfaces (cardiac + respiratory), ANALYZE_READING worker wiring (all three new categories), Activity/Sleep schema for Feature I |
+| **Feature E — Multi-condition health logs** | 🟡 In progress — schema + bypass classifiers + server modules + multi-category dispatch + 36 integration tests + cardiac/respiratory trend detectors + ANALYZE_READING multi-category wiring landed (2026-06-05 → 06); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + mobile UI still pending | Mobile log surfaces (cardiac + respiratory), Activity/Sleep schema for Feature I |
 | **Feature F — Prescription OCR** | ❌ Not started (Week 15-16) | Spec is in `phase4.md §F.1`; needs Claude Vision spend cap wiring |
 | **Feature G — Doctor portal** | ❌ Not started (Week 17) | — |
 | **Feature H — Indian food DB** | ❌ Not started (Week 18) | — |
@@ -72,6 +72,22 @@ Earliest first within each cluster; most recent cluster last.
 - PR #112 (2026-05-31) — `defaultRateLimit` now keys per-userId when JWT verifiable, IP fallback otherwise. Defeats Indian carrier-NAT mass-throttling.
 - PR #113 (2026-05-31) — Surface Expo's `errors[].code` + `errors[].message` in admin UI instead of opaque `HTTP_400`.
 - PR #114 (2026-05-31) — Auto-prune push tokens that return `PushTooManyExperienceIds` or `MismatchSenderId` (was only `DeviceNotRegistered`).
+
+### Feature E (chunk 4) — ANALYZE_READING multi-category wiring (2026-06-06)
+
+Closes the worker-side gap left by chunks 1-3. Cardiac + respiratory trend detectors now actually run; BP gains cross-condition firing on its own insert (previously the correlation card only landed when glucose arrived). Glucose path byte-identical, verified by regression run.
+
+- **Job shape generalisation `apps/server/src/workers/analyze-reading.processor.ts`** — `AnalyzeReadingJob` is now a discriminated union over `category`. Missing category routes to the glucose branch (back-compat with in-flight BullMQ retries from the previous server). Per-category branches:
+  - `glucose` (existing) — unchanged: spike + trend + meal-correlation + anomaly + cross-condition.
+  - `bp` (new) — runs `detectCrossCondition` so a BP-leading patient produces the correlation card on BP insert. Same `cross_condition_detector_enabled` flag gate as the glucose path.
+  - `cardiac` (new) — runs `detectCardiacTrend` across 5/14/30 day windows; the window-pattern de-dup pass in the processor collapses repeats within 24h.
+  - `respiratory` (new) — runs `detectRespiratoryTrend` across 5/14/30 day windows; null-peakFlow rows filtered at the boundary mapper (`toTypedRespiratory`) so the pure detector keeps its non-null contract.
+- **Window-pattern dedup extended** — `WINDOW_PATTERNS` now includes `trend` alongside `cross_condition` and `meal_correlation`. Without this, every cardiac/respiratory insert at the same severity would persist a duplicate card. Spike + anomaly remain target-keyed and never dedup.
+- **BP service enqueue** — `bp.service.ts` now fires `analyzeQueue.add` after a successful write; controller forwards `requestId` for correlated logging.
+- **Cardiac + respiratory service enqueues** — symmetric `analyzeQueue.add` calls after the critical-bypass block, mirroring the glucose pattern.
+- **Integration tests** — one ANALYZE_READING enqueue assertion added to `bp.test.ts`, `cardiac.test.ts`, `respiratory.test.ts` (3 new, 49 total). BullMQ queue probe verifies the job carries the right `category` + `readingId`. All passing.
+- **No glucose regression** — 12/12 existing `readings.test.ts` tests still pass after the processor refactor.
+- **Verify gates** — `pnpm format:check` ✅ · `pnpm typecheck` ✅ (6/6) · `pnpm lint` ✅ (6/6) · `pnpm -r build` ✅ · 49/49 integration ✅.
 
 ### Feature E (chunk 3) — Cardiac + Respiratory trend detectors (2026-06-05)
 
@@ -223,9 +239,7 @@ Spec: `phase4.md §E.5` + `§E.2 (#3–#5)`.
    - `activity-aggregator/` — `dailyActivitySummary(logs)`. Coupled to Feature I (ActivityDaily) → naturally lands Week 19.
    - `sleep-quality-classifier/` — coupled to SleepLog → Week 19.
 
-3. **ANALYZE_READING server-side wiring** — cardiac + respiratory services should enqueue `ANALYZE_READING` jobs the same way glucose does, and the processor should branch on category to call the new detectors. BP has the same gap today; this naturally lands as a single follow-up for all three categories. Pure detectors already exist (chunk 3 above); only the worker wiring is missing.
-
-4. **Cohort ramp** (operational):
+3. **Cohort ramp** (operational):
    - Flip `cardiac_logging_enabled` for a ≤10-user internal cohort.
    - Flip `respiratory_logging_enabled` same cohort.
    - After 7 days zero false-alarm, ramp by percentage.
