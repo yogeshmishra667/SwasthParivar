@@ -88,6 +88,19 @@ export default defineConfig({
         // skip an escalation stage and a real emergency reaches no
         // one. Locked at 100% per phase3.md §D.9.
         "src/sos-escalation/state-machine.ts": { 100: true },
+        // Phase 4 Feature E.1 — cardiac threshold classifier. Safety-
+        // critical: a regression mis-classifies HR < 40 / HR > 150 /
+        // chestPain ≥ 7 and the bypass chain (push + SMS + fullscreen
+        // + call, per CLAUDE.md "Phase 4 Invariants — Multi-condition
+        // Critical-Bypass Dispatch") never enqueues for a cardiac
+        // emergency. Locked at 100% per phase4.md §E.2.
+        "src/cardiac-thresholds/classifier.ts": { 100: true },
+        // Phase 4 Feature E.1 — respiratory threshold classifier.
+        // Safety-critical: a regression mis-classifies the asthma
+        // red zone (peakFlow < baseline * 0.5) or severe symptom and
+        // the bypass chain never enqueues for a respiratory emergency.
+        // Locked at 100% per phase4.md §E.2.
+        "src/respiratory-thresholds/classifier.ts": { 100: true },
 
         // Ratchet floors at CURRENT measured values (2026-05-14 baseline).
         // Raise these as tests close the gap to CLAUDE.md targets.
