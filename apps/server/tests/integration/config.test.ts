@@ -74,7 +74,13 @@ describe("GET /api/v1/config/features — rollout resolution", () => {
   it("reports ai_chat false when the flag is unset (fail-safe default)", async () => {
     const res = await getFeatures();
     expect(res.status).toBe(200);
-    expect(res.body.data.features).toEqual({ ai_chat: false });
+    // Phase 4 Feature E added cardiac_logging + respiratory_logging to
+    // the registry. Both default-off, same fail-safe path as ai_chat.
+    expect(res.body.data.features).toEqual({
+      ai_chat: false,
+      cardiac_logging: false,
+      respiratory_logging: false,
+    });
   });
 
   it("reports ai_chat true for a global-on boolean flag", async () => {

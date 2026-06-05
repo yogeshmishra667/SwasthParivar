@@ -2,7 +2,7 @@
 
 > **Companion to `phase4.md`** (the original spec). This file tracks what's done, what's in flight, and what's next. Update on every merged PR. The spec stays canonical for HOW things should be built.
 >
-> Last updated: **2026-06-06** (Feature E ANALYZE_READING multi-category wiring — closes the trend-detector loop for cardiac/respiratory; closes the cross-condition-on-BP-insert parity gap).
+> Last updated: **2026-06-06** (Feature E mobile log surfaces — cardiac + respiratory input/confirm screens, services, flag-gated mode chooser, en+hi i18n).
 
 ---
 
@@ -22,7 +22,7 @@
 | **SOS ramp** | 🟡 Code-complete, needs operational soak | Provision vendor creds → 7-day test-mode soak → first drill → flag flips |
 | **Push delivery hardening** | ✅ Diagnostic + auto-prune + per-user rate-limit keying landed (#113, #114, #112) | Verify the Expo token / projectId pairing in prod once #114 prunes the dead tokens |
 | **UI polish + dark mode + new settings** | ✅ Antigravity rollup (#117-121) cleaned up + shippable in #118 | Visual click-through on Light/Dark/System across all screens before EAS build |
-| **Feature E — Multi-condition health logs** | 🟡 In progress — schema + bypass classifiers + server modules + multi-category dispatch + 36 integration tests + cardiac/respiratory trend detectors + ANALYZE_READING multi-category wiring landed (2026-06-05 → 06); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + mobile UI still pending | Mobile log surfaces (cardiac + respiratory), Activity/Sleep schema for Feature I |
+| **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + **mobile log surfaces** landed (2026-06-05 → 06); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + voice fixtures still pending | Voice fixtures + parser extension (small follow-up), Activity/Sleep schema for Feature I |
 | **Feature F — Prescription OCR** | ❌ Not started (Week 15-16) | Spec is in `phase4.md §F.1`; needs Claude Vision spend cap wiring |
 | **Feature G — Doctor portal** | ❌ Not started (Week 17) | — |
 | **Feature H — Indian food DB** | ❌ Not started (Week 18) | — |
@@ -72,6 +72,20 @@ Earliest first within each cluster; most recent cluster last.
 - PR #112 (2026-05-31) — `defaultRateLimit` now keys per-userId when JWT verifiable, IP fallback otherwise. Defeats Indian carrier-NAT mass-throttling.
 - PR #113 (2026-05-31) — Surface Expo's `errors[].code` + `errors[].message` in admin UI instead of opaque `HTTP_400`.
 - PR #114 (2026-05-31) — Auto-prune push tokens that return `PushTooManyExperienceIds` or `MismatchSenderId` (was only `DeviceNotRegistered`).
+
+### Feature E (chunk 5) — Mobile log surfaces for cardiac + respiratory (2026-06-06)
+
+Patient-facing UX for the two new categories. Numpad-only this round; voice fixtures + parser extension land in a small follow-up. Flag-gated through the existing CC.12 rollout resolver so a patient outside the cohort sees the unchanged Phase-2 layout.
+
+- **Server config registry `apps/server/src/modules/config/config.service.ts`** — adds `cardiac_logging` and `respiratory_logging` to the `FEATURE_REGISTRY`. Mobile reads these via `GET /api/v1/config/features` and gates the mode chooser buttons on them; server-side writes ALSO gate on the same `*_logging_enabled` flag so a runtime flip turns the feature off at both ends in lockstep.
+- **Mobile service clients `apps/mobile/src/services/cardiac.ts` + `respiratory.ts`** — mirror `services/bp.ts`: online-first with a `queued` fallback on network / 5xx errors. The new typed `rejected` discriminator surfaces `CARDIAC_DISABLED` / `RESPIRATORY_DISABLED` (503) so the screen can render a "feature unavailable" message instead of a generic toast. Sets `targetUserId` for shared-phone profile routing.
+- **`apps/mobile/src/components/logging/CardiacInput.tsx`** — TAP-ONLY (CLAUDE.md "core flows: TAP ONLY"). Sections: HR numpad → rhythm chips (regular/irregular/unknown) → chest-pain toggle (auto-expands a 0–10 pain-severity numpad) → exercise-tolerance chips. Local validation rejects HR ∉ [30,250] and `painSeverity > 0` without `chestPain=true` before the user can tap Next.
+- **`apps/mobile/src/components/logging/RespiratoryInput.tsx`** — Symmetric. Sections: peak-flow numpad → symptom-severity chips → inhaler toggle (auto-expands a puffs numpad). Local validation enforces at-least-one-signal (peakFlow OR inhalerUsed OR symptomSeverity≠none).
+- **`apps/mobile/src/components/logging/CardiacConfirmationScreen.tsx` + `RespiratoryConfirmationScreen.tsx`** — Mirror `BPConfirmationScreen`. Both run the **pure classifier from `@swasth/domain-logic` locally** so the patient sees the critical / warn banner BEFORE the server round-trip — the same `classifyCardiacReading` / `classifyRespiratoryReading` the server runs, so this is a faithful preview, not a guess.
+- **`apps/mobile/app/(tabs)/log.tsx`** — `LogMode` widened from `glucose | bp | meal` to also include `cardiac | respiratory`. Mode chooser renders the two new buttons only when their per-user rollout flag is true; the layout for users outside the cohort is byte-identical to Phase 2. Cardiac + respiratory get the same `saved` summary screen, offline indicator, and reset semantics. Critical-bypass surface emits the same `critical_bypass_triggered` PostHog event with a new `surface` dimension (`cardiac` / `respiratory`) so dashboards pivot by category.
+- **i18n (en + hi) — `apps/mobile/src/i18n/{en,hi}.json`** — ~80 new keys covering input labels, confirmation copy, classification banner per reason code (every value of `classification.reason` from both classifiers gets its own localised string), saved / offline / disabled / saveFailed states, range hints, mode-chooser buttons. Hindi-first per CLAUDE.md.
+- **Regression — `tests/integration/config.test.ts`** updated for the widened registry (3 features now return; previously 1). 7/7 still pass.
+- **Verify gates** — `pnpm format:check` ✅ · `pnpm typecheck` ✅ (6/6) · `pnpm lint` ✅ (6/6) · `pnpm -r build` ✅ · 660 domain-logic tests ✅ · 7/7 config integration ✅.
 
 ### Feature E (chunk 4) — ANALYZE_READING multi-category wiring (2026-06-06)
 
@@ -229,17 +243,15 @@ SOS real-call ramp stays operational (see checklist above). Feature E.1 chunk 1 
 
 Spec: `phase4.md §E.5` + `§E.2 (#3–#5)`.
 
-1. **Mobile log surfaces** (`apps/mobile/`, Section M.2). Gated by the existing `cardiac_logging_enabled` / `respiratory_logging_enabled` flags via the feature-rollout resolver:
-   - Cardiac log screen (3-tap: pick HR → rhythm toggle → chest-pain toggle → save). Pre-save preview uses the pure `classifyCardiacReading` so the fullscreen alert matches the server-side outcome.
-   - Respiratory log screen (peak-flow + inhaler toggle + symptom severity radio).
-   - Activity dashboard widget + Sleep dashboard widget (placeholders until Feature I ships ActivityDaily + SleepLog).
-   - Voice fixtures + parser extension for "dil ki dhadkan 85" + "peak flow do sau" (lands in `packages/test-factories/src/voice-transcript.fixtures.ts`).
+1. **Voice fixtures + parser extension** for "dil ki dhadkan 85" + "peak flow do sau" (lands in `packages/test-factories/src/voice-transcript.fixtures.ts`). Cardiac + respiratory log screens currently ship numpad-only — voice support is a small follow-up that extends `voice-parser.ts` with HR + peak-flow intent keywords and wires the existing `VoiceInput` component into the two new mode branches in `log.tsx`.
 
-2. **Remaining pure modules** in `packages/domain-logic/src/`:
+2. **Activity dashboard widget + Sleep dashboard widget** — placeholders until Feature I ships `ActivityDaily` + `SleepLog`.
+
+3. **Remaining pure modules** in `packages/domain-logic/src/`:
    - `activity-aggregator/` — `dailyActivitySummary(logs)`. Coupled to Feature I (ActivityDaily) → naturally lands Week 19.
    - `sleep-quality-classifier/` — coupled to SleepLog → Week 19.
 
-3. **Cohort ramp** (operational):
+4. **Cohort ramp** (operational):
    - Flip `cardiac_logging_enabled` for a ≤10-user internal cohort.
    - Flip `respiratory_logging_enabled` same cohort.
    - After 7 days zero false-alarm, ramp by percentage.
