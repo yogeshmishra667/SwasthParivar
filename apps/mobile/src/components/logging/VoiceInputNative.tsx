@@ -5,7 +5,13 @@ import {
   useSpeechRecognitionEvent,
   type ExpoSpeechRecognitionErrorCode,
 } from "expo-speech-recognition";
-import { parseVoiceTranscript, type VoiceParseResult } from "@swasth/domain-logic";
+import {
+  parseCardiacVoiceTranscript,
+  parseRespiratoryVoiceTranscript,
+  parseVoiceTranscript,
+  type NumericVoiceParseResult,
+  type VoiceParseResult,
+} from "@swasth/domain-logic";
 import { useTranslation } from "react-i18next";
 import { usePreferencesStore } from "@/stores/preferences.store";
 import { useProfileStore } from "@/stores/profile.store";
@@ -13,17 +19,24 @@ import { Icon } from "@/components/ui/Icon";
 import { hapticSave } from "@/utils/haptics";
 import { TIMEOUTS, TOUCH_TARGET_MIN } from "@/utils/constants";
 import { logError, track } from "@/services/analytics";
-
-interface Props {
-  onParsed: (result: VoiceParseResult) => void;
-  onFail: () => void;
-}
+import type { VoiceInputProps } from "./VoiceInput";
 
 const FAIL_THRESHOLD = 2;
 
 type StatusKey = "tap" | "listen" | "noPermission" | "error";
 
-const VoiceInputNative = ({ onParsed, onFail }: Props): JSX.Element => {
+// Per-mode contextual strings push the speech-recognition engine toward
+// the vocabulary we expect to hear, so "dil ki dhadkan" / "peak flow"
+// don't fall through to a generic transcription. The glucose hint list
+// is unchanged from Phase 1.
+const CONTEXTUAL_STRINGS: Record<VoiceInputProps["mode"], readonly string[]> = {
+  glucose: ["sugar", "fasting", "post meal", "subah", "khane"],
+  cardiac: ["dil", "dhadkan", "heart", "pulse", "heart rate"],
+  respiratory: ["peak flow", "saans", "breathing", "asthma", "inhaler"],
+};
+
+const VoiceInputNative = (props: VoiceInputProps): JSX.Element => {
+  const { mode, onFail } = props;
   const { t } = useTranslation();
   const [recording, setRecording] = useState(false);
   const [statusKey, setStatusKey] = useState<StatusKey>("tap");
@@ -97,6 +110,44 @@ const VoiceInputNative = ({ onParsed, onFail }: Props): JSX.Element => {
     onFail();
   });
 
+  // Dispatch into the right pure parser based on mode. Glucose stays
+  // byte-identical with Phase 1 — same call site, same shape. Cardiac /
+  // respiratory route through the shared numeric parser via their thin
+  // wrappers from `@swasth/domain-logic`.
+  const parseTranscript = (
+    transcript: string,
+    confidence: number,
+  ): {
+    result: VoiceParseResult | NumericVoiceParseResult;
+    success: boolean;
+    colloquialMatch: boolean;
+    uncertaintyDetected: boolean;
+  } => {
+    if (mode === "glucose") {
+      const result = parseVoiceTranscript({
+        transcript,
+        confidence,
+        capturedAtHourLocal: new Date().getHours(),
+      });
+      return {
+        result,
+        success: result.kind === "ok",
+        colloquialMatch: result.kind === "ok" ? result.colloquialMatch : false,
+        uncertaintyDetected: result.kind === "ok" ? result.uncertaintyDetected : false,
+      };
+    }
+    const result =
+      mode === "cardiac"
+        ? parseCardiacVoiceTranscript({ transcript, confidence })
+        : parseRespiratoryVoiceTranscript({ transcript, confidence });
+    return {
+      result,
+      success: result.kind === "ok",
+      colloquialMatch: result.kind === "ok" ? result.colloquialMatch : false,
+      uncertaintyDetected: result.kind === "ok" ? result.uncertaintyDetected : false,
+    };
+  };
+
   const finalizeAttempt = (): void => {
     const transcript = transcriptRef.current.trim();
     transcriptRef.current = "";
@@ -107,6 +158,7 @@ const VoiceInputNative = ({ onParsed, onFail }: Props): JSX.Element => {
       const next = failCount.current + 1;
       failCount.current = next;
       track("voice_attempt", {
+        surface: mode,
         success: false,
         confidence: 0,
         fallback: next >= FAIL_THRESHOLD,
@@ -117,21 +169,26 @@ const VoiceInputNative = ({ onParsed, onFail }: Props): JSX.Element => {
       return;
     }
 
-    const result = parseVoiceTranscript({
-      transcript,
-      confidence,
-      capturedAtHourLocal: new Date().getHours(),
-    });
+    const dispatch = parseTranscript(transcript, confidence);
     track("voice_attempt", {
-      success: result.kind === "ok",
+      surface: mode,
+      success: dispatch.success,
       confidence,
       fallback: false,
-      colloquial_match: result.kind === "ok" ? result.colloquialMatch : false,
-      uncertainty_detected: result.kind === "ok" ? result.uncertaintyDetected : false,
+      colloquial_match: dispatch.colloquialMatch,
+      uncertainty_detected: dispatch.uncertaintyDetected,
     });
-    if (result.kind === "ok") {
+    if (dispatch.success) {
       failCount.current = 0;
-      onParsed(result);
+      // The discriminated union over `mode` keeps each branch's onParsed
+      // typed correctly without runtime checks. Glucose carries the
+      // extra reading-type axis so the cast is required; the numeric
+      // branch is a structural supertype of the union and needs none.
+      if (props.mode === "glucose") {
+        props.onParsed(dispatch.result as VoiceParseResult);
+      } else {
+        props.onParsed(dispatch.result);
+      }
       return;
     }
     const next = failCount.current + 1;
@@ -160,7 +217,7 @@ const VoiceInputNative = ({ onParsed, onFail }: Props): JSX.Element => {
         continuous: false,
         requiresOnDeviceRecognition: false,
         addsPunctuation: false,
-        contextualStrings: ["sugar", "fasting", "post meal", "subah", "khane"],
+        contextualStrings: [...CONTEXTUAL_STRINGS[mode]],
       });
       silenceTimer.current = setTimeout(() => stopAndUnlock(), TIMEOUTS.voiceSilenceMs);
     } catch (err) {
@@ -198,7 +255,7 @@ const VoiceInputNative = ({ onParsed, onFail }: Props): JSX.Element => {
         }}
         accessibilityRole="button"
         accessibilityState={{ busy: recording }}
-        accessibilityLabel="Tap to speak your glucose reading"
+        accessibilityLabel={t(`voice.${mode}.accessibilityLabel`)}
         className={`items-center justify-center rounded-full ${
           recording ? "bg-critical" : "bg-primary"
         }`}
@@ -214,7 +271,7 @@ const VoiceInputNative = ({ onParsed, onFail }: Props): JSX.Element => {
       </Text>
       {(statusKey === "tap" || statusKey === "listen") && (
         <Text className="text-center px-4 text-gray-500" style={{ fontSize: 13 }}>
-          {t("voice.exampleHint")}
+          {t(`voice.${mode}.exampleHint`)}
         </Text>
       )}
     </View>

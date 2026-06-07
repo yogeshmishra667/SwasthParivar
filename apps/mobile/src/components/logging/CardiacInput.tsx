@@ -36,6 +36,11 @@ export interface ParsedCardiacInput {
 
 interface CardiacInputProps {
   onSubmit: (params: ParsedCardiacInput) => void;
+  // Phase 4 §E voice-integration follow-up: when the patient logs by
+  // voice ("dil ki dhadkan 85"), the parsed HR seeds the numpad and the
+  // user only taps the rhythm / chest-pain / exercise pills. Optional —
+  // tap-only entry still starts blank.
+  initialHeartRate?: number;
 }
 
 type Field = "hr" | "pain";
@@ -47,9 +52,9 @@ const PAIN_DIGIT_LIMIT = 2;
 const RHYTHM_OPTIONS: readonly RhythmStatus[] = ["regular", "irregular", "unknown"];
 const EXERCISE_OPTIONS: readonly ExerciseTolerance[] = ["normal", "reduced", "severe"];
 
-export const CardiacInput = ({ onSubmit }: CardiacInputProps): JSX.Element => {
+export const CardiacInput = ({ onSubmit, initialHeartRate }: CardiacInputProps): JSX.Element => {
   const { t } = useTranslation();
-  const [hr, setHr] = useState("");
+  const [hr, setHr] = useState(initialHeartRate !== undefined ? String(initialHeartRate) : "");
   const [rhythm, setRhythm] = useState<RhythmStatus>("unknown");
   const [chestPain, setChestPain] = useState(false);
   const [pain, setPain] = useState("");

@@ -510,7 +510,19 @@
     "statusNoPermission": "Microphone permission needed — allow in Settings.",
     "statusError": "Voice is having trouble — use numpad instead.",
     "exampleHint": "Try: \"sugar 120\" or \"my sugar is 120\"",
-    "devBuildRequired": "Voice needs a dev build — use numpad for now."
+    "devBuildRequired": "Voice needs a dev build — use numpad for now.",
+    "glucose": {
+      "exampleHint": "Try: \"sugar 120\" or \"my sugar is 120\"",
+      "accessibilityLabel": "Tap to speak your glucose reading"
+    },
+    "cardiac": {
+      "exampleHint": "Try: \"heart rate 80\" or \"dil ki dhadkan pachasi\"",
+      "accessibilityLabel": "Tap to speak your heart rate"
+    },
+    "respiratory": {
+      "exampleHint": "Try: \"peak flow 350\" or \"peak flow teen sau\"",
+      "accessibilityLabel": "Tap to speak your peak flow"
+    }
   },
   "sync": {
     "draining": "Syncing..."

@@ -10,7 +10,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { isCriticalGlucose } from "@swasth/shared-types";
 import type { GlucoseReadingType, MealCategory, MealType } from "@swasth/shared-types";
-import type { VoiceParseResult } from "@swasth/domain-logic";
+import type { NumericVoiceParseResult, VoiceParseResult } from "@swasth/domain-logic";
 import { useTranslation } from "react-i18next";
 
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
@@ -69,7 +69,12 @@ export default function LogScreen(): JSX.Element {
 
   const [mode, setMode] = useState<LogMode>("glucose");
   const [stage, setStage] = useState<Stage>("input");
-  const [inputMethod, setInputMethod] = useState<InputMethod>("voice");
+  // Per-mode default: glucose starts on voice (Phase 1 behaviour). Cardiac
+  // and respiratory start on the tap form so the user lands on the
+  // familiar HR / peak-flow numpad and chips, with an explicit "Use
+  // voice" toggle if they want voice for the headline numeric.
+  const defaultInputMethodFor = (m: LogMode): InputMethod => (m === "glucose" ? "voice" : "numpad");
+  const [inputMethod, setInputMethod] = useState<InputMethod>(defaultInputMethodFor("glucose"));
 
   // Glucose
   const [parsedGlucose, setParsedGlucose] = useState<ParsedGlucose | null>(null);
@@ -90,6 +95,11 @@ export default function LogScreen(): JSX.Element {
   const respiratoryEnabled = useFeatureEnabled("respiratory_logging");
   const [parsedCardiac, setParsedCardiac] = useState<ParsedCardiacInput | null>(null);
   const [parsedRespiratory, setParsedRespiratory] = useState<ParsedRespiratoryInput | null>(null);
+  // Voice pre-fill: parsed HR / peak flow from the cardiac / respiratory
+  // voice parsers. Seeds the tap form so the user only has to fill the
+  // remaining fields (rhythm, chest pain, exercise / inhaler, severity).
+  const [voiceInitialHr, setVoiceInitialHr] = useState<number | undefined>(undefined);
+  const [voiceInitialPeakFlow, setVoiceInitialPeakFlow] = useState<number | undefined>(undefined);
 
   // Shared post-save state
   const [undoVisible, setUndoVisible] = useState(false);
@@ -105,26 +115,31 @@ export default function LogScreen(): JSX.Element {
   } | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const resetForNext = useCallback((): void => {
-    setStage("input");
-    setInputMethod("voice");
-    setParsedGlucose(null);
-    setParsedBP(null);
-    setParsedCardiac(null);
-    setParsedRespiratory(null);
-    setLastReadingId(null);
-    setStreakDays(0);
-    setFeedbackMsg(null);
-    setSavedSummary(null);
-    setUndoVisible(false);
-    setSavedOffline(false);
-    setSaveError(null);
-  }, []);
+  const resetForNext = useCallback(
+    (nextMode?: LogMode): void => {
+      setStage("input");
+      setInputMethod(defaultInputMethodFor(nextMode ?? mode));
+      setParsedGlucose(null);
+      setParsedBP(null);
+      setParsedCardiac(null);
+      setParsedRespiratory(null);
+      setVoiceInitialHr(undefined);
+      setVoiceInitialPeakFlow(undefined);
+      setLastReadingId(null);
+      setStreakDays(0);
+      setFeedbackMsg(null);
+      setSavedSummary(null);
+      setUndoVisible(false);
+      setSavedOffline(false);
+      setSaveError(null);
+    },
+    [mode],
+  );
 
   const switchMode = (next: LogMode): void => {
     if (next === mode) return;
     setMode(next);
-    resetForNext();
+    resetForNext(next);
   };
 
   // ── Glucose ───────────────────────────────────────────────
@@ -270,6 +285,16 @@ export default function LogScreen(): JSX.Element {
     setStage("confirm");
   };
 
+  // Voice path seeds HR only; rhythm / chest-pain / exercise stay in
+  // the tap form. On reject the VoiceInput component tracks its own
+  // fail count and calls onFail after the threshold — we just drop the
+  // user onto the numpad form unchanged.
+  const handleCardiacVoice = (result: NumericVoiceParseResult): void => {
+    if (result.kind !== "ok") return;
+    setVoiceInitialHr(result.value);
+    setInputMethod("numpad");
+  };
+
   const saveCardiac = async (): Promise<void> => {
     if (!parsedCardiac || !userId) return;
     hapticSave();
@@ -330,6 +355,14 @@ export default function LogScreen(): JSX.Element {
   const handleRespiratorySubmit = (params: ParsedRespiratoryInput): void => {
     setParsedRespiratory(params);
     setStage("confirm");
+  };
+
+  // Voice path seeds peak flow only; symptom severity + inhaler stay
+  // in the tap form.
+  const handleRespiratoryVoice = (result: NumericVoiceParseResult): void => {
+    if (result.kind !== "ok") return;
+    setVoiceInitialPeakFlow(result.value);
+    setInputMethod("numpad");
   };
 
   const saveRespiratory = async (): Promise<void> => {
@@ -566,7 +599,7 @@ export default function LogScreen(): JSX.Element {
                     ? t("bp.title")
                     : t("meals.logMore")
               }
-              onPress={resetForNext}
+              onPress={() => resetForNext()}
             />
             <Button
               label={t("common.dashboard")}
@@ -699,7 +732,11 @@ export default function LogScreen(): JSX.Element {
         ) : (
           <View className="flex-1 gap-6 px-6">
             {inputMethod === "voice" ? (
-              <VoiceInput onParsed={handleVoice} onFail={() => setInputMethod("numpad")} />
+              <VoiceInput
+                mode="glucose"
+                onParsed={handleVoice}
+                onFail={() => setInputMethod("numpad")}
+              />
             ) : (
               <NumpadInput onSubmit={handleNumpad} />
             )}
@@ -715,9 +752,47 @@ export default function LogScreen(): JSX.Element {
     );
   }
 
-  // BP / Meal modes use ScrollView because their input surfaces (numpad
-  // + 3 field chips + range hint, or meal type + 3 large category
-  // cards) are taller than the screen on small phones.
+  // Cardiac / respiratory voice mode renders OUTSIDE the ScrollView for
+  // the same Android tap-intercept reason called out in the glucose
+  // branch above. On parse, we switch back to "numpad" and the tap
+  // form below renders with the voice-captured headline number seeded.
+  if ((mode === "cardiac" || mode === "respiratory") && inputMethod === "voice") {
+    return (
+      <SafeAreaView className="flex-1 gap-6 bg-white dark:bg-gray-900">
+        <View className="flex-row items-center justify-end px-4 py-3">
+          <ActiveProfileBadge />
+        </View>
+        {modeChooser}
+        <CheckScheduleChip />
+        <View className="flex-1 gap-6 px-6">
+          {mode === "cardiac" ? (
+            <VoiceInput
+              mode="cardiac"
+              onParsed={handleCardiacVoice}
+              onFail={() => setInputMethod("numpad")}
+            />
+          ) : (
+            <VoiceInput
+              mode="respiratory"
+              onParsed={handleRespiratoryVoice}
+              onFail={() => setInputMethod("numpad")}
+            />
+          )}
+          <Button
+            label={t("logging.useNumpad")}
+            variant="ghost"
+            onPress={() => setInputMethod("numpad")}
+          />
+          {saveError !== null && <Text className="text-body text-warning">{saveError}</Text>}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // BP / Meal / cardiac-tap / respiratory-tap modes use ScrollView
+  // because their input surfaces (numpad + 3 field chips + range hint,
+  // or meal type + 3 large category cards) are taller than the screen
+  // on small phones.
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
       <View className="flex-row items-center justify-end px-4 py-3">
@@ -730,11 +805,27 @@ export default function LogScreen(): JSX.Element {
         {mode === "bp" ? (
           <BPInput onSubmit={handleBPSubmit} />
         ) : mode === "cardiac" ? (
-          <CardiacInput onSubmit={handleCardiacSubmit} />
+          <CardiacInput
+            onSubmit={handleCardiacSubmit}
+            {...(voiceInitialHr !== undefined ? { initialHeartRate: voiceInitialHr } : {})}
+          />
         ) : mode === "respiratory" ? (
-          <RespiratoryInput onSubmit={handleRespiratorySubmit} />
+          <RespiratoryInput
+            onSubmit={handleRespiratorySubmit}
+            {...(voiceInitialPeakFlow !== undefined
+              ? { initialPeakFlow: voiceInitialPeakFlow }
+              : {})}
+          />
         ) : (
           <MealQuickLog onSave={(p) => void saveMeal(p)} saving={saving} />
+        )}
+
+        {(mode === "cardiac" || mode === "respiratory") && (
+          <Button
+            label={t("logging.useVoice")}
+            variant="ghost"
+            onPress={() => setInputMethod("voice")}
+          />
         )}
 
         {saveError !== null && <Text className="text-body text-warning">{saveError}</Text>}

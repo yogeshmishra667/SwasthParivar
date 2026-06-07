@@ -2,7 +2,7 @@
 
 > **Companion to `phase4.md`** (the original spec). This file tracks what's done, what's in flight, and what's next. Update on every merged PR. The spec stays canonical for HOW things should be built.
 >
-> Last updated: **2026-06-06** (Feature E voice parser — cardiac + respiratory Hindi/Hinglish/English transcript parsing via a shared numeric parser, fixtures in test-factories).
+> Last updated: **2026-06-07** (Feature E chunk 7 — mobile voice integration: cardiac + respiratory `VoiceInput` mode dispatch, pre-fill flow on tap form, per-mode contextual strings + i18n).
 
 ---
 
@@ -22,7 +22,7 @@
 | **SOS ramp** | 🟡 Code-complete, needs operational soak | Provision vendor creds → 7-day test-mode soak → first drill → flag flips |
 | **Push delivery hardening** | ✅ Diagnostic + auto-prune + per-user rate-limit keying landed (#113, #114, #112) | Verify the Expo token / projectId pairing in prod once #114 prunes the dead tokens |
 | **UI polish + dark mode + new settings** | ✅ Antigravity rollup (#117-121) cleaned up + shippable in #118 | Visual click-through on Light/Dark/System across all screens before EAS build |
-| **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + mobile log surfaces + **voice parser** landed (2026-06-05 → 06); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + mobile-voice integration still pending | Mobile voice integration (wire `VoiceInput` to the new parsers), Activity/Sleep schema for Feature I |
+| **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + mobile log surfaces + voice parser + **mobile-voice integration** landed (2026-06-05 → 07); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + cohort flag-ramp still pending | Cohort flag-ramp (`cardiac_logging_enabled` / `respiratory_logging_enabled`), Activity/Sleep schema for Feature I |
 | **Feature F — Prescription OCR** | ❌ Not started (Week 15-16) | Spec is in `phase4.md §F.1`; needs Claude Vision spend cap wiring |
 | **Feature G — Doctor portal** | ❌ Not started (Week 17) | — |
 | **Feature H — Indian food DB** | ❌ Not started (Week 18) | — |
@@ -72,6 +72,18 @@ Earliest first within each cluster; most recent cluster last.
 - PR #112 (2026-05-31) — `defaultRateLimit` now keys per-userId when JWT verifiable, IP fallback otherwise. Defeats Indian carrier-NAT mass-throttling.
 - PR #113 (2026-05-31) — Surface Expo's `errors[].code` + `errors[].message` in admin UI instead of opaque `HTTP_400`.
 - PR #114 (2026-05-31) — Auto-prune push tokens that return `PushTooManyExperienceIds` or `MismatchSenderId` (was only `DeviceNotRegistered`).
+
+### Feature E (chunk 7) — Mobile voice integration for cardiac + respiratory (2026-06-07)
+
+Wires the cardiac + respiratory voice parsers (chunk 6) into the mobile log surface. The headline numeric (HR / peak flow) is captured by voice; the rest of the form (rhythm, chest-pain, exercise tolerance / symptom severity, inhaler) stays tap-only. Voice mic is opt-in for the new modes — the tap form remains the default landing so the existing Phase-4 §E.5 flow is unchanged for users who don't toggle voice on.
+
+- **`apps/mobile/src/components/logging/VoiceInput.tsx` + `VoiceInputNative.tsx`** — props widened to a discriminated union over `mode: "glucose" | "cardiac" | "respiratory"`. Glucose path is byte-identical with Phase 1: same `parseVoiceTranscript` call, same `VoiceParseResult` shape, same contextual-string list, same tap-target geometry. Cardiac / respiratory dispatch into `parseCardiacVoiceTranscript` / `parseRespiratoryVoiceTranscript` and return `NumericVoiceParseResult`. Contextual-string lists per mode push the SR engine toward "dil ki dhadkan" / "peak flow" / "saans" so cross-domain false transcripts are reduced.
+- **Pre-fill, not skip-to-confirm.** Voice captures the single numeric and routes back to the tap form (CardiacInput / RespiratoryInput) with that field seeded — NOT directly to the confirmation screen. Rhythm / chest-pain / exercise / symptom severity / inhaler are still tap-only because they have no clean voice utterance and would force the elderly user to repeat themselves on edit. Cardiac voice + tap = the same Next → confirmation flow as pure tap.
+- **`CardiacInput.tsx` + `RespiratoryInput.tsx`** — accept optional `initialHeartRate` / `initialPeakFlow` props. Internal state seeds from those on first render. The existing tap-only flow is unchanged when the prop is `undefined`.
+- **`apps/mobile/app/(tabs)/log.tsx`** — `inputMethod` default is now per-mode via `defaultInputMethodFor(mode)`: glucose stays on "voice" (Phase 1), cardiac / respiratory default to "numpad" (existing §E.5 flow). `resetForNext` takes the next mode so a mode-switch lands on the right default; the saved-summary "Log another" button keeps the current mode's default. Voice mode for cardiac / respiratory renders the mic OUTSIDE the ScrollView — the same Android tap-intercept regression the glucose branch already calls out (a Pressable inside ScrollView swallows the mic activation on Android).
+- **Analytics extension** — `voice_attempt` event now carries a `surface: "glucose" | "cardiac" | "respiratory"` dimension. Dashboards can pivot voice success rate, colloquial-match rate, uncertainty rate by surface — important for the developer-alert thresholds (voice_success < 70% → parsing problem) which now apply per-category.
+- **i18n (en + hi)** — new `voice.glucose.*`, `voice.cardiac.*`, `voice.respiratory.*` namespaces for example hints + accessibility labels. The legacy top-level `voice.exampleHint` key is preserved (no other consumer reads it, but a soft-deprecate is safer than ripping it out). Hindi-first per CLAUDE.md.
+- **Verify gates** — `pnpm typecheck` ✅ (6/6) · `pnpm lint` ✅ (6/6) · purity ✅ (76 files) · 770 tests ✅ · `pnpm -r build` ✅. The two glucose-vs-numeric type assertions in the dispatch were trimmed to the minimum the discriminated union requires — only the glucose branch needs an explicit cast, the numeric branch is a structural supertype of the parse-result union.
 
 ### Feature E (chunk 6) — Cardiac + Respiratory voice parser (2026-06-06)
 
@@ -257,13 +269,13 @@ SOS real-call ramp stays operational (see checklist above). Feature E.1 chunk 1 
 
 Spec: `phase4.md §E.5` + `§E.2 (#3–#5)`.
 
-1. **Mobile voice integration** — the pure cardiac + respiratory voice parsers shipped in chunk 6, but `VoiceInputNative` is still hardcoded to `parseVoiceTranscript` (glucose-shaped result). Follow-up: parameterise `VoiceInput` / `VoiceInputNative` with a `mode` prop, dispatch to `parseCardiacVoiceTranscript` / `parseRespiratoryVoiceTranscript` based on the active `LogMode`, and adapt the result type to a discriminated union so cardiac/respiratory confirmation screens accept the parsed value.
+1. **Activity dashboard widget + Sleep dashboard widget** — placeholders until Feature I ships `ActivityDaily` + `SleepLog`.
 
-2. **Activity dashboard widget + Sleep dashboard widget** — placeholders until Feature I ships `ActivityDaily` + `SleepLog`.
-
-3. **Remaining pure modules** in `packages/domain-logic/src/`:
+2. **Remaining pure modules** in `packages/domain-logic/src/`:
    - `activity-aggregator/` — `dailyActivitySummary(logs)`. Coupled to Feature I (ActivityDaily) → naturally lands Week 19.
    - `sleep-quality-classifier/` — coupled to SleepLog → Week 19.
+
+3. **(Done 2026-06-07, chunk 7)** Mobile voice integration — cardiac + respiratory `VoiceInput` mode dispatch landed.
 
 4. **Cohort ramp** (operational):
    - Flip `cardiac_logging_enabled` for a ≤10-user internal cohort.

@@ -31,6 +31,9 @@ export interface ParsedRespiratoryInput {
 
 interface RespiratoryInputProps {
   onSubmit: (params: ParsedRespiratoryInput) => void;
+  // Phase 4 §E voice-integration follow-up: voice path seeds peak flow
+  // (e.g. "peak flow do sau"), user taps inhaler/severity afterward.
+  initialPeakFlow?: number;
 }
 
 type Field = "peakFlow" | "puffs";
@@ -41,9 +44,14 @@ const PUFFS_DIGIT_LIMIT = 2;
 
 const SEVERITY_OPTIONS: readonly SymptomSeverity[] = ["none", "mild", "moderate", "severe"];
 
-export const RespiratoryInput = ({ onSubmit }: RespiratoryInputProps): JSX.Element => {
+export const RespiratoryInput = ({
+  onSubmit,
+  initialPeakFlow,
+}: RespiratoryInputProps): JSX.Element => {
   const { t } = useTranslation();
-  const [peakFlow, setPeakFlow] = useState("");
+  const [peakFlow, setPeakFlow] = useState(
+    initialPeakFlow !== undefined ? String(initialPeakFlow) : "",
+  );
   const [severity, setSeverity] = useState<SymptomSeverity>("none");
   const [inhalerUsed, setInhalerUsed] = useState(false);
   const [puffs, setPuffs] = useState("");
