@@ -1,11 +1,12 @@
 import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
-// Workspace dep aliasing — shared-types' package.json `main` points at
-// `./dist/index.js` for production Node resolution, but tests want
-// source so a fresh checkout works without a prior build.
+// Workspace dep aliasing — package.json `main` points at `./dist/index.js`
+// for production Node resolution, but tests want source so a fresh
+// checkout (and the pre-push preflight) works without a prior build.
 const workspaceAliases = {
   "@swasth/shared-types": resolve(__dirname, "../shared-types/src/index.ts"),
+  "@swasth/test-factories": resolve(__dirname, "../test-factories/src/index.ts"),
 };
 
 /**
@@ -176,6 +177,21 @@ export default defineConfig({
           branches: 85,
           statements: 90,
         },
+        // Phase 4 Feature E — shared numeric voice parser. Same shape
+        // as glucose parser.ts (helpers duplicated by design — see the
+        // file-level comment); pinned at the matching floor. The 6.25%
+        // uncovered branch is the defensive non-standalone-retry path
+        // inside `containsAnyWord` — unreachable from any production
+        // transcript but kept for correctness.
+        "src/voice-parser/numeric-parser.ts": {
+          lines: 97,
+          functions: 100,
+          branches: 93,
+          statements: 97,
+        },
+        // Cardiac + respiratory voice wrappers are thin (one function
+        // call each) — they ride the shared numeric parser. No per-file
+        // ratchet beyond the directory-level aggregate.
         "src/feedback-engine/engine.ts": {
           lines: 95,
           functions: 100,

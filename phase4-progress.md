@@ -2,7 +2,7 @@
 
 > **Companion to `phase4.md`** (the original spec). This file tracks what's done, what's in flight, and what's next. Update on every merged PR. The spec stays canonical for HOW things should be built.
 >
-> Last updated: **2026-06-06** (Feature E mobile log surfaces — cardiac + respiratory input/confirm screens, services, flag-gated mode chooser, en+hi i18n).
+> Last updated: **2026-06-06** (Feature E voice parser — cardiac + respiratory Hindi/Hinglish/English transcript parsing via a shared numeric parser, fixtures in test-factories).
 
 ---
 
@@ -22,7 +22,7 @@
 | **SOS ramp** | 🟡 Code-complete, needs operational soak | Provision vendor creds → 7-day test-mode soak → first drill → flag flips |
 | **Push delivery hardening** | ✅ Diagnostic + auto-prune + per-user rate-limit keying landed (#113, #114, #112) | Verify the Expo token / projectId pairing in prod once #114 prunes the dead tokens |
 | **UI polish + dark mode + new settings** | ✅ Antigravity rollup (#117-121) cleaned up + shippable in #118 | Visual click-through on Light/Dark/System across all screens before EAS build |
-| **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + **mobile log surfaces** landed (2026-06-05 → 06); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + voice fixtures still pending | Voice fixtures + parser extension (small follow-up), Activity/Sleep schema for Feature I |
+| **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + mobile log surfaces + **voice parser** landed (2026-06-05 → 06); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + mobile-voice integration still pending | Mobile voice integration (wire `VoiceInput` to the new parsers), Activity/Sleep schema for Feature I |
 | **Feature F — Prescription OCR** | ❌ Not started (Week 15-16) | Spec is in `phase4.md §F.1`; needs Claude Vision spend cap wiring |
 | **Feature G — Doctor portal** | ❌ Not started (Week 17) | — |
 | **Feature H — Indian food DB** | ❌ Not started (Week 18) | — |
@@ -72,6 +72,20 @@ Earliest first within each cluster; most recent cluster last.
 - PR #112 (2026-05-31) — `defaultRateLimit` now keys per-userId when JWT verifiable, IP fallback otherwise. Defeats Indian carrier-NAT mass-throttling.
 - PR #113 (2026-05-31) — Surface Expo's `errors[].code` + `errors[].message` in admin UI instead of opaque `HTTP_400`.
 - PR #114 (2026-05-31) — Auto-prune push tokens that return `PushTooManyExperienceIds` or `MismatchSenderId` (was only `DeviceNotRegistered`).
+
+### Feature E (chunk 6) — Cardiac + Respiratory voice parser (2026-06-06)
+
+Pure-function voice parsers for the two new categories. The glucose parser stays byte-identical; this chunk adds a parallel `parseNumericVoiceTranscript` covering numeric-only surfaces (HR in bpm, peak flow in L/min) with no reading-type axis. Mobile integration into `VoiceInput` is intentionally deferred — UI ships in a follow-up so the parser can stabilise on its own first.
+
+- **`packages/domain-logic/src/voice-parser/dictionary.ts`** — new `CARDIAC_INTENT_KEYWORDS` ("dhadkan", "dil ki dhadkan", "dil", "pulse", "heart rate", "heartbeat", "heart") and `RESPIRATORY_INTENT_KEYWORDS` ("peak flow", "saans", "saans phoolti", "breath", "breathing", "asthma", "inhaler"). Glucose dictionary entries unchanged.
+- **`packages/domain-logic/src/voice-parser/numeric-parser.ts`** — shared `parseNumericVoiceTranscript({transcript, confidence, intentKeywords, validRange})`. Same gate sequence as the glucose parser (empty → no_number, negation → negated_intent, past-tense-without-present → past_tense_only, no intent → no_intent, no number → no_number, value outside range → out_of_range). Helpers (containsAnyWord, extractDigits, extractColloquial, rankCandidates) are deliberately duplicated from `parser.ts` rather than extracted — glucose is the safety-critical path that ships today; isolating new code keeps regressions from touching glucose. A future `chore/voice-helpers` extracts the common surface.
+- **The Hindi colloquial number dictionary IS shared** — "sava sau" still means 125 whether the patient is reporting glucose, HR, or peak flow.
+- **`packages/domain-logic/src/voice-parser/cardiac-voice.ts` + `respiratory-voice.ts`** — thin wrappers that call `parseNumericVoiceTranscript` with the category-specific intent keywords + the `*_VALID_MIN/MAX` constants from `@swasth/shared-types`. Each is one function call.
+- **Test fixtures `packages/test-factories/src/voice-transcript.fixtures.ts`** — new `CARDIAC_VOICE_FIXTURES` + `RESPIRATORY_VOICE_FIXTURES` (8 + 7 fixtures): explicit intent, colloquial Hindi, English variants, past-tense rejection, no-intent rejection, out-of-range, uncertainty hedging. New `NumericVoiceFixture` interface — the original `VoiceFixture` (glucose-shaped with `capturedAtHourLocal`) stays untouched.
+- **Tests — 48 new cases (24 per category)**: happy-path table tests with `it.each`, all rejection reasons, confirmation-flag plumbing (`requiresStrongConfirmation` on low confidence, `uncertaintyDetected` on hedge words), intent-ranking (numbers after intent keyword beat numbers before), fixture-compliance loops. All passing.
+- **Coverage ratchet pinned** in `vitest.config.ts`: `numeric-parser.ts` at 97% statements / 100% functions / 93% branches / 97% lines (the 7% uncovered branch is the defensive non-standalone-retry path inside `containsAnyWord` — unreachable from production transcripts, matches the glucose-parser baseline). Cardiac/respiratory wrappers are too thin to need their own per-file ratchet.
+- **Total domain-logic** now: 708 tests across 38 files (up from 660). Ratchets enforced.
+- **Verify gates** — `pnpm format:check` ✅ · `pnpm typecheck` ✅ (6/6) · `pnpm lint` ✅ (6/6) · `pnpm -r build` ✅ · 708 unit tests ✅.
 
 ### Feature E (chunk 5) — Mobile log surfaces for cardiac + respiratory (2026-06-06)
 
@@ -243,7 +257,7 @@ SOS real-call ramp stays operational (see checklist above). Feature E.1 chunk 1 
 
 Spec: `phase4.md §E.5` + `§E.2 (#3–#5)`.
 
-1. **Voice fixtures + parser extension** for "dil ki dhadkan 85" + "peak flow do sau" (lands in `packages/test-factories/src/voice-transcript.fixtures.ts`). Cardiac + respiratory log screens currently ship numpad-only — voice support is a small follow-up that extends `voice-parser.ts` with HR + peak-flow intent keywords and wires the existing `VoiceInput` component into the two new mode branches in `log.tsx`.
+1. **Mobile voice integration** — the pure cardiac + respiratory voice parsers shipped in chunk 6, but `VoiceInputNative` is still hardcoded to `parseVoiceTranscript` (glucose-shaped result). Follow-up: parameterise `VoiceInput` / `VoiceInputNative` with a `mode` prop, dispatch to `parseCardiacVoiceTranscript` / `parseRespiratoryVoiceTranscript` based on the active `LogMode`, and adapt the result type to a discriminated union so cardiac/respiratory confirmation screens accept the parsed value.
 
 2. **Activity dashboard widget + Sleep dashboard widget** — placeholders until Feature I ships `ActivityDaily` + `SleepLog`.
 
