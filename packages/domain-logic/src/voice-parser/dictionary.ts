@@ -57,3 +57,31 @@ export const POST_MEAL_KEYWORDS: readonly string[] = [
   "post-meal",
   "after meal",
 ];
+
+// ─────────────────────────────────────────────────────────────
+// Phase 4 Feature E — cardiac + respiratory voice intent keywords.
+// Mirrors the glucose `INTENT_KEYWORDS` shape: presence of any of
+// these grounds a number-in-the-transcript as the actual reading;
+// absence routes through "no_intent" rejection so a TV/radio number
+// without medical context is ignored (CLAUDE.md "Background Noise").
+// ─────────────────────────────────────────────────────────────
+
+export const CARDIAC_INTENT_KEYWORDS: readonly string[] = [
+  "dhadkan",
+  "dil ki dhadkan",
+  "dil",
+  "pulse",
+  "heart rate",
+  "heartbeat",
+  "heart",
+];
+
+export const RESPIRATORY_INTENT_KEYWORDS: readonly string[] = [
+  "peak flow",
+  "saans",
+  "saans phoolti",
+  "breath",
+  "breathing",
+  "asthma",
+  "inhaler",
+];
