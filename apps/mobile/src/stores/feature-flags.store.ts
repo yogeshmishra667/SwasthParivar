@@ -22,7 +22,11 @@ import { api } from "@/services/api";
 // Feature names mirror the server FEATURE_REGISTRY (CC.12.4). Only
 // BUILT features appear; Features C/D append `silent_guardian` / `sos`
 // here when they land.
-export type FeatureName = "ai_chat";
+//
+// Phase 4 Feature E — `cardiac_logging` and `respiratory_logging` gate
+// the two new mode buttons on the unified log tab. Default-off; a
+// patient outside the cohort never sees the unimplemented surface.
+export type FeatureName = "ai_chat" | "cardiac_logging" | "respiratory_logging";
 
 interface FeaturesEnvelope {
   success: boolean;

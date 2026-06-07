@@ -657,3 +657,64 @@ describe("POST /api/v1/readings/cardiac — unauthorised", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("POST /api/v1/readings/cardiac — ANALYZE_READING enqueue", () => {
+  it("every successful write enqueues an ANALYZE_READING job with category=cardiac", async () => {
+    const household = await prisma.household.create({ data: {} });
+    const user = await prisma.user.create({
+      data: {
+        phone: `+9198${Math.floor(10_000_000 + Math.random() * 89_999_999)}`,
+        name: "Analyze Cardiac",
+        age: 55,
+        householdId: household.id,
+        onboardingComplete: true,
+      },
+    });
+    const token = jwt.sign(
+      { sub: user.id, householdId: user.householdId },
+      process.env.JWT_SECRET!,
+      { expiresIn: "1h" },
+    );
+
+    const queueModule = await import("../../src/shared/queue.js");
+    const { Queue } = await import("bullmq");
+    const { Redis } = await import("ioredis");
+    const conn = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: null });
+    const probeQueue = new Queue(queueModule.QUEUE_NAMES.ANALYZE_READING, { connection: conn });
+
+    try {
+      const postRes = await request(app)
+        .post("/api/v1/readings/cardiac")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          clientUuid: randomUUID(),
+          heartRate: 78,
+          rhythmStatus: "regular",
+          chestPain: false,
+          exerciseTolerance: "normal",
+          source: "manual",
+          measuredAt: new Date().toISOString(),
+          version: 1,
+        });
+      expect(postRes.status).toBe(201);
+      const readingId = postRes.body.data.reading.id;
+
+      let foundJob = false;
+      for (let attempt = 0; attempt < 20 && !foundJob; attempt++) {
+        const jobs = await probeQueue.getJobs(
+          ["waiting", "active", "delayed", "completed"],
+          0,
+          100,
+        );
+        foundJob = jobs.some(
+          (j) => j.data?.category === "cardiac" && j.data?.readingId === readingId,
+        );
+        if (!foundJob) await new Promise((r) => setTimeout(r, 100));
+      }
+      expect(foundJob).toBe(true);
+    } finally {
+      await probeQueue.close();
+      await conn.quit();
+    }
+  }, 30_000);
+});

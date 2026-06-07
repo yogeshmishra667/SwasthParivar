@@ -21,6 +21,13 @@ import { NumpadInput } from "@/components/logging/NumpadInput";
 import { ConfirmationScreen } from "@/components/logging/ConfirmationScreen";
 import { BPInput } from "@/components/logging/BPInput";
 import { BPConfirmationScreen } from "@/components/logging/BPConfirmationScreen";
+import { CardiacInput, type ParsedCardiacInput } from "@/components/logging/CardiacInput";
+import { CardiacConfirmationScreen } from "@/components/logging/CardiacConfirmationScreen";
+import {
+  RespiratoryInput,
+  type ParsedRespiratoryInput,
+} from "@/components/logging/RespiratoryInput";
+import { RespiratoryConfirmationScreen } from "@/components/logging/RespiratoryConfirmationScreen";
 import { MealQuickLog } from "@/components/logging/MealQuickLog";
 import { CriticalAlert } from "@/components/logging/CriticalAlert";
 import { UndoToast } from "@/components/shared/UndoToast";
@@ -30,12 +37,15 @@ import { Icon } from "@/components/ui/Icon";
 import { api } from "@/services/api";
 import { saveGlucoseReading } from "@/services/readings";
 import { saveBPReading } from "@/services/bp";
+import { saveCardiacLog } from "@/services/cardiac";
+import { saveRespiratoryLog } from "@/services/respiratory";
 import { saveMealLog } from "@/services/meals";
 import { useActiveProfile } from "@/hooks/useActiveProfile";
+import { useFeatureEnabled } from "@/stores/feature-flags.store";
 import { hapticSave } from "@/utils/haptics";
 import { track } from "@/services/analytics";
 
-type LogMode = "glucose" | "bp" | "meal";
+type LogMode = "glucose" | "bp" | "meal" | "cardiac" | "respiratory";
 type Stage = "input" | "confirm" | "saved";
 type InputMethod = "voice" | "numpad";
 
@@ -75,6 +85,12 @@ export default function LogScreen(): JSX.Element {
   // BP
   const [parsedBP, setParsedBP] = useState<ParsedBP | null>(null);
 
+  // Cardiac + Respiratory (Phase 4 Feature E, flag-gated below)
+  const cardiacEnabled = useFeatureEnabled("cardiac_logging");
+  const respiratoryEnabled = useFeatureEnabled("respiratory_logging");
+  const [parsedCardiac, setParsedCardiac] = useState<ParsedCardiacInput | null>(null);
+  const [parsedRespiratory, setParsedRespiratory] = useState<ParsedRespiratoryInput | null>(null);
+
   // Shared post-save state
   const [undoVisible, setUndoVisible] = useState(false);
   const [savedOffline, setSavedOffline] = useState(false);
@@ -94,6 +110,8 @@ export default function LogScreen(): JSX.Element {
     setInputMethod("voice");
     setParsedGlucose(null);
     setParsedBP(null);
+    setParsedCardiac(null);
+    setParsedRespiratory(null);
     setLastReadingId(null);
     setStreakDays(0);
     setFeedbackMsg(null);
@@ -246,6 +264,125 @@ export default function LogScreen(): JSX.Element {
     }
   };
 
+  // ── Cardiac (Phase 4 Feature E) ────────────────────────────
+  const handleCardiacSubmit = (params: ParsedCardiacInput): void => {
+    setParsedCardiac(params);
+    setStage("confirm");
+  };
+
+  const saveCardiac = async (): Promise<void> => {
+    if (!parsedCardiac || !userId) return;
+    hapticSave();
+    setSaveError(null);
+    setSaving(true);
+    try {
+      const result = await saveCardiacLog({
+        userId,
+        heartRate: parsedCardiac.heartRate,
+        rhythmStatus: parsedCardiac.rhythmStatus,
+        chestPain: parsedCardiac.chestPain,
+        ...(parsedCardiac.painSeverity !== undefined
+          ? { painSeverity: parsedCardiac.painSeverity }
+          : {}),
+        exerciseTolerance: parsedCardiac.exerciseTolerance,
+        source: "manual",
+        measuredAtIso: new Date().toISOString(),
+      });
+
+      if (result.kind === "synced") {
+        setSavedOffline(false);
+        if (result.critical.isCritical) {
+          // Heart-rate-driven bypass routes through the same fullscreen
+          // alert primitive as glucose; the contact targeting is
+          // server-side (CRITICAL_ALERT job already enqueued).
+          track("critical_bypass_triggered", {
+            value: parsedCardiac.heartRate,
+            surface: "cardiac",
+          });
+        }
+        setSavedSummary({
+          headline: `${result.heartRate} ${t("cardiac.bpm")}`,
+          detail: t("cardiac.saved"),
+        });
+        setStage("saved");
+        return;
+      }
+      if (result.kind === "queued") {
+        setSavedOffline(true);
+        setSavedSummary({
+          headline: `${parsedCardiac.heartRate} ${t("cardiac.bpm")}`,
+          detail: t("cardiac.savedOffline"),
+        });
+        setStage("saved");
+        return;
+      }
+      if (result.code === "CARDIAC_DISABLED") {
+        setSaveError(t("cardiac.disabled"));
+        return;
+      }
+      setSaveError(t("cardiac.saveFailed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Respiratory (Phase 4 Feature E) ────────────────────────
+  const handleRespiratorySubmit = (params: ParsedRespiratoryInput): void => {
+    setParsedRespiratory(params);
+    setStage("confirm");
+  };
+
+  const saveRespiratory = async (): Promise<void> => {
+    if (!parsedRespiratory || !userId) return;
+    hapticSave();
+    setSaveError(null);
+    setSaving(true);
+    try {
+      const result = await saveRespiratoryLog({
+        userId,
+        ...(parsedRespiratory.peakFlow !== undefined
+          ? { peakFlow: parsedRespiratory.peakFlow }
+          : {}),
+        inhalerUsed: parsedRespiratory.inhalerUsed,
+        ...(parsedRespiratory.puffs !== undefined ? { puffs: parsedRespiratory.puffs } : {}),
+        symptomSeverity: parsedRespiratory.symptomSeverity,
+        source: "manual",
+        measuredAtIso: new Date().toISOString(),
+      });
+
+      const headline =
+        parsedRespiratory.peakFlow !== undefined
+          ? `${parsedRespiratory.peakFlow} ${t("respiratory.lMin")}`
+          : t(`respiratory.symptom.${parsedRespiratory.symptomSeverity}`);
+
+      if (result.kind === "synced") {
+        setSavedOffline(false);
+        if (result.critical.isCritical) {
+          track("critical_bypass_triggered", {
+            value: parsedRespiratory.peakFlow ?? 0,
+            surface: "respiratory",
+          });
+        }
+        setSavedSummary({ headline, detail: t("respiratory.saved") });
+        setStage("saved");
+        return;
+      }
+      if (result.kind === "queued") {
+        setSavedOffline(true);
+        setSavedSummary({ headline, detail: t("respiratory.savedOffline") });
+        setStage("saved");
+        return;
+      }
+      if (result.code === "RESPIRATORY_DISABLED") {
+        setSaveError(t("respiratory.disabled"));
+        return;
+      }
+      setSaveError(t("respiratory.saveFailed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // ── Meal ───────────────────────────────────────────────────
   const saveMeal = async (params: {
     mealType: MealType;
@@ -322,6 +459,43 @@ export default function LogScreen(): JSX.Element {
         diastolic={parsedBP.diastolic}
         {...(parsedBP.pulse !== undefined ? { pulse: parsedBP.pulse } : {})}
         onConfirm={() => void saveBP()}
+        onEdit={() => {
+          setSaveError(null);
+          setStage("input");
+        }}
+      />
+    );
+  }
+
+  if (stage === "confirm" && mode === "cardiac" && parsedCardiac) {
+    return (
+      <CardiacConfirmationScreen
+        heartRate={parsedCardiac.heartRate}
+        rhythmStatus={parsedCardiac.rhythmStatus}
+        chestPain={parsedCardiac.chestPain}
+        {...(parsedCardiac.painSeverity !== undefined
+          ? { painSeverity: parsedCardiac.painSeverity }
+          : {})}
+        exerciseTolerance={parsedCardiac.exerciseTolerance}
+        onConfirm={() => void saveCardiac()}
+        onEdit={() => {
+          setSaveError(null);
+          setStage("input");
+        }}
+      />
+    );
+  }
+
+  if (stage === "confirm" && mode === "respiratory" && parsedRespiratory) {
+    return (
+      <RespiratoryConfirmationScreen
+        {...(parsedRespiratory.peakFlow !== undefined
+          ? { peakFlow: parsedRespiratory.peakFlow }
+          : {})}
+        inhalerUsed={parsedRespiratory.inhalerUsed}
+        {...(parsedRespiratory.puffs !== undefined ? { puffs: parsedRespiratory.puffs } : {})}
+        symptomSeverity={parsedRespiratory.symptomSeverity}
+        onConfirm={() => void saveRespiratory()}
         onEdit={() => {
           setSaveError(null);
           setStage("input");
@@ -436,9 +610,12 @@ export default function LogScreen(): JSX.Element {
   }
 
   // ── Input stage ───────────────────────────────────────────
-  // Mode chooser row — shared header for all three modes.
+  // Mode chooser row — shared header. Cardiac + respiratory only
+  // appear when their per-user rollout flag returns true; a patient
+  // outside the cohort sees the original 3-button layout, byte-
+  // identical to Phase 2.
   const modeChooser = (
-    <View className="flex-row gap-2 px-4 pb-3">
+    <View className="flex-row flex-wrap gap-2 px-4 pb-3">
       <View className="flex-1">
         <Button
           label={t("log.modeGlucose")}
@@ -460,6 +637,24 @@ export default function LogScreen(): JSX.Element {
           onPress={() => switchMode("meal")}
         />
       </View>
+      {cardiacEnabled && (
+        <View className="flex-1">
+          <Button
+            label={t("log.modeCardiac")}
+            variant={mode === "cardiac" ? "primary" : "ghost"}
+            onPress={() => switchMode("cardiac")}
+          />
+        </View>
+      )}
+      {respiratoryEnabled && (
+        <View className="flex-1">
+          <Button
+            label={t("log.modeRespiratory")}
+            variant={mode === "respiratory" ? "primary" : "ghost"}
+            onPress={() => switchMode("respiratory")}
+          />
+        </View>
+      )}
     </View>
   );
 
@@ -534,6 +729,10 @@ export default function LogScreen(): JSX.Element {
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}>
         {mode === "bp" ? (
           <BPInput onSubmit={handleBPSubmit} />
+        ) : mode === "cardiac" ? (
+          <CardiacInput onSubmit={handleCardiacSubmit} />
+        ) : mode === "respiratory" ? (
+          <RespiratoryInput onSubmit={handleRespiratorySubmit} />
         ) : (
           <MealQuickLog onSave={(p) => void saveMeal(p)} saving={saving} />
         )}

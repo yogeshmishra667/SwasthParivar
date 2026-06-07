@@ -20,6 +20,14 @@ import type { FeatureConfigResponse } from "./config.types.js";
  */
 const FEATURE_REGISTRY: Readonly<Record<string, string>> = {
   ai_chat: "ai_chat_enabled",
+  // Phase 4 Feature E — multi-condition log surfaces. The mobile log
+  // tab gates the cardiac / respiratory mode buttons on these values so
+  // a patient outside the cohort never sees an unimplemented surface.
+  // Server-side write paths gate on the same flag (the kill-switch in
+  // each module's service), so flipping the flag at runtime turns the
+  // feature off both in the UI and the API in lockstep.
+  cardiac_logging: "cardiac_logging_enabled",
+  respiratory_logging: "respiratory_logging_enabled",
 };
 
 export const resolveFeatures = async (userId: string): Promise<FeatureConfigResponse> => {

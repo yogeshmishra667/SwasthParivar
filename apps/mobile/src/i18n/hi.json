@@ -251,7 +251,91 @@
   "log": {
     "modeGlucose": "Sugar",
     "modeBp": "BP",
-    "modeMeal": "Khana"
+    "modeMeal": "Khana",
+    "modeCardiac": "Dil",
+    "modeRespiratory": "Saans"
+  },
+  "cardiac": {
+    "title": "Dil ki dhadkan log karein",
+    "heartRate": "Dhadkan",
+    "bpm": "bpm",
+    "rhythm": {
+      "label": "Dhadkan ki taal",
+      "regular": "Normal",
+      "irregular": "Anaaapaki",
+      "unknown": "Pata nahi"
+    },
+    "chestPain": {
+      "label": "Seene mein dard?",
+      "yes": "Haan",
+      "no": "Nahi"
+    },
+    "painSeverity": {
+      "label": "Dard ki teevrata",
+      "scale": "/ 10"
+    },
+    "exerciseTolerance": {
+      "label": "Aaj ki taakat",
+      "normal": "Normal",
+      "reduced": "Jaldi thakte hain",
+      "severe": "Bahut thakte hain"
+    },
+    "saved": "Dil ki reading save ho gayi",
+    "savedOffline": "Locally save ho gaya — sync hone par update hoga.",
+    "saveFailed": "Save nahi ho paya — dobara try karein.",
+    "disabled": "Dil ka log abhi available nahi hai.",
+    "rangeHint": "Dhadkan: 30-250 bpm",
+    "classification": {
+      "critical": "Bahut zaroori — turant doctor ko call karein.",
+      "warn": "Dhyaan dein — aaram karein.",
+      "critical.hr_low": "Dhadkan bahut kam — turant doctor ko call karein.",
+      "critical.hr_high": "Dhadkan bahut tez — aaram karein, doctor ko call karein.",
+      "critical.chest_pain_severe": "Seene mein bahut dard — turant hospital jayein ya 108 dial karein.",
+      "warn.hr_borderline_low": "Dhadkan thodi kam — aaram karein, dobara check karein.",
+      "warn.hr_borderline_high": "Dhadkan thodi tez — aaram karein, dobara check karein.",
+      "warn.chest_pain": "Seene mein dard — dhyaan rakhein, badhne par doctor ko call karein.",
+      "warn.rhythm_irregular": "Dhadkan anaaapaki — agle doctor visit mein bataayein.",
+      "warn.exercise_intolerance": "Aaj zyada thakaan — kuch din track karein."
+    }
+  },
+  "respiratory": {
+    "title": "Saans ki reading log karein",
+    "peakFlow": "Peak flow",
+    "lMin": "L/min",
+    "percentOfBaseline": "(best ka {{percent}}%)",
+    "symptom": {
+      "label": "Takleef",
+      "none": "Koi nahi",
+      "mild": "Halki",
+      "moderate": "Madhyam",
+      "severe": "Bahut"
+    },
+    "inhaler": {
+      "label": "Inhaler liya?",
+      "yes": "Haan",
+      "no": "Nahi"
+    },
+    "puffs": {
+      "label": "Puffs",
+      "unit": "puff",
+      "unit_plural": "puffs"
+    },
+    "needsSignal": "Peak flow, inhaler ya symptom mein se ek zaroori hai.",
+    "saved": "Saans ki reading save ho gayi",
+    "savedOffline": "Locally save ho gaya — sync hone par update hoga.",
+    "saveFailed": "Save nahi ho paya — dobara try karein.",
+    "disabled": "Saans ka log abhi available nahi hai.",
+    "rangeHint": "Peak flow: 50-800 L/min",
+    "classification": {
+      "critical": "Bahut zaroori — turant doctor ko call karein.",
+      "warn": "Dhyaan dein — inhaler paas rakhein.",
+      "critical.peak_flow_red_zone": "Peak flow red zone mein — inhaler lein aur doctor ko call karein.",
+      "critical.symptom_severe": "Saans mein bahut takleef — turant hospital jayein ya 108 dial karein.",
+      "warn.peak_flow_yellow_zone": "Peak flow yellow zone mein — inhaler lein, dhyaan rakhein.",
+      "warn.symptom_moderate": "Madhyam takleef — aaram karein, dhyaan rakhein.",
+      "warn.symptom_mild": "Halki takleef — dhyaan rakhein.",
+      "warn.inhaler_used": "Inhaler liya — hafte mein kitni baar, track karein."
+    }
   },
   "bp": {
     "title": "BP log karein",

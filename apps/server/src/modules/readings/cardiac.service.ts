@@ -11,8 +11,10 @@ import type {
   CriticalAlertJob,
   CriticalAlertMultiCategoryJob,
 } from "../../workers/critical-alert.processor.js";
+import type { AnalyzeReadingJob } from "../../workers/analyze-reading.processor.js";
 
 const criticalQueue = createQueue<CriticalAlertJob>(QUEUE_NAMES.CRITICAL_ALERT);
+const analyzeQueue = createQueue<AnalyzeReadingJob>(QUEUE_NAMES.ANALYZE_READING);
 
 interface CreateCardiacInput {
   userId: string;
@@ -201,6 +203,19 @@ export const createCardiacLog = async (input: CreateCardiacInput): Promise<Creat
       await markBypassed("cardiac", input.userId, new Date().toISOString());
     }
   }
+
+  // Phase 4 §E follow-up — ANALYZE_READING enqueue parity with glucose.
+  // Runs detectCardiacTrend across 5/14/30-day windows in the worker;
+  // the window-pattern de-dup pass in the processor collapses repeats
+  // within 24h so an idempotent replay (same clientUuid) does not
+  // double-publish an insight card. 3 retries + exp backoff come from
+  // queue defaults.
+  await analyzeQueue.add("analyze", {
+    category: "cardiac",
+    readingId: reading.id,
+    userId: input.userId,
+    ...(input.requestId ? { requestId: input.requestId } : {}),
+  });
 
   return {
     reading,
