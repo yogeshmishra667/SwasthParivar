@@ -510,7 +510,19 @@
     "statusNoPermission": "Microphone permission chahiye — settings me allow karein.",
     "statusError": "Voice mein dikkat hai — numpad use karein.",
     "exampleHint": "Boliye: \"sugar 120\" ya \"meri sugar ek sau bees hai\"",
-    "devBuildRequired": "Voice ke liye dev build chahiye — abhi numpad use karein."
+    "devBuildRequired": "Voice ke liye dev build chahiye — abhi numpad use karein.",
+    "glucose": {
+      "exampleHint": "Boliye: \"sugar 120\" ya \"meri sugar ek sau bees hai\"",
+      "accessibilityLabel": "Sugar reading bolne ke liye tap karein"
+    },
+    "cardiac": {
+      "exampleHint": "Boliye: \"dil ki dhadkan pachasi\" ya \"heart rate 80\"",
+      "accessibilityLabel": "Dil ki dhadkan bolne ke liye tap karein"
+    },
+    "respiratory": {
+      "exampleHint": "Boliye: \"peak flow teen sau\" ya \"peak flow 300\"",
+      "accessibilityLabel": "Peak flow bolne ke liye tap karein"
+    }
   },
   "sync": {
     "draining": "Sync ho raha hai..."

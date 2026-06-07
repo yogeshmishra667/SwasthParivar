@@ -1,15 +1,30 @@
 import { useEffect, useState, type ComponentType } from "react";
 import { View, Text, Pressable, Platform } from "react-native";
 import { useTranslation } from "react-i18next";
-import type { VoiceParseResult } from "@swasth/domain-logic";
+import type { NumericVoiceParseResult, VoiceParseResult } from "@swasth/domain-logic";
 import { Icon } from "@/components/ui/Icon";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 import { isExpoGo } from "@/utils/runtime";
 
-interface VoiceInputProps {
-  onParsed: (result: VoiceParseResult) => void;
-  onFail: () => void;
-}
+// Phase 4 Feature E — VoiceInput now multiplexes across glucose, cardiac,
+// and respiratory log surfaces. The result shape is discriminated over
+// `mode`: glucose carries the existing reading-type axis, cardiac and
+// respiratory carry a plain numeric value (HR or peak flow). Consumers
+// pass the mode they're in; the runtime dispatches to the matching pure
+// parser in `@swasth/domain-logic`.
+export type VoiceInputMode = "glucose" | "cardiac" | "respiratory";
+
+export type VoiceInputProps =
+  | {
+      mode: "glucose";
+      onParsed: (result: VoiceParseResult) => void;
+      onFail: () => void;
+    }
+  | {
+      mode: "cardiac" | "respiratory";
+      onParsed: (result: NumericVoiceParseResult) => void;
+      onFail: () => void;
+    };
 
 // `expo-speech-recognition` uses `requireNativeModule` at import time.
 // In Expo Go on Android the native module isn't present and the import
@@ -17,7 +32,7 @@ interface VoiceInputProps {
 // runtime supports it (any custom dev build, or Expo Go on iOS).
 const voiceUnavailable = isExpoGo && Platform.OS === "android";
 
-const VoiceUnavailable = ({ onFail }: VoiceInputProps): JSX.Element => {
+const VoiceUnavailable = ({ onFail }: { onFail: () => void }): JSX.Element => {
   const { t } = useTranslation();
   // Auto-fall back so the screen lands on numpad without an extra tap.
   useEffect(() => {
@@ -60,7 +75,7 @@ export const VoiceInput = (props: VoiceInputProps): JSX.Element => {
     };
   }, []);
 
-  if (voiceUnavailable) return <VoiceUnavailable {...props} />;
+  if (voiceUnavailable) return <VoiceUnavailable onFail={props.onFail} />;
   if (!Native) {
     return (
       <View className="items-center gap-3">
