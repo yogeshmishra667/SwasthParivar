@@ -23,6 +23,7 @@
 | **Push delivery hardening** | ✅ Diagnostic + auto-prune + per-user rate-limit keying landed (#113, #114, #112) | Verify the Expo token / projectId pairing in prod once #114 prunes the dead tokens |
 | **UI polish + dark mode + new settings** | ✅ Antigravity rollup (#117-121) cleaned up + shippable in #118 | Visual click-through on Light/Dark/System across all screens before EAS build |
 | **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + mobile log surfaces + voice parser + **mobile-voice integration** landed (2026-06-05 → 07); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + cohort flag-ramp still pending | Cohort flag-ramp (`cardiac_logging_enabled` / `respiratory_logging_enabled`), Activity/Sleep schema for Feature I |
+| **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + mobile log surfaces + **voice parser** landed (2026-06-05 → 06); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + mobile-voice integration still pending. Cohort ramp runbook: `docs/runbooks/feature-e-cohort-ramp.md` | Mobile voice integration (wire `VoiceInput` to the new parsers), Activity/Sleep schema for Feature I, then operational cohort ramp per the runbook |
 | **Feature F — Prescription OCR** | ❌ Not started (Week 15-16) | Spec is in `phase4.md §F.1`; needs Claude Vision spend cap wiring |
 | **Feature G — Doctor portal** | ❌ Not started (Week 17) | — |
 | **Feature H — Indian food DB** | ❌ Not started (Week 18) | — |
@@ -244,6 +245,40 @@ Mobile UX polish + the remaining Phase 1 audit item closed:
 - [ ] Rotate any access token that was pasted in chat or stored in plaintext outside `.env` / secret store.
 - [ ] After PR #114 auto-prunes broken tokens, reinstall the mobile app on each affected device so a clean token gets registered against the current `projectId`.
 - [ ] Run admin "Send test push" against a fresh install — expect 200 with `success_count > 0`.
+
+### Feature E cohort ramp checklist
+
+Runbook: `docs/runbooks/feature-e-cohort-ramp.md`. Run the cardiac
+ramp and the respiratory ramp in sequence, not parallel — a regression
+in shared infra (critical-bypass chain, ANALYZE_READING worker, voice
+parser dispatch) would taint both soak datasets and force a restart.
+
+**Cardiac (`cardiac_logging_enabled`)**
+
+- [ ] Stage 1 — Internal smoke (1 ops user, 24h). PostHog gates:
+      `critical_bypass_triggered{surface=cardiac}` = 0,
+      `fail_safe_triggered{scenario LIKE 'cardiac%'}` = 0.
+- [ ] Stage 2 — Internal cohort (≤ 10 users with `cardiac` condition,
+      7d). Zero false-alarm bypass rows. Zero new Sentry P1s tagged
+      `category:cardiac`.
+- [ ] Stage 3 — Percentage ramp: 5% → 25% → 50% → 100%, holding 24-48h
+      between each step. Any false-alarm row → flip back to the
+      previous percentage immediately.
+
+**Respiratory (`respiratory_logging_enabled`)**
+
+- [ ] Stage 1 — Internal smoke (1 ops user with asthma or COPD, 24h).
+      Same PostHog gates with `surface=respiratory`.
+- [ ] Stage 2 — Internal cohort (≤ 10 users, 7d). Same acceptance
+      criteria as cardiac stage 2.
+- [ ] Stage 3 — Percentage ramp: same step sizes and hold times as
+      cardiac stage 3.
+
+Both ramps share the kill-switch: `PUT /admin/flags/<key>` back to
+`{"value": false}` immediately turns the surface off at the server
+(`CARDIAC_DISABLED` / `RESPIRATORY_DISABLED`, 503) and the mobile
+client renders the disabled copy from `cardiac.disabled` /
+`respiratory.disabled` i18n keys.
 
 ### Emergency contacts go-live
 
