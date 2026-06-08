@@ -280,6 +280,67 @@ enum SOSEscalationStage {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Phase 4 Feature F — Prescription OCR enums
+// ─────────────────────────────────────────────────────────────
+
+// Lifecycle of a Prescription row. `pending_ocr` is the post-upload
+// state; the PRESCRIPTION_OCR job transitions it to `pending_approval`
+// (or `partial` if some items land in need_clarification). `approved`
+// is terminal-positive — `MedicationSchedule` rows have been created.
+// `rejected` is terminal-negative; the row is retained per DPDP. See
+// phase4.md §F.4 for the full state machine.
+enum PrescriptionStatus {
+  pending_ocr
+  pending_approval
+  partial
+  approved
+  rejected
+}
+
+// Per-item color classification, output of
+// `prescription-color-classifier`. Drives the mobile UI banner and the
+// approve-button friction level. See phase4.md §F.6 for the rules and
+// CLAUDE.md "Prescription OCR Approval Flow".
+enum PrescriptionItemColor {
+  red
+  yellow
+  green
+  need_clarification
+}
+
+// Item-level state. `need_clarification` items are PARKED (not silently
+// dropped) until the approver supplies a bottle photo or typed name.
+// `needs_doctor` is terminal — never auto-creates a MedicationSchedule.
+enum PrescriptionItemStatus {
+  pending
+  need_clarification
+  approved
+  rejected
+  needs_doctor
+}
+
+// Cross-check status between a prescription line (Pass A) and a paired
+// medicine bottle photo (Pass B). `not_attempted` covers the no-bottle
+// case so GREEN is unreachable without a bottle photo.
+enum MedicineMatchStatus {
+  match
+  mismatch
+  unclear
+  not_attempted
+}
+
+// When a MedicinePhoto was captured relative to the prescription
+// lifecycle. `initial_upload` is the paired-upload moment;
+// `mid_approval_clarification` is the approver-side reupload from
+// /clarify; `post_schedule_routine_check` is the CLAUDE.md
+// already-have-a-schedule flow that fires MEDICINE_PHOTO_CROSS_CHECK.
+enum MedicinePhotoUploadContext {
+  initial_upload
+  mid_approval_clarification
+  post_schedule_routine_check
+}
+
+// ─────────────────────────────────────────────────────────────
 // Users & Household (Phase 1)
 // ─────────────────────────────────────────────────────────────
 
@@ -362,6 +423,10 @@ model User {
   // Phase 4 Feature D' — SOS events. Always patient-side; the
   // guardian is reached via EmergencyContact / FamilyLink dispatch.
   sosEvents              SOSEvent[]
+  // Phase 4 Feature F — Prescription uploads. Always patient-side
+  // (the guardian approves but doesn't own the row). Guardian access
+  // is via the household join, not a separate relation.
+  prescriptions          Prescription[]
 
   @@index([householdId])
   // Admin "show deactivated users" filter — partial-like coverage via
@@ -689,8 +754,14 @@ model MedicationSchedule {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
-  user User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  logs MedicationLog[]
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs              MedicationLog[]
+  // Phase 4 Feature F — A schedule can be backfilled by an approved
+  // PrescriptionItem (item drives the create on approve); medicine
+  // bottle photos attached post-schedule support the routine
+  // cross-check flow (MEDICINE_PHOTO_CROSS_CHECK).
+  prescriptionItems PrescriptionItem[]
+  medicinePhotos    MedicinePhoto[]
 
   @@index([userId, active])
   @@map("medication_schedules")
@@ -1096,6 +1167,150 @@ model SOSEvent {
   // Test-mode audit — ops grep "what fired in test mode this week".
   @@index([testMode, triggeredAt(sort: Desc)])
   @@map("sos_events")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Phase 4 Feature F — Prescription OCR
+//
+// Trust model is "AI suggests, guardian decides" — see CLAUDE.md
+// "Prescription OCR Approval Flow" and phase4.md §F.2. Every Vision
+// call + every approver tap is appended to `aiSuggestionHistory` for a
+// full replayable audit trail (same philosophy as PaymentEvent
+// raw payload). Schema is a hand-write; OCR / classifier / approver
+// routes ship in later F.* chunks.
+// ─────────────────────────────────────────────────────────────
+
+model Prescription {
+  id                       String             @id @default(uuid()) @db.Uuid
+  userId                   String             @map("user_id") @db.Uuid
+  // Optional link to a `DoctorProfile` row (Feature G, Week 17). Plain
+  // string so this schema lands before doctor-portal models exist;
+  // Feature G adds the relation + FK in a follow-up migration.
+  doctorId                 String?            @map("doctor_id") @db.Uuid
+  originalPhotoUrls        String[]           @map("original_photo_urls")
+  // Full Vision response retained for audit. Pass A + Pass B + every
+  // clarification pass are all recorded here verbatim — the per-item
+  // history in `PrescriptionItem.aiSuggestionHistory` is the
+  // approver-facing slice; this column is the raw bag.
+  ocrRawResult             Json               @default("{}") @map("ocr_raw_result")
+  status                   PrescriptionStatus @default(pending_ocr)
+  // Approver-resolution snapshot. Computed at upload time via
+  // `prescription-approver-resolver` (phase4.md §F.6) and IMMUTABLE
+  // afterwards: a guardian being removed mid-approval must not flip
+  // authority back to the elderly patient. See CLAUDE.md "Approval
+  // authority: guardian-primary".
+  requiresGuardianApproval Boolean            @map("requires_guardian_approval")
+  approvedBy               String?            @map("approved_by") @db.Uuid
+  approvedAt               DateTime?          @map("approved_at")
+  // When the guardian-approval push was sent — drives the "Maa ji ne
+  // bheja, abhi tak nahi dekha" SG signal.
+  approvalRequestedAt      DateTime?          @map("approval_requested_at")
+  approvalCompletedAt      DateTime?          @map("approval_completed_at")
+  rejectedAt               DateTime?          @map("rejected_at")
+  rejectionReason          String?            @map("rejection_reason")
+  prescribedDate           DateTime?          @map("prescribed_date")
+  createdAt                DateTime           @default(now()) @map("created_at")
+  updatedAt                DateTime           @updatedAt @map("updated_at")
+
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items          PrescriptionItem[]
+  medicinePhotos MedicinePhoto[]
+
+  // List newest-first per patient — the dominant read path for the
+  // approver queue and the patient-side "my prescriptions" screen.
+  @@index([userId, createdAt(sort: Desc)])
+  // Approver queue ("everything still waiting on me") scans by status.
+  @@index([status])
+  @@map("prescriptions")
+}
+
+model PrescriptionItem {
+  id                     String                 @id @default(uuid()) @db.Uuid
+  prescriptionId         String                 @map("prescription_id") @db.Uuid
+  // OCR Pass A output — verbatim what Vision read. Kept even after the
+  // approver corrects to support the replay-the-decision audit case.
+  ocrMedicineName        String                 @map("ocr_medicine_name")
+  ocrDosage              String                 @map("ocr_dosage")
+  ocrFrequency           String                 @map("ocr_frequency")
+  ocrConfidence          Float                  @map("ocr_confidence")
+  // Top-N alternate readings from Vision (`[{name, confidence}, …]`).
+  // Used by the approver UI when the highest-confidence guess looks
+  // wrong — one tap to swap in an alternative.
+  ocrAlternatives        Json?                  @map("ocr_alternatives")
+  ocrColor               PrescriptionItemColor  @map("ocr_color")
+  status                 PrescriptionItemStatus @default(pending)
+  // Verified-by-approver fields — null until the approver taps approve
+  // with corrections. Only the verified columns are read by the
+  // `MedicationSchedule` create step on approve.
+  verifiedMedicineName   String?                @map("verified_medicine_name")
+  verifiedDosage         String?                @map("verified_dosage")
+  verifiedFrequency      String?                @map("verified_frequency")
+  medicationScheduleId   String?                @map("medication_schedule_id") @db.Uuid
+  approvedByUserId       String?                @map("approved_by_user_id") @db.Uuid
+  approvedAt             DateTime?              @map("approved_at")
+  // Diff vs the AI's suggestion at approval time — populated only when
+  // the approver actually changed something. Same shape as
+  // `aiSuggestionHistory` entries so dashboards can fold both views.
+  approverCorrections    Json?                  @map("approver_corrections")
+  approverNote           String?                @map("approver_note")
+  // The MedicinePhoto rows that informed Pass-B reconciliation for
+  // this item at OCR time. Kept as a UUID array (not an FK relation)
+  // because a photo can match multiple items and ordering matters for
+  // the replay UI.
+  pairedMedicinePhotoIds String[]               @map("paired_medicine_photo_ids") @db.Uuid
+  // Append-only audit array. Each entry:
+  //   { at, by, source, payload }
+  //   source ∈ vision_pass_a | vision_pass_b
+  //            | vision_clarification_pass | approver_correction
+  //            | approver_added
+  // Same philosophy as PaymentEvent.rawPayload — ops can replay
+  // exactly which photo + which AI pass + which approver tap produced
+  // the cabinet contents three months later.
+  aiSuggestionHistory    Json                   @default("[]") @map("ai_suggestion_history")
+  // Counts up by /clarify; gate to terminal `needs_doctor` after 3
+  // failed clarifications (CLAUDE.md "Up to 3 clarification attempts").
+  clarificationAttempts  Int                    @default(0) @map("clarification_attempts")
+  createdAt              DateTime               @default(now()) @map("created_at")
+  updatedAt              DateTime               @updatedAt @map("updated_at")
+
+  prescription       Prescription        @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  medicationSchedule MedicationSchedule? @relation(fields: [medicationScheduleId], references: [id], onDelete: SetNull)
+
+  @@index([prescriptionId])
+  @@index([status])
+  // "Items the approver still needs to look at" scan — paired with
+  // the prescription join in the queue endpoint.
+  @@index([prescriptionId, status])
+  @@map("prescription_items")
+}
+
+model MedicinePhoto {
+  id                   String                     @id @default(uuid()) @db.Uuid
+  // Both refs are nullable so a photo can be attached at upload time
+  // BEFORE any item exists (Pass B runs against unreconciled photos)
+  // OR after a schedule exists (post_schedule_routine_check). The
+  // service layer enforces the invariants per phase4.md §F.5.
+  prescriptionId       String?                    @map("prescription_id") @db.Uuid
+  prescriptionItemId   String?                    @map("prescription_item_id") @db.Uuid
+  medicationScheduleId String?                    @map("medication_schedule_id") @db.Uuid
+  photoUrl             String                     @map("photo_url")
+  // Output of Vision Pass B or MEDICINE_PHOTO_CROSS_CHECK.
+  aiReadName           String?                    @map("ai_read_name")
+  matchStatus          MedicineMatchStatus        @default(not_attempted) @map("match_status")
+  matchConfidence      Float                      @default(0) @map("match_confidence")
+  verified             Boolean                    @default(false)
+  uploadedAt           MedicinePhotoUploadContext @default(initial_upload) @map("uploaded_at")
+  createdAt            DateTime                   @default(now()) @map("created_at")
+
+  prescription       Prescription?       @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  medicationSchedule MedicationSchedule? @relation(fields: [medicationScheduleId], references: [id], onDelete: Cascade)
+
+  // Photo lookup by prescription is the dominant pattern for both the
+  // approver queue and the OCR worker pulling Pass-B inputs.
+  @@index([prescriptionId])
+  @@index([prescriptionItemId])
+  @@index([medicationScheduleId])
+  @@map("medicine_photos")
 }
 
 // ─────────────────────────────────────────────────────────────

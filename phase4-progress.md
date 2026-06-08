@@ -2,7 +2,7 @@
 
 > **Companion to `phase4.md`** (the original spec). This file tracks what's done, what's in flight, and what's next. Update on every merged PR. The spec stays canonical for HOW things should be built.
 >
-> Last updated: **2026-06-07** (Feature E chunk 7 — mobile voice integration: cardiac + respiratory `VoiceInput` mode dispatch, pre-fill flow on tap form, per-mode contextual strings + i18n).
+> Last updated: **2026-06-07** (Feature F chunk 1 — Prescription / PrescriptionItem / MedicinePhoto schema + 5 new enums + audit-trail columns landed; OCR worker / classifier / approver routes deferred to F.2+).
 
 ---
 
@@ -24,7 +24,7 @@
 | **UI polish + dark mode + new settings** | ✅ Antigravity rollup (#117-121) cleaned up + shippable in #118 | Visual click-through on Light/Dark/System across all screens before EAS build |
 | **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + mobile log surfaces + voice parser + **mobile-voice integration** landed (2026-06-05 → 07); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + cohort flag-ramp still pending | Cohort flag-ramp (`cardiac_logging_enabled` / `respiratory_logging_enabled`), Activity/Sleep schema for Feature I |
 | **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + mobile log surfaces + **voice parser** landed (2026-06-05 → 06); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + mobile-voice integration still pending. Cohort ramp runbook: `docs/runbooks/feature-e-cohort-ramp.md` | Mobile voice integration (wire `VoiceInput` to the new parsers), Activity/Sleep schema for Feature I, then operational cohort ramp per the runbook |
-| **Feature F — Prescription OCR** | ❌ Not started (Week 15-16) | Spec is in `phase4.md §F.1`; needs Claude Vision spend cap wiring |
+| **Feature F — Prescription OCR** | 🟡 In progress — schema chunk 1 landed (2026-06-07): `Prescription` + `PrescriptionItem` + `MedicinePhoto` models + 5 new enums + audit-trail columns (`aiSuggestionHistory`, `pairedMedicinePhotoIds`, `approverCorrections`) per phase4.md §F.1 + §F.5. OCR worker / classifier / approver routes deferred to chunks 2+ | `prescription-approver-resolver/` + `prescription-color-classifier/` pure modules; then Claude Vision wrapper + spend cap; then `PRESCRIPTION_OCR` BullMQ job |
 | **Feature G — Doctor portal** | ❌ Not started (Week 17) | — |
 | **Feature H — Indian food DB** | ❌ Not started (Week 18) | — |
 | **Feature I — Wearables** | ❌ Not started (Week 19-20) | Blocks `activity_drop` SG signal from going live |
@@ -73,6 +73,18 @@ Earliest first within each cluster; most recent cluster last.
 - PR #112 (2026-05-31) — `defaultRateLimit` now keys per-userId when JWT verifiable, IP fallback otherwise. Defeats Indian carrier-NAT mass-throttling.
 - PR #113 (2026-05-31) — Surface Expo's `errors[].code` + `errors[].message` in admin UI instead of opaque `HTTP_400`.
 - PR #114 (2026-05-31) — Auto-prune push tokens that return `PushTooManyExperienceIds` or `MismatchSenderId` (was only `DeviceNotRegistered`).
+
+### Feature F (chunk 1) — Prescription / PrescriptionItem / MedicinePhoto schema (2026-06-07)
+
+First chunk of phase4.md §F. Schema-only landing — three new tables, five new enums, audit-trail columns. No service code, no OCR job, no HTTP routes yet; those land in chunk 2+ once the schema has stabilised.
+
+- **Schema (`apps/server/prisma/schema.prisma`)** — new `Prescription` + `PrescriptionItem` + `MedicinePhoto` models. Enums: `PrescriptionStatus` (pending_ocr | pending_approval | partial | approved | rejected), `PrescriptionItemColor` (red | yellow | green | need_clarification — the §F.4 revision that parks low-confidence items instead of silently dropping them), `PrescriptionItemStatus` (pending | need_clarification | approved | rejected | needs_doctor), `MedicineMatchStatus` (match | mismatch | unclear | not_attempted — `not_attempted` keeps GREEN unreachable without a bottle photo per §F.6), `MedicinePhotoUploadContext` (initial_upload | mid_approval_clarification | post_schedule_routine_check). Reverse relations added on `User` (`prescriptions[]`) and `MedicationSchedule` (`prescriptionItems[]` + `medicinePhotos[]`).
+- **Audit trail — `PrescriptionItem.aiSuggestionHistory`** is the append-only JSON array that lets ops replay "which Vision pass + which approver tap put this drug in the cabinet three months later" (same philosophy as `PaymentEvent.rawPayload`). `pairedMedicinePhotoIds` (UUID[]) snapshots the Pass-B inputs at OCR time; `approverCorrections` records the diff vs the AI's suggestion at approval time; `clarificationAttempts` enforces the §F.4 "≤ 3 clarification attempts → terminal needs_doctor" rule.
+- **Approval-authority snapshot — `Prescription.requiresGuardianApproval`** is a NOT-NULL Boolean resolved at upload time and IMMUTABLE thereafter. Per CLAUDE.md "Approval authority: guardian-primary": a guardian being removed mid-approval must NOT flip authority back to the elderly patient. `approvalRequestedAt` / `approvalCompletedAt` track the guardian-side push lifecycle for the §C' Silent Guardian signal "Maa ji ne bheja, abhi tak nahi dekha".
+- **MedicinePhoto** uses nullable `prescriptionId` / `prescriptionItemId` / `medicationScheduleId` so a photo can be attached at upload time (BEFORE any item is reconciled), at mid-approval clarification time, OR post-schedule for the routine cross-check flow (CLAUDE.md `POST /medicines/:id/photo`). Three indexes cover the three lookup patterns.
+- **`doctorId` is plain UUID, no FK** — `DoctorProfile` doesn't ship until Feature G (Week 17). A follow-up migration adds the FK once `doctor_profiles` exists. Same pattern Phase 1 used for the eventually-tightened `Household.primaryUserId`.
+- **Migration `20260628000000_prescriptions/migration.sql`** — hand-written, byte-equivalent to `prisma migrate diff` output (verified locally). DPDP retention preserved: rejected/approved prescriptions are RETAINED, never row-deleted. CASCADE fires only on user row deletion (separate forget-me flow).
+- **Verify gates** — `pnpm format:check` ✅ · `pnpm typecheck` ✅ (6/6) · `pnpm lint` ✅ (6/6) · `pnpm -r build` ✅ · purity ✅ (76 files) · 708 domain-logic tests ✅. Schema ↔ migration parity passes via `prisma migrate diff`.
 
 ### Feature E (chunk 7) — Mobile voice integration for cardiac + respiratory (2026-06-07)
 
