@@ -23,9 +23,9 @@ export const CheckScheduleChip = (): JSX.Element | null => {
   const time = reminderTime ?? "07:00";
 
   return (
-    <View className="mx-4 mb-2 flex-row items-center gap-2 self-start rounded-full bg-gray-100 px-3 py-1.5 dark:bg-gray-800">
-      <Icon name="notifications-outline" size={14} color="#6B7280" />
-      <Text className="text-sm text-gray-700 dark:text-gray-300">
+    <View className="mt-1 flex-row items-center gap-1.5">
+      <Icon name="notifications-outline" size={13} color="#9CA3AF" />
+      <Text className="text-[13px] font-medium text-gray-500 dark:text-gray-400">
         {cadence} • {time}
       </Text>
     </View>

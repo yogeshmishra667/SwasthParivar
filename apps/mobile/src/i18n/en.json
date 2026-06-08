@@ -253,10 +253,13 @@
     "modeBp": "BP",
     "modeMeal": "Meal",
     "modeCardiac": "Heart",
-    "modeRespiratory": "Breath"
+    "modeRespiratory": "Breath",
+    "glucoseTitle": "Log sugar reading",
+    "glucoseSubtitle": "Quick log — tap to speak or type."
   },
   "cardiac": {
     "title": "Log heart reading",
+    "subtitle": "Heart rate, rhythm, and chest pain.",
     "heartRate": "Heart rate",
     "bpm": "bpm",
     "rhythm": {
@@ -300,6 +303,7 @@
   },
   "respiratory": {
     "title": "Log breathing reading",
+    "subtitle": "Peak flow, symptoms, and inhaler.",
     "peakFlow": "Peak flow",
     "lMin": "L/min",
     "percentOfBaseline": "({{percent}}% of best)",
@@ -339,6 +343,7 @@
   },
   "bp": {
     "title": "Log blood pressure",
+    "subtitle": "Upper, lower, and pulse.",
     "systolic": "Upper (Systolic)",
     "diastolic": "Lower (Diastolic)",
     "pulse": "Pulse (optional)",

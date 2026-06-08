@@ -102,6 +102,23 @@ export default defineConfig({
         // the bypass chain never enqueues for a respiratory emergency.
         // Locked at 100% per phase4.md §E.2.
         "src/respiratory-thresholds/classifier.ts": { 100: true },
+        // Phase 4 Feature F.2 — prescription color classifier.
+        // Safety-critical (phase4.md §F.6 "100% branch coverage"):
+        // a regression promotes a low-confidence OCR result to GREEN
+        // and the elderly patient taps through wrong-medicine cabinet
+        // contents. Locked at 100%.
+        "src/prescription-color-classifier/classifier.ts": { 100: true },
+        // Phase 4 Feature F.2 — prescription approver resolver.
+        // Safety-critical (phase4.md §F.6 "100% branch coverage"):
+        // a regression here flips approver authority back to the
+        // elderly patient when a guardian is linked, defeating the
+        // whole "guardian decides" trust model.
+        "src/prescription-approver-resolver/resolver.ts": { 100: true },
+        // Relationship-family matcher backing the resolver. 100% on
+        // measured run; the empty-string defensive guard inside
+        // hasAlias is marked `/* c8 ignore */` because the caller
+        // short-circuits before reaching it.
+        "src/prescription-approver-resolver/relationship.ts": { 100: true },
         // Phase 4 Feature E.2 — multi-category bypass dispatch planner.
         // Safety-critical: a regression here would route a cardiac
         // chest-pain alert to the bradycardia template, or skip the

@@ -24,6 +24,7 @@ import { FontScaleProvider } from "@/components/shared/FontScaleProvider";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { ProfileSelectorModal } from "@/components/profile/ProfileSelectorModal";
 import { isExpoGo } from "@/utils/runtime";
+import { useFeatureFlags } from "@/stores/feature-flags.store";
 import { setOnMaintenanceMode } from "@/services/api";
 
 void SplashScreen.preventAutoHideAsync();
@@ -97,6 +98,10 @@ export default function RootLayout(): JSX.Element | null {
     // per auth-token change, in parallel with push-token registration
     // since neither depends on the other.
     void usePreferencesStore.getState().hydrateFromServer();
+
+    // Hydrate per-user feature flags (CC.12) so the log tab gates
+    // cardiac / respiratory surfaces correctly. Also runs in parallel.
+    void useFeatureFlags.getState().refresh();
 
     if (isExpoGo) {
       setPushTokenStatus("expo_go");
