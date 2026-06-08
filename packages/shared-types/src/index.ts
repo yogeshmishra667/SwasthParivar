@@ -11,3 +11,4 @@ export * from "./insights.js";
 export * from "./chat.js";
 export * from "./silent-guardian.js";
 export * from "./admin.js";
+export * from "./prescriptions.js";

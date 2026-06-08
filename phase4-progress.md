@@ -2,7 +2,7 @@
 
 > **Companion to `phase4.md`** (the original spec). This file tracks what's done, what's in flight, and what's next. Update on every merged PR. The spec stays canonical for HOW things should be built.
 >
-> Last updated: **2026-06-07** (Feature F chunk 1 — Prescription / PrescriptionItem / MedicinePhoto schema + 5 new enums + audit-trail columns landed; OCR worker / classifier / approver routes deferred to F.2+).
+> Last updated: **2026-06-08** (Feature F chunk 2 — `prescription-color-classifier` + `prescription-approver-resolver` pure modules landed with 100% branch coverage; Claude Vision wrapper + spend cap + `PRESCRIPTION_OCR` worker deferred to F.3+).
 
 ---
 
@@ -24,7 +24,7 @@
 | **UI polish + dark mode + new settings** | ✅ Antigravity rollup (#117-121) cleaned up + shippable in #118 | Visual click-through on Light/Dark/System across all screens before EAS build |
 | **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + mobile log surfaces + voice parser + **mobile-voice integration** landed (2026-06-05 → 07); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + cohort flag-ramp still pending | Cohort flag-ramp (`cardiac_logging_enabled` / `respiratory_logging_enabled`), Activity/Sleep schema for Feature I |
 | **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + mobile log surfaces + **voice parser** landed (2026-06-05 → 06); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + mobile-voice integration still pending. Cohort ramp runbook: `docs/runbooks/feature-e-cohort-ramp.md` | Mobile voice integration (wire `VoiceInput` to the new parsers), Activity/Sleep schema for Feature I, then operational cohort ramp per the runbook |
-| **Feature F — Prescription OCR** | 🟡 In progress — schema chunk 1 landed (2026-06-07): `Prescription` + `PrescriptionItem` + `MedicinePhoto` models + 5 new enums + audit-trail columns (`aiSuggestionHistory`, `pairedMedicinePhotoIds`, `approverCorrections`) per phase4.md §F.1 + §F.5. OCR worker / classifier / approver routes deferred to chunks 2+ | `prescription-approver-resolver/` + `prescription-color-classifier/` pure modules; then Claude Vision wrapper + spend cap; then `PRESCRIPTION_OCR` BullMQ job |
+| **Feature F — Prescription OCR** | 🟡 In progress — schema chunk 1 (2026-06-07) + pure-modules chunk 2 (2026-06-08): `prescription-color-classifier` (5-way RED/YELLOW/GREEN/`need_clarification`) + `prescription-approver-resolver` (guardian-primary vs solo-with-friction vs self-capable-adult) — both at 100% branch coverage per phase4.md §F.6 | Claude Vision wrapper (`apps/server/src/shared/ai/claude-vision.ts`) + `CLAUDE_VISION_DAILY_SPEND_CAP_USD`; then `PRESCRIPTION_OCR` BullMQ job + `prescription-paired-reconciliation/` pure module |
 | **Feature G — Doctor portal** | ❌ Not started (Week 17) | — |
 | **Feature H — Indian food DB** | ❌ Not started (Week 18) | — |
 | **Feature I — Wearables** | ❌ Not started (Week 19-20) | Blocks `activity_drop` SG signal from going live |
@@ -73,6 +73,21 @@ Earliest first within each cluster; most recent cluster last.
 - PR #112 (2026-05-31) — `defaultRateLimit` now keys per-userId when JWT verifiable, IP fallback otherwise. Defeats Indian carrier-NAT mass-throttling.
 - PR #113 (2026-05-31) — Surface Expo's `errors[].code` + `errors[].message` in admin UI instead of opaque `HTTP_400`.
 - PR #114 (2026-05-31) — Auto-prune push tokens that return `PushTooManyExperienceIds` or `MismatchSenderId` (was only `DeviceNotRegistered`).
+
+### Feature F (chunk 2) — `prescription-color-classifier` + `prescription-approver-resolver` (2026-06-08)
+
+Two pure domain-logic modules backing the F.4 item state machine and the F.2 approval-authority resolution. No service code, no Vision wrapper, no HTTP routes yet — those land in F.3+. Both modules are SAFETY-CRITICAL per phase4.md §F.6: a regression in either can put the wrong medication in a 70-year-old's cabinet.
+
+- **`packages/shared-types/src/prescriptions.ts`** — new file exporting `PrescriptionItemColor` (`red | yellow | green | need_clarification`), `MedicineMatchStatus` (`match | mismatch | unclear | not_attempted`), `PrescriptionItemStatus`, `PrescriptionStatus`, `ApproverFrictionLevel` (`none | high`), and the confidence-band constants `PRESCRIPTION_CONFIDENCE_HIGH=0.85` / `PRESCRIPTION_CONFIDENCE_LOW=0.6`. Mirrors the Prisma enums from F.1 so domain-logic + mobile UI share one source of truth without importing `@prisma/client`. Same pattern cardiac uses for `RhythmStatus` / `ExerciseTolerance`.
+- **`packages/domain-logic/src/prescription-color-classifier/`** — pure `classifyPrescriptionItem({ocrConfidence, photoCrossCheckStatus, hasPairedMedicinePhoto})` returning `{color, reason}`. Encodes the F.6 decision tree literally: mismatch overrides all → RED; confidence < 0.60 with no bottle → `need_clarification`; < 0.60 with a bottle → RED; 0.60–0.85 → YELLOW; ≥ 0.85 + match → GREEN; ≥ 0.85 otherwise → YELLOW. GREEN is unreachable without a bottle match per the §F.6 design rule. 16 tests + 3 fast-check property tests (totality, GREEN gating, mismatch-always-RED). **100% lines / branches / functions / statements** — pinned in `vitest.config.ts`.
+- **`packages/domain-logic/src/prescription-approver-resolver/`** — pure `resolveApprover({patientUserId, acceptedFamilyLinks, patientIsGuardianElsewhere})` returning `{approverUserId, requiresGuardianApproval, frictionLevel, reason}`. Three branches per F.2:
+  - **Guardian primary**: ≥ 1 accepted FamilyLink whose relationship folds to `child | spouse | caregiver` → that guardian approves, friction `none`. Tie-break by family precedence (child > spouse > caregiver) then earliest `acceptedAt` — stable "primary" identity across invite churn.
+  - **Self-capable adult**: no qualifying guardian but `patientIsGuardianElsewhere=true` → patient self-approves, friction `none`.
+  - **Solo with friction**: no qualifying guardian, not a guardian elsewhere → patient self-approves with friction `high` (the elderly-shared-device case CLAUDE.md "Solo patient (no guardian)" targets — 3-second activation delay + re-confirm modal).
+  - **Relationship-family matcher** (`relationship.ts`) folds free-text labels (English + Hindi/Hinglish + Devanagari) onto a closed `RelationshipFamily` enum. Aliases curated, honorifics stripped (`ji`, `saab`, etc), word-boundary matching (so "godfather" does NOT match "father"). Pre-compiled regex patterns for the security/non-literal-regexp lint rule.
+  - 37 tests + 3 invariant tests. **100% lines / branches / functions / statements** on `resolver.ts` AND `relationship.ts` — pinned in `vitest.config.ts`. The empty-string defensive guard inside `hasAlias` is marked `/* c8 ignore */` since the caller short-circuits before reaching it.
+- **Coverage ratchets pinned** — three new entries in `packages/domain-logic/vitest.config.ts` at 100% across the board: `prescription-color-classifier/classifier.ts`, `prescription-approver-resolver/resolver.ts`, `prescription-approver-resolver/relationship.ts`.
+- **Verify gates** — `pnpm format:check` ✅ · `pnpm typecheck` ✅ (6/6) · `pnpm lint` ✅ (6/6) · `pnpm -r build` ✅ · purity ✅ (83 files, up from 76 — 3 new files in domain-logic) · **763 domain-logic tests** ✅ (up from 708, +55).
 
 ### Feature F (chunk 1) — Prescription / PrescriptionItem / MedicinePhoto schema (2026-06-07)
 
