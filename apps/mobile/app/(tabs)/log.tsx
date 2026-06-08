@@ -4,8 +4,8 @@
 // and the new surfaces don't accidentally inherit voice-parsing wiring
 // they don't need.
 
-import { useCallback, useState } from "react";
-import { View, Text, ScrollView } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { View, Text, ScrollView, Pressable, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { isCriticalGlucose } from "@swasth/shared-types";
@@ -33,7 +33,7 @@ import { CriticalAlert } from "@/components/logging/CriticalAlert";
 import { UndoToast } from "@/components/shared/UndoToast";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Icon } from "@/components/ui/Icon";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { api } from "@/services/api";
 import { saveGlucoseReading } from "@/services/readings";
 import { saveBPReading } from "@/services/bp";
@@ -41,13 +41,21 @@ import { saveCardiacLog } from "@/services/cardiac";
 import { saveRespiratoryLog } from "@/services/respiratory";
 import { saveMealLog } from "@/services/meals";
 import { useActiveProfile } from "@/hooks/useActiveProfile";
-import { useFeatureEnabled } from "@/stores/feature-flags.store";
+import { useFeatureEnabled, useFeatureFlags } from "@/stores/feature-flags.store";
 import { hapticSave } from "@/utils/haptics";
 import { track } from "@/services/analytics";
 
 type LogMode = "glucose" | "bp" | "meal" | "cardiac" | "respiratory";
 type Stage = "input" | "confirm" | "saved";
 type InputMethod = "voice" | "numpad";
+
+const MODE_ICONS: Readonly<Record<LogMode, IconName>> = {
+  glucose: "water-outline",
+  bp: "heart-outline",
+  meal: "restaurant-outline",
+  cardiac: "pulse-outline",
+  respiratory: "fitness-outline",
+};
 
 interface ParsedGlucose {
   value: number;
@@ -66,6 +74,8 @@ export default function LogScreen(): JSX.Element {
   const router = useRouter();
   const activeProfile = useActiveProfile();
   const userId = activeProfile?.id ?? null;
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
 
   const [mode, setMode] = useState<LogMode>("glucose");
   const [stage, setStage] = useState<Stage>("input");
@@ -93,6 +103,14 @@ export default function LogScreen(): JSX.Element {
   // Cardiac + Respiratory (Phase 4 Feature E, flag-gated below)
   const cardiacEnabled = useFeatureEnabled("cardiac_logging");
   const respiratoryEnabled = useFeatureEnabled("respiratory_logging");
+
+  // Re-check feature flags each time the log tab mounts so admin
+  // changes made after app startup are picked up within the TTL window.
+  const refreshFlags = useFeatureFlags((s) => s.refresh);
+  useEffect(() => {
+    void refreshFlags();
+  }, [refreshFlags]);
+
   const [parsedCardiac, setParsedCardiac] = useState<ParsedCardiacInput | null>(null);
   const [parsedRespiratory, setParsedRespiratory] = useState<ParsedRespiratoryInput | null>(null);
   // Voice pre-fill: parsed HR / peak flow from the cardiac / respiratory
@@ -643,51 +661,188 @@ export default function LogScreen(): JSX.Element {
   }
 
   // ── Input stage ───────────────────────────────────────────
-  // Mode chooser row — shared header. Cardiac + respiratory only
-  // appear when their per-user rollout flag returns true; a patient
-  // outside the cohort sees the original 3-button layout, byte-
-  // identical to Phase 2.
+  // Mode chooser — uniform grid, all modes visible at once. No
+  // horizontal scrolling: older users (40-60+) won't discover hidden
+  // content. Each cell is equal-width with a large 56dp touch target
+  // and a vertically stacked icon + label for maximum clarity.
+  // 3 modes → single row; 5 modes → 3 + 2 grid (second row centered).
+
+  const visibleModes: { key: LogMode; label: string }[] = [
+    { key: "glucose", label: t("log.modeGlucose") },
+    { key: "bp", label: t("log.modeBp") },
+    { key: "meal", label: t("log.modeMeal") },
+    ...(cardiacEnabled ? [{ key: "cardiac" as LogMode, label: t("log.modeCardiac") }] : []),
+    ...(respiratoryEnabled
+      ? [{ key: "respiratory" as LogMode, label: t("log.modeRespiratory") }]
+      : []),
+  ];
+
+  // 3 columns, 8px gap between items, 16px horizontal padding
+  const GRID_GAP = 8;
+  const GRID_PAD = 16;
+  const COLS = 3;
+
   const modeChooser = (
-    <View className="flex-row flex-wrap gap-2 px-4 pb-3">
-      <View className="flex-1">
-        <Button
-          label={t("log.modeGlucose")}
-          variant={mode === "glucose" ? "primary" : "ghost"}
-          onPress={() => switchMode("glucose")}
-        />
-      </View>
-      <View className="flex-1">
-        <Button
-          label={t("log.modeBp")}
-          variant={mode === "bp" ? "primary" : "ghost"}
-          onPress={() => switchMode("bp")}
-        />
-      </View>
-      <View className="flex-1">
-        <Button
-          label={t("log.modeMeal")}
-          variant={mode === "meal" ? "primary" : "ghost"}
-          onPress={() => switchMode("meal")}
-        />
-      </View>
-      {cardiacEnabled && (
-        <View className="flex-1">
-          <Button
-            label={t("log.modeCardiac")}
-            variant={mode === "cardiac" ? "primary" : "ghost"}
-            onPress={() => switchMode("cardiac")}
-          />
+    <View
+      style={{
+        flexDirection: "row",
+        flexWrap: "wrap",
+        paddingHorizontal: GRID_PAD,
+        paddingBottom: 8,
+        justifyContent: visibleModes.length <= COLS ? "flex-start" : "center",
+      }}
+    >
+      {visibleModes.map((m) => {
+        const active = mode === m.key;
+        return (
+          <View
+            key={m.key}
+            style={{
+              width: `${100 / COLS}%`,
+              paddingHorizontal: GRID_GAP / 2,
+              paddingVertical: GRID_GAP / 2,
+            }}
+          >
+            <Pressable
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={m.label}
+              onPress={() => switchMode(m.key)}
+              style={{
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: 12,
+                paddingHorizontal: 8,
+                borderRadius: 16,
+                minHeight: 56,
+                backgroundColor: active ? "#2563EB" : isDark ? "#1F2937" : "#F9FAFB",
+                borderWidth: 1.5,
+                borderColor: active ? "#1D4ED8" : isDark ? "#374151" : "#E5E7EB",
+                ...(active
+                  ? {
+                      shadowColor: "#2563EB",
+                      shadowOpacity: 0.25,
+                      shadowRadius: 8,
+                      shadowOffset: { width: 0, height: 3 },
+                      elevation: 4,
+                    }
+                  : {}),
+              }}
+            >
+              <Icon
+                name={
+                  active
+                    ? (MODE_ICONS[m.key].replace("-outline", "") as IconName)
+                    : MODE_ICONS[m.key]
+                }
+                size={22}
+                color={active ? "#FFFFFF" : isDark ? "#9CA3AF" : "#6B7280"}
+              />
+              <Text
+                style={{
+                  marginTop: 4,
+                  fontSize: 13,
+                  fontWeight: active ? "700" : "500",
+                  color: active ? "#FFFFFF" : isDark ? "#D1D5DB" : "#374151",
+                }}
+                numberOfLines={1}
+              >
+                {m.label}
+              </Text>
+            </Pressable>
+          </View>
+        );
+      })}
+    </View>
+  );
+  // ── Shared mode header ─────────────────────────────────────
+  // Contextual title + subtitle below the grid, giving the user
+  // clear orientation: "what am I logging right now?"
+  const MODE_TITLES: Record<LogMode, { icon: IconName; titleKey: string; subtitleKey: string }> = {
+    glucose: { icon: "water", titleKey: "log.glucoseTitle", subtitleKey: "log.glucoseSubtitle" },
+    bp: { icon: "heart", titleKey: "bp.title", subtitleKey: "bp.subtitle" },
+    meal: { icon: "restaurant", titleKey: "meals.title", subtitleKey: "meals.subtitle" },
+    cardiac: { icon: "pulse", titleKey: "cardiac.title", subtitleKey: "cardiac.subtitle" },
+    respiratory: {
+      icon: "fitness",
+      titleKey: "respiratory.title",
+      subtitleKey: "respiratory.subtitle",
+    },
+  };
+
+  const modeHeader = (
+    <View style={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 8 }}>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <View
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            backgroundColor: isDark ? "#1E3A5F" : "#EFF6FF",
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: 10,
+          }}
+        >
+          <Icon name={MODE_TITLES[mode].icon} size={20} color="#2563EB" />
         </View>
-      )}
-      {respiratoryEnabled && (
-        <View className="flex-1">
-          <Button
-            label={t("log.modeRespiratory")}
-            variant={mode === "respiratory" ? "primary" : "ghost"}
-            onPress={() => switchMode("respiratory")}
-          />
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: "700",
+              color: isDark ? "#F9FAFB" : "#111827",
+            }}
+          >
+            {t(MODE_TITLES[mode].titleKey, { defaultValue: "" })}
+          </Text>
+          <Text
+            style={{
+              fontSize: 13,
+              color: isDark ? "#9CA3AF" : "#6B7280",
+              marginTop: 2,
+            }}
+          >
+            {t(MODE_TITLES[mode].subtitleKey, { defaultValue: "" })}
+          </Text>
+          <CheckScheduleChip />
         </View>
-      )}
+      </View>
+    </View>
+  );
+
+  // ── Input method toggle (voice ↔ numpad) ──────────────────
+  // Compact pill with icon — more discoverable than a plain ghost button
+  const inputToggle = (
+    <View style={{ alignItems: "center", paddingTop: 4 }}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => setInputMethod((m) => (m === "voice" ? "numpad" : "voice"))}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 16,
+          paddingVertical: 10,
+          borderRadius: 999,
+          backgroundColor: isDark ? "#1F2937" : "#F3F4F6",
+        }}
+      >
+        <Icon
+          name={inputMethod === "voice" ? "keypad-outline" : "mic-outline"}
+          size={18}
+          color={isDark ? "#9CA3AF" : "#6B7280"}
+        />
+        <Text
+          style={{
+            marginLeft: 6,
+            fontSize: 14,
+            fontWeight: "500",
+            color: isDark ? "#D1D5DB" : "#4B5563",
+          }}
+        >
+          {inputMethod === "voice" ? t("logging.useNumpad") : t("logging.useVoice")}
+        </Text>
+      </Pressable>
     </View>
   );
 
@@ -698,17 +853,13 @@ export default function LogScreen(): JSX.Element {
   // Phase 2 refactor.
   if (mode === "glucose") {
     return (
-      <SafeAreaView className="flex-1 gap-6 bg-white dark:bg-gray-900">
+      <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
         <View className="flex-row items-center justify-end px-4 py-3">
           <ActiveProfileBadge />
         </View>
         {modeChooser}
-        <CheckScheduleChip />
+        {modeHeader}
         {rateLimited ? (
-          // Daily-cap reached. Replace the input surface entirely so the
-          // user can't keep tapping the mic / numpad to no effect, but
-          // leave the mode chooser visible — BP and meals are still
-          // available and the cap only applies to glucose.
           <View className="flex-1 justify-center gap-4 px-6">
             <Card className="border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
               <View className="items-center gap-3 py-4">
@@ -730,22 +881,40 @@ export default function LogScreen(): JSX.Element {
             />
           </View>
         ) : (
-          <View className="flex-1 gap-6 px-6">
-            {inputMethod === "voice" ? (
-              <VoiceInput
-                mode="glucose"
-                onParsed={handleVoice}
-                onFail={() => setInputMethod("numpad")}
-              />
-            ) : (
-              <NumpadInput onSubmit={handleNumpad} />
+          <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: 24 }}>
+            <View style={{ alignItems: "center" }}>
+              {inputMethod === "voice" ? (
+                <VoiceInput
+                  mode="glucose"
+                  onParsed={handleVoice}
+                  onFail={() => setInputMethod("numpad")}
+                />
+              ) : (
+                <NumpadInput onSubmit={handleNumpad} />
+              )}
+            </View>
+            {inputToggle}
+            {saveError !== null && (
+              <View
+                style={{
+                  marginTop: 12,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: 12,
+                  backgroundColor: isDark ? "#7F1D1D" : "#FEF2F2",
+                }}
+              >
+                <Text
+                  style={{
+                    color: isDark ? "#FCA5A5" : "#DC2626",
+                    fontSize: 14,
+                    textAlign: "center",
+                  }}
+                >
+                  {saveError}
+                </Text>
+              </View>
             )}
-            <Button
-              label={inputMethod === "voice" ? t("logging.useNumpad") : t("logging.useVoice")}
-              variant="ghost"
-              onPress={() => setInputMethod((m) => (m === "voice" ? "numpad" : "voice"))}
-            />
-            {saveError !== null && <Text className="text-body text-warning">{saveError}</Text>}
           </View>
         )}
       </SafeAreaView>
@@ -758,32 +927,46 @@ export default function LogScreen(): JSX.Element {
   // form below renders with the voice-captured headline number seeded.
   if ((mode === "cardiac" || mode === "respiratory") && inputMethod === "voice") {
     return (
-      <SafeAreaView className="flex-1 gap-6 bg-white dark:bg-gray-900">
+      <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
         <View className="flex-row items-center justify-end px-4 py-3">
           <ActiveProfileBadge />
         </View>
         {modeChooser}
-        <CheckScheduleChip />
-        <View className="flex-1 gap-6 px-6">
-          {mode === "cardiac" ? (
-            <VoiceInput
-              mode="cardiac"
-              onParsed={handleCardiacVoice}
-              onFail={() => setInputMethod("numpad")}
-            />
-          ) : (
-            <VoiceInput
-              mode="respiratory"
-              onParsed={handleRespiratoryVoice}
-              onFail={() => setInputMethod("numpad")}
-            />
+        {modeHeader}
+        <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: 24 }}>
+          <View style={{ alignItems: "center" }}>
+            {mode === "cardiac" ? (
+              <VoiceInput
+                mode="cardiac"
+                onParsed={handleCardiacVoice}
+                onFail={() => setInputMethod("numpad")}
+              />
+            ) : (
+              <VoiceInput
+                mode="respiratory"
+                onParsed={handleRespiratoryVoice}
+                onFail={() => setInputMethod("numpad")}
+              />
+            )}
+          </View>
+          {inputToggle}
+          {saveError !== null && (
+            <View
+              style={{
+                marginTop: 12,
+                paddingHorizontal: 16,
+                paddingVertical: 10,
+                borderRadius: 12,
+                backgroundColor: isDark ? "#7F1D1D" : "#FEF2F2",
+              }}
+            >
+              <Text
+                style={{ color: isDark ? "#FCA5A5" : "#DC2626", fontSize: 14, textAlign: "center" }}
+              >
+                {saveError}
+              </Text>
+            </View>
           )}
-          <Button
-            label={t("logging.useNumpad")}
-            variant="ghost"
-            onPress={() => setInputMethod("numpad")}
-          />
-          {saveError !== null && <Text className="text-body text-warning">{saveError}</Text>}
         </View>
       </SafeAreaView>
     );
@@ -799,7 +982,7 @@ export default function LogScreen(): JSX.Element {
         <ActiveProfileBadge />
       </View>
       {modeChooser}
-      <CheckScheduleChip />
+      {modeHeader}
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}>
         {mode === "bp" ? (
@@ -820,15 +1003,25 @@ export default function LogScreen(): JSX.Element {
           <MealQuickLog onSave={(p) => void saveMeal(p)} saving={saving} />
         )}
 
-        {(mode === "cardiac" || mode === "respiratory") && (
-          <Button
-            label={t("logging.useVoice")}
-            variant="ghost"
-            onPress={() => setInputMethod("voice")}
-          />
-        )}
+        {(mode === "cardiac" || mode === "respiratory") && inputToggle}
 
-        {saveError !== null && <Text className="text-body text-warning">{saveError}</Text>}
+        {saveError !== null && (
+          <View
+            style={{
+              marginTop: 12,
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderRadius: 12,
+              backgroundColor: isDark ? "#7F1D1D" : "#FEF2F2",
+            }}
+          >
+            <Text
+              style={{ color: isDark ? "#FCA5A5" : "#DC2626", fontSize: 14, textAlign: "center" }}
+            >
+              {saveError}
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

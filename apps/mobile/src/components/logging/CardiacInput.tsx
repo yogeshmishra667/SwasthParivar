@@ -113,21 +113,37 @@ export const CardiacInput = ({ onSubmit, initialHeartRate }: CardiacInputProps):
     });
   };
 
+  const renderNumpad = () => (
+    <View className="flex-row flex-wrap justify-between mt-2 mb-2">
+      {KEYS.map((k) => (
+        <Pressable
+          key={k}
+          onPress={() => handlePress(k)}
+          accessibilityRole="button"
+          accessibilityLabel={`Numpad ${k}`}
+          className="mb-2 w-[31%] items-center justify-center rounded-xl bg-gray-100 active:bg-gray-200 dark:bg-gray-800"
+          style={{ minHeight: TOUCH_TARGET_MIN + 16 }}
+        >
+          <Text className="text-number font-semibold text-gray-900 dark:text-gray-100">{k}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
   return (
     <View className="gap-4">
-      <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
-        {t("cardiac.title")}
-      </Text>
-
       {/* ── Heart-rate field + chips ─── */}
-      <FieldChip
-        label={t("cardiac.heartRate")}
-        suffix={t("cardiac.bpm")}
-        value={hr}
-        active={active === "hr"}
-        invalid={hr.length > 0 && !hrValid}
-        onPress={() => setActive("hr")}
-      />
+      <View>
+        <FieldChip
+          label={t("cardiac.heartRate")}
+          suffix={t("cardiac.bpm")}
+          value={hr}
+          active={active === "hr"}
+          invalid={hr.length > 0 && !hrValid}
+          onPress={() => setActive("hr")}
+        />
+        {active === "hr" && renderNumpad()}
+      </View>
 
       {/* ── Rhythm pills ─── */}
       <View className="gap-2">
@@ -165,14 +181,17 @@ export const CardiacInput = ({ onSubmit, initialHeartRate }: CardiacInputProps):
           />
         </View>
         {chestPain && (
-          <FieldChip
-            label={t("cardiac.painSeverity.label")}
-            suffix={t("cardiac.painSeverity.scale")}
-            value={pain}
-            active={active === "pain"}
-            invalid={pain.length > 0 && !painValid}
-            onPress={() => setActive("pain")}
-          />
+          <View className="mt-2">
+            <FieldChip
+              label={t("cardiac.painSeverity.label")}
+              suffix={t("cardiac.painSeverity.scale")}
+              value={pain}
+              active={active === "pain"}
+              invalid={pain.length > 0 && !painValid}
+              onPress={() => setActive("pain")}
+            />
+            {active === "pain" && renderNumpad()}
+          </View>
         )}
       </View>
 
@@ -191,22 +210,6 @@ export const CardiacInput = ({ onSubmit, initialHeartRate }: CardiacInputProps):
             />
           ))}
         </View>
-      </View>
-
-      {/* ── Numpad ─── */}
-      <View className="flex-row flex-wrap justify-between">
-        {KEYS.map((k) => (
-          <Pressable
-            key={k}
-            onPress={() => handlePress(k)}
-            accessibilityRole="button"
-            accessibilityLabel={`Numpad ${k}`}
-            className="mb-2 w-[31%] items-center justify-center rounded-xl bg-gray-100 active:bg-gray-200 dark:bg-gray-800"
-            style={{ minHeight: TOUCH_TARGET_MIN + 16 }}
-          >
-            <Text className="text-number font-semibold text-gray-900 dark:text-gray-100">{k}</Text>
-          </Pressable>
-        ))}
       </View>
 
       <Pressable

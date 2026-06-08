@@ -251,13 +251,16 @@
   "log": {
     "modeGlucose": "Sugar",
     "modeBp": "BP",
-    "modeMeal": "Khana",
+    "modeMeal": "Bhojan",
     "modeCardiac": "Dil",
-    "modeRespiratory": "Saans"
+    "modeRespiratory": "Saans",
+    "glucoseTitle": "Sugar darj karein",
+    "glucoseSubtitle": "Turant darj karein — bolne ke liye tap karein."
   },
   "cardiac": {
-    "title": "Dil ki dhadkan log karein",
-    "heartRate": "Dhadkan",
+    "title": "Dil ki reading darj karein",
+    "subtitle": "Heart rate, rhythm, aur chest pain.",
+    "heartRate": "Heart rate",
     "bpm": "bpm",
     "rhythm": {
       "label": "Dhadkan ki taal",
@@ -299,7 +302,8 @@
     }
   },
   "respiratory": {
-    "title": "Saans ki reading log karein",
+    "title": "Saans ki reading darj karein",
+    "subtitle": "Peak flow, lakshan, aur inhaler.",
     "peakFlow": "Peak flow",
     "lMin": "L/min",
     "percentOfBaseline": "(best ka {{percent}}%)",
@@ -338,8 +342,9 @@
     }
   },
   "bp": {
-    "title": "BP log karein",
-    "systolic": "Upper (Systolic)",
+    "title": "BP darj karein",
+    "subtitle": "Upar, lower aur pulse.",
+    "systolic": "Upar (Systolic)",
     "diastolic": "Lower (Diastolic)",
     "pulse": "Pulse (optional)",
     "confirmSave": "{{sys}}/{{dia}} — {{profile}} ke liye save karein?",

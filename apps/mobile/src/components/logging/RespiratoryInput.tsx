@@ -106,21 +106,37 @@ export const RespiratoryInput = ({
     });
   };
 
+  const renderNumpad = () => (
+    <View className="flex-row flex-wrap justify-between mt-2 mb-2">
+      {KEYS.map((k) => (
+        <Pressable
+          key={k}
+          onPress={() => handlePress(k)}
+          accessibilityRole="button"
+          accessibilityLabel={`Numpad ${k}`}
+          className="mb-2 w-[31%] items-center justify-center rounded-xl bg-gray-100 active:bg-gray-200 dark:bg-gray-800"
+          style={{ minHeight: TOUCH_TARGET_MIN + 16 }}
+        >
+          <Text className="text-number font-semibold text-gray-900 dark:text-gray-100">{k}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
   return (
     <View className="gap-4">
-      <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
-        {t("respiratory.title")}
-      </Text>
-
       {/* ── Peak flow ─── */}
-      <FieldChip
-        label={t("respiratory.peakFlow")}
-        suffix={t("respiratory.lMin")}
-        value={peakFlow}
-        active={active === "peakFlow"}
-        invalid={peakFlow.length > 0 && !peakFlowValid}
-        onPress={() => setActive("peakFlow")}
-      />
+      <View>
+        <FieldChip
+          label={t("respiratory.peakFlow")}
+          suffix={t("respiratory.lMin")}
+          value={peakFlow}
+          active={active === "peakFlow"}
+          invalid={peakFlow.length > 0 && !peakFlowValid}
+          onPress={() => setActive("peakFlow")}
+        />
+        {active === "peakFlow" && renderNumpad()}
+      </View>
 
       {/* ── Symptom severity ─── */}
       <View className="gap-2">
@@ -158,30 +174,17 @@ export const RespiratoryInput = ({
           />
         </View>
         {inhalerUsed && (
-          <FieldChip
-            label={t("respiratory.puffs.label")}
-            value={puffs}
-            active={active === "puffs"}
-            invalid={puffs.length > 0 && !puffsValid}
-            onPress={() => setActive("puffs")}
-          />
+          <View className="mt-2">
+            <FieldChip
+              label={t("respiratory.puffs.label")}
+              value={puffs}
+              active={active === "puffs"}
+              invalid={puffs.length > 0 && !puffsValid}
+              onPress={() => setActive("puffs")}
+            />
+            {active === "puffs" && renderNumpad()}
+          </View>
         )}
-      </View>
-
-      {/* ── Numpad ─── */}
-      <View className="flex-row flex-wrap justify-between">
-        {KEYS.map((k) => (
-          <Pressable
-            key={k}
-            onPress={() => handlePress(k)}
-            accessibilityRole="button"
-            accessibilityLabel={`Numpad ${k}`}
-            className="mb-2 w-[31%] items-center justify-center rounded-xl bg-gray-100 active:bg-gray-200 dark:bg-gray-800"
-            style={{ minHeight: TOUCH_TARGET_MIN + 16 }}
-          >
-            <Text className="text-number font-semibold text-gray-900 dark:text-gray-100">{k}</Text>
-          </Pressable>
-        ))}
       </View>
 
       {!hasSignal && peakFlow.length === 0 && (

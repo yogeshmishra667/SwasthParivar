@@ -71,15 +71,6 @@ export const MealQuickLog = ({ onSave, saving = false }: MealQuickLogProps): JSX
 
   return (
     <View className="gap-4">
-      <View>
-        <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">
-          {t("meals.title")}
-        </Text>
-        <Text className="mt-1 text-body text-neutral dark:text-gray-400">
-          {t("meals.subtitle")}
-        </Text>
-      </View>
-
       <Card>
         <View className="flex-row flex-wrap gap-2">
           {TYPES.map((tp) => {

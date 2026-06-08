@@ -74,8 +74,6 @@ export const BPInput = ({ onSubmit }: BPInputProps): JSX.Element => {
 
   return (
     <View className="gap-4">
-      <Text className="text-hero font-bold text-gray-900 dark:text-gray-100">{t("bp.title")}</Text>
-
       <View className="flex-row gap-3">
         <FieldChip
           label={t("bp.systolic")}
