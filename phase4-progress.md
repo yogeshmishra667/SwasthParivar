@@ -2,7 +2,7 @@
 
 > **Companion to `phase4.md`** (the original spec). This file tracks what's done, what's in flight, and what's next. Update on every merged PR. The spec stays canonical for HOW things should be built.
 >
-> Last updated: **2026-06-08** (Feature F chunk 2 — `prescription-color-classifier` + `prescription-approver-resolver` pure modules landed with 100% branch coverage; Claude Vision wrapper + spend cap + `PRESCRIPTION_OCR` worker deferred to F.3+).
+> Last updated: **2026-06-09** (Feature F chunks 1+2 merged via PR #137 squash (`1b2a51c`); splash-logo fix in flight on PR #138; Feature F chunk 3 — Claude Vision wrapper + `CLAUDE_VISION_DAILY_SPEND_CAP_USD` + `prescription-paired-reconciliation` pure module — landed locally, PR pending).
 
 ---
 
@@ -24,7 +24,7 @@
 | **UI polish + dark mode + new settings** | ✅ Antigravity rollup (#117-121) cleaned up + shippable in #118 | Visual click-through on Light/Dark/System across all screens before EAS build |
 | **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + mobile log surfaces + voice parser + **mobile-voice integration** landed (2026-06-05 → 07); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + cohort flag-ramp still pending | Cohort flag-ramp (`cardiac_logging_enabled` / `respiratory_logging_enabled`), Activity/Sleep schema for Feature I |
 | **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + mobile log surfaces + **voice parser** landed (2026-06-05 → 06); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + mobile-voice integration still pending. Cohort ramp runbook: `docs/runbooks/feature-e-cohort-ramp.md` | Mobile voice integration (wire `VoiceInput` to the new parsers), Activity/Sleep schema for Feature I, then operational cohort ramp per the runbook |
-| **Feature F — Prescription OCR** | 🟡 In progress — schema chunk 1 (2026-06-07) + pure-modules chunk 2 (2026-06-08): `prescription-color-classifier` (5-way RED/YELLOW/GREEN/`need_clarification`) + `prescription-approver-resolver` (guardian-primary vs solo-with-friction vs self-capable-adult) — both at 100% branch coverage per phase4.md §F.6 | Claude Vision wrapper (`apps/server/src/shared/ai/claude-vision.ts`) + `CLAUDE_VISION_DAILY_SPEND_CAP_USD`; then `PRESCRIPTION_OCR` BullMQ job + `prescription-paired-reconciliation/` pure module |
+| **Feature F — Prescription OCR** | 🟡 In progress — chunks 1+2 merged to main (PR #137, squashed `1b2a51c`): schema + 5 enums + audit trail + `prescription-color-classifier` + `prescription-approver-resolver` (both 100% branch coverage per phase4.md §F.6). Chunk 3 in progress: `prescription-paired-reconciliation/` + `claude-vision.ts` wrapper + `CLAUDE_VISION_DAILY_SPEND_CAP_USD` flag-flip on `prescription_ocr_enabled` | Land F.3, then `PRESCRIPTION_OCR` BullMQ job (F.4), then HTTP routes `/upload` `/clarify` `/approve` `/reject` (F.5) |
 | **Feature G — Doctor portal** | ❌ Not started (Week 17) | — |
 | **Feature H — Indian food DB** | ❌ Not started (Week 18) | — |
 | **Feature I — Wearables** | ❌ Not started (Week 19-20) | Blocks `activity_drop` SG signal from going live |
@@ -73,6 +73,32 @@ Earliest first within each cluster; most recent cluster last.
 - PR #112 (2026-05-31) — `defaultRateLimit` now keys per-userId when JWT verifiable, IP fallback otherwise. Defeats Indian carrier-NAT mass-throttling.
 - PR #113 (2026-05-31) — Surface Expo's `errors[].code` + `errors[].message` in admin UI instead of opaque `HTTP_400`.
 - PR #114 (2026-05-31) — Auto-prune push tokens that return `PushTooManyExperienceIds` or `MismatchSenderId` (was only `DeviceNotRegistered`).
+
+### Feature F (chunk 3) — Claude Vision wrapper + paired-reconciliation (2026-06-09)
+
+Third chunk of phase4.md §F. Vision-side plumbing for the OCR pipeline: pure paired-reconciliation matcher + Claude Vision wrapper + separate per-surface spend cap. The `PRESCRIPTION_OCR` BullMQ job (F.4) and HTTP routes (F.5) still pending — this chunk gives them all the building blocks they need.
+
+- **`packages/domain-logic/src/medicine-aliases/indian-brands.json`** — checked-in alias data for ~40 top diabetes / BP / asthma / cardiac brands sold in India (Glycomet → metformin, Telma → telmisartan, etc.). Updatable via single-PR review per phase4.md §F.6 ("data, not code"). Includes `metformin_gp1` / `metformin_gp2` so variant-difference cases ("Glycomet 500" vs "Glycomet GP 1") fold into distinct canonical keys.
+- **`packages/domain-logic/src/medicine-aliases/index.ts`** — `canonicaliseMedicineName(raw): string | null`. Case-insensitive, whitespace-normalised lookup. Returns `null` on unknown brands so the matcher falls through to Levenshtein.
+- **`packages/domain-logic/src/prescription-paired-reconciliation/`** — three files. `similarity.ts` exposes `levenshtein` + `nameSimilarity` (alias-table fast path → 1.0 on same canonical; 0.05 on different; Levenshtein fallback). `reconciliation.ts` exposes `reconcilePassAB({passA, passB})` which scores each Pass-A line against every Pass-B bottle and maps the best score onto `match | mismatch | not_attempted`:
+  - Score ≥ 0.80 → `match`, confidence boosted by 0.1 (clamped), `matchedMedicinePhotoId` snapshotted.
+  - 0.40 ≤ score < 0.80 → `mismatch` (same stem, different variant — downstream classifier marks RED).
+  - Score < 0.40 OR Pass B empty → `not_attempted`.
+  - One bottle can match multiple Pass-A items by design (morning + evening dose lines for the same drug).
+- **Coverage** — 34 new domain-logic tests across `similarity.test.ts`, `reconciliation.test.ts`, and `medicine-aliases/index.test.ts`. **100% lines / branches / functions / statements** on both `reconciliation.ts` and `similarity.ts`. New ratchets pinned in `vitest.config.ts`. Total domain-logic: **797 tests** (up from 763).
+- **`apps/server/src/shared/ai/claude-vision.ts`** — Anthropic SDK wrapper that mirrors `claude.ts` shape: lazy client, per-surface circuit breaker (Redis namespace `vision_circuit:*`, separate from chat), per-surface daily spend cap (`vision_spend:*`), hard timeout via `AbortController`, `PrescriptionContext` PII guard (anonymised patient id only), Sentry breadcrumbs + PostHog telemetry. Three modes: `prescription_text` (Pass A — returns lines array with alternatives), `medicine_bottle` (Pass B — returns single bottle reading), `clarification_pass` (same shape as bottle for the F.5 mid-approval reupload flow). Vision uses Sonnet by default (Haiku struggles with handwritten Hindi-English prescriptions); temperature 0 for deterministic replay. JSON-only output enforced by the system prompt + defensive strip of ` ```json ` fences. Out-of-range confidence values clamped to `[0, 1]` at the wrapper.
+- **`CLAUDE_VISION_DAILY_SPEND_CAP_USD`** (env, default 20 USD) + **`VISION_HARD_TIMEOUT_MS`** (default 30s — Vision is slower than chat). Cap breach auto-flips `prescription_ocr_enabled=false` per CLAUDE.md "Spend-Cap Parity Across AI Surfaces" — separate from the chat cap so ops can kill OCR without breaking chat.
+- **New flags** in `seed-flags.ts`: `prescription_ocr_enabled: false` (kill switch + spend-cap auto-flip target) and `prescription_auto_approve_green: false` (ship default per phase4.md §F.2 — GREEN items still require explicit `/approve`).
+- **New error codes** in `@swasth/shared-types`: `VISION_CIRCUIT_OPEN` (503), `VISION_UPSTREAM_TIMEOUT` (504), `VISION_INVALID_JSON` (422), `VISION_NO_IMAGES` (422). Wired through `error-handler.ts`.
+- **New PostHog events**: `prescription_ocr_call` (per Vision call, pivot by mode), `prescription_ocr_circuit_opened`, `prescription_ocr_spend_cap_reached`.
+- **17 new server unit tests** covering happy path / clamping / fence-stripping / empty-lines / both bottle modes / image validation / PII guard / circuit breaker / hard timeout / spend cap. All passing.
+- **Verify gates** — `pnpm format:check` ✅ · `pnpm typecheck` ✅ (6/6) · `pnpm lint` ✅ (6/6, max-warnings=0) · `pnpm -r build` ✅ · purity ✅ (88 files, +5 since chunk 2) · 797 domain-logic tests ✅ · 63 server unit tests ✅.
+
+### Feature F (chunks 1+2 merged) — schema + pure modules (2026-06-09)
+
+PR [#137](https://github.com/yogeshmishra667/SwasthParivar/pull/137) squash-merged to main as `1b2a51c`. Bundles three atomic commits from the F.1 / F.2 / mobile-UI-overhaul session: server schema (Prescription / PrescriptionItem / MedicinePhoto + 5 enums + audit trail), mobile log-surface UX redesign (grid mode chooser + shared modeHeader + inline numpads), and the two safety-critical pure modules (`prescription-color-classifier` + `prescription-approver-resolver`) at 100% branch coverage.
+
+Splash-logo size regression (separately surfaced post-merge) is in flight on PR [#138](https://github.com/yogeshmishra667/SwasthParivar/pull/138) — single-file regen of `splash.png` from 1242×2436 portrait to 1024×1024 square with logo at 85% scale, so Android's splash drawable no longer downscales the logo to ~10% of screen width.
 
 ### Feature F (chunk 2) — `prescription-color-classifier` + `prescription-approver-resolver` (2026-06-08)
 

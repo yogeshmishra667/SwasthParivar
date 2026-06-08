@@ -27,6 +27,15 @@ const DEFAULT_FLAGS = {
   // after Week 14 ramp.
   cardiac_logging_enabled: false,
   respiratory_logging_enabled: false,
+  // Phase 4 Feature F — prescription OCR. Default OFF — flipped on
+  // after the F.4 BullMQ job lands and ops has staffed the approver
+  // queue. Auto-flipped OFF on `CLAUDE_VISION_DAILY_SPEND_CAP_USD`
+  // breach (per CLAUDE.md "Spend-Cap Parity Across AI Surfaces").
+  prescription_ocr_enabled: false,
+  // Ship-default per phase4.md §F.2: GREEN items still require an
+  // explicit `POST /approve` with verified fields — auto-approve
+  // stays false. Listed here so an operator can see it.
+  prescription_auto_approve_green: false,
 };
 
 async function main() {

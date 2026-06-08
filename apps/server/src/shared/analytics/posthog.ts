@@ -92,6 +92,28 @@ export interface EventPropsMap {
     spend_usd: number;
     cap_usd: number;
   };
+  // Phase 4 Feature F — Claude Vision (prescription OCR) telemetry.
+  // `prescription_ocr_call` fires for every Pass A / Pass B / clarification
+  // pass; the dashboards pivot by `mode` to track per-pass cost + latency.
+  prescription_ocr_call: {
+    mode: "prescription_text" | "medicine_bottle" | "clarification_pass";
+    model: string;
+    image_count: number;
+    tokens_input: number;
+    tokens_output: number;
+    response_latency_ms: number;
+    estimated_cost_usd: number;
+    prescription_id: string;
+    request_id: string;
+  };
+  prescription_ocr_circuit_opened: {
+    failures_in_window: number;
+    window_seconds: number;
+  };
+  prescription_ocr_spend_cap_reached: {
+    spend_usd: number;
+    cap_usd: number;
+  };
   // Fired by the CHAT_SAFETY_REVIEW worker after persisting the
   // human-audit row. Drives the safety-review dashboard +
   // weekly-flag-rate alarm.

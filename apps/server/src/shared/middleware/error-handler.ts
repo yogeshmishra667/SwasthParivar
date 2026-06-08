@@ -58,9 +58,14 @@ const statusFor = (code: ErrorCode): number => {
     case "SOS_DISABLED": // sos_enabled=false — call emergency services directly
     case "CARDIAC_DISABLED": // cardiac_logging_enabled=false
     case "RESPIRATORY_DISABLED": // respiratory_logging_enabled=false
+    case "VISION_CIRCUIT_OPEN": // claude vision circuit breaker open
       return 503;
     case "CHAT_UPSTREAM_TIMEOUT":
+    case "VISION_UPSTREAM_TIMEOUT":
       return 504;
+    case "VISION_INVALID_JSON":
+    case "VISION_NO_IMAGES":
+      return 422;
     case "CHAT_SAFETY_REJECTED":
       return 400;
     case "REPORT_GENERATING":
