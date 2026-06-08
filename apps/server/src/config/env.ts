@@ -50,6 +50,20 @@ const envSchema = z.object({
   // exceeds this, the wrapper auto-flips ai_chat_tier3_enabled=false
   // (Tier 1/2 still flow) and pages on-call via Sentry. CC.11 §6.
   CLAUDE_DAILY_SPEND_CAP_USD: z.coerce.number().positive().default(50),
+  // Phase 4 Feature F — Claude Vision daily spend ceiling (USD,
+  // org-wide, UTC reset). When estimated cumulative Vision spend
+  // exceeds this, the wrapper auto-flips
+  // `prescription_ocr_enabled=false` (NEW prescription uploads stop
+  // enqueuing OCR; pre-existing items continue through the approval
+  // flow) and pages on-call via Sentry. Per CLAUDE.md "Spend-Cap
+  // Parity Across AI Surfaces" — separate from the chat cap so ops
+  // can kill the expensive OCR surface without breaking chat.
+  CLAUDE_VISION_DAILY_SPEND_CAP_USD: z.coerce.number().positive().default(20),
+  // Phase 4 Feature F — hard timeout for a single Vision call. Vision
+  // is slower than chat (image upload + multimodal inference) so the
+  // ceiling is higher than CHAT_HARD_TIMEOUT_MS, but still short
+  // enough that a runaway OCR call cannot block the BullMQ worker.
+  VISION_HARD_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
 
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY: z.string().optional(),

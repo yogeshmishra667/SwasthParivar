@@ -119,6 +119,13 @@ export default defineConfig({
         // hasAlias is marked `/* c8 ignore */` because the caller
         // short-circuits before reaching it.
         "src/prescription-approver-resolver/relationship.ts": { 100: true },
+        // Phase 4 Feature F.3 — paired-reconciliation matcher.
+        // 95%+ floor per phase4.md §F.6; measured 100% across the
+        // board. Pinned at 100% — a regression here would mis-classify
+        // a bottle photo as matching a wrong prescription line.
+        "src/prescription-paired-reconciliation/reconciliation.ts": { 100: true },
+        // Levenshtein + alias-table similarity. Measured 100%; pinned.
+        "src/prescription-paired-reconciliation/similarity.ts": { 100: true },
         // Phase 4 Feature E.2 — multi-category bypass dispatch planner.
         // Safety-critical: a regression here would route a cardiac
         // chest-pain alert to the bradycardia template, or skip the
