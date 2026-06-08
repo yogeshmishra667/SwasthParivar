@@ -23,7 +23,13 @@
  *   icon.png              1024×1024  rounded blue square, white lotus + tilak + pulse
  *   adaptive-icon.png     1024×1024  white lotus on transparent (smaller, inside safe zone)
  *   notification-icon.png 96×96      monochrome white lotus silhouette
- *   splash.png            1242×2436  full-bleed blue with centred lotus
+ *   splash.png            1024×1024  square blue with large centred lotus
+ *                                    (Expo `contain` resize scales it up
+ *                                    to fit device width — splashShader
+ *                                    makes the lotus ~65% of the canvas
+ *                                    so it lands ~60% of screen width
+ *                                    on real phones, vs ~10% with the
+ *                                    previous full-bleed portrait image.)
  *
  * Usage (from repo root):
  *   pnpm --filter @swasth/mobile icon:build
@@ -280,11 +286,19 @@ const notificationShader = (x, y) => {
 };
 
 const splashShader = (x, y) => {
-  // x, y normalised against the smaller dimension (width). Shift the
-  // lotus into the upper portion of the portrait canvas.
-  const HEART_SCALE = 1.6;
+  // x, y normalised against the smaller dimension. The splash is now a
+  // SQUARE 1024×1024 canvas (down from 1242×2436) — Expo's `contain`
+  // resize mode scales the smaller image up to fit the device width,
+  // and the legacy `expo.splash.backgroundColor` paints the strip
+  // above and below. Net result: the lotus appears at ~60% of screen
+  // width on real phones, vs ~10% with the previous full-bleed image.
+  //
+  // HEART_SCALE = 0.6 makes the lotus fill ~65% of the canvas width.
+  // The y-offset keeps it slightly above visual centre so a future
+  // bitmap-text layer ("SwasthParivar") can sit below without clipping.
+  const HEART_SCALE = 0.6;
   const hx = x * HEART_SCALE;
-  const hy = (y + 0.4) * HEART_SCALE;
+  const hy = (y + 0.08) * HEART_SCALE;
   if (insideCircle(hx, hy, TILAK_CX, TILAK_CY, TILAK_R)) return [...SAFFRON, 255];
   if (insideLotus(hx, hy)) return [...WHITE, 255];
   if (insidePulse(hx, hy - 0.42)) return [255, 255, 255, 110];
@@ -297,7 +311,7 @@ const targets = [
   { name: "icon.png", w: 1024, h: 1024, shader: launcherShader },
   { name: "adaptive-icon.png", w: 1024, h: 1024, shader: adaptiveShader },
   { name: "notification-icon.png", w: 96, h: 96, shader: notificationShader },
-  { name: "splash.png", w: 1242, h: 2436, shader: splashShader },
+  { name: "splash.png", w: 1024, h: 1024, shader: splashShader },
 ];
 
 console.log("Generating SwasthParivar brand icons (v2 — lotus)…\n");
