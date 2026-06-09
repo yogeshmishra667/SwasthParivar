@@ -1,0 +1,72 @@
+// Zod schemas for Phase 4 §F.5 prescription routes. Multipart-uploaded
+// bodies are validated downstream (multer hands us files, not strings),
+// so the body schemas here are for the JSON-bodied endpoints only —
+// clarify, approve, reject, manual-item-add.
+
+import { z } from "zod";
+
+const uuid = z.string().uuid();
+
+// ── POST /prescriptions/upload — optional non-file fields ──────────
+// multer carries the files; these are the JSON-ish flags clients may
+// embed alongside (e.g. `prescribedDate` from the doctor, `doctorId`
+// from the patient's doctor list). All optional.
+export const uploadFormFieldsSchema = z.object({
+  doctorId: uuid.optional(),
+  prescribedDate: z.string().datetime({ offset: true }).optional(),
+});
+
+// ── POST /prescriptions/:id/items/:itemId/clarify ───────────────────
+//
+// Either the approver uploads a new bottle photo (multipart) OR types a
+// medicine name (JSON body), per CLAUDE.md "Up to 3 clarification
+// attempts". Both can be supplied — the worker uses the photo as
+// authoritative and the typed name as a tiebreaker. `approverNote` is
+// always optional free-text.
+export const clarifyBodySchema = z
+  .object({
+    typedMedicineName: z.string().trim().min(1).max(120).optional(),
+    approverNote: z.string().trim().max(500).optional(),
+    clarificationAttemptId: uuid,
+  })
+  .refine(
+    // Application layer ensures EITHER a photo (file upload) OR a typed
+    // name is present. multer file presence is checked in the
+    // controller; this Zod schema can't see it.
+    () => true,
+  );
+
+// ── POST /prescriptions/:id/approve ─────────────────────────────────
+const approverItemDecisionSchema = z
+  .object({
+    id: uuid,
+    decision: z.enum(["approve", "reject", "needs_doctor"]),
+    verifiedMedicineName: z.string().trim().min(1).max(120).optional(),
+    verifiedDosage: z.string().trim().max(80).optional(),
+    verifiedFrequency: z.string().trim().max(80).optional(),
+    approverNote: z.string().trim().max(500).optional(),
+  })
+  .refine(
+    (v) =>
+      v.decision !== "approve" ||
+      (v.verifiedMedicineName !== undefined &&
+        v.verifiedDosage !== undefined &&
+        v.verifiedFrequency !== undefined),
+    {
+      message: "approve requires verifiedMedicineName, verifiedDosage, verifiedFrequency",
+    },
+  );
+
+export const approveBodySchema = z.object({
+  items: z.array(approverItemDecisionSchema).min(1).max(50),
+});
+
+// ── POST /prescriptions/:id/reject ──────────────────────────────────
+export const rejectBodySchema = z.object({
+  reason: z.string().trim().min(1).max(500),
+});
+
+export type UploadFormFields = z.infer<typeof uploadFormFieldsSchema>;
+export type ClarifyBody = z.infer<typeof clarifyBodySchema>;
+export type ApproveBody = z.infer<typeof approveBodySchema>;
+export type RejectBody = z.infer<typeof rejectBodySchema>;

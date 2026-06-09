@@ -1,0 +1,54 @@
+// Phase 4 §F.5 prescription router. Routes:
+//
+//   POST   /upload                         multipart, paired upload
+//   GET    /:id                            full prescription detail
+//   POST   /:id/items/:itemId/clarify      mid-approval clarification
+//   POST   /:id/approve                    per-item decisions
+//   POST   /:id/reject                     whole-prescription reject
+//
+// Auth: `requireAuth` on the whole router — JWT carries the household
+// and user id. Per-action authority (caller vs resolved approver vs
+// household read) is enforced in the service layer.
+
+import { type NextFunction, type Request, type Response, Router } from "express";
+
+import { requireAuth } from "../../shared/middleware/auth.js";
+import {
+  mapMulterError,
+  prescriptionUploadMultipart,
+  singlePhotoMultipart,
+} from "../../shared/middleware/multipart.js";
+import * as controller from "./prescriptions.controller.js";
+
+export const prescriptionsRouter: Router = Router();
+
+prescriptionsRouter.use(requireAuth);
+
+/**
+ * Wrap multer's callback-style middleware so its errors run through the
+ * `mapMulterError` mapper before reaching the global error handler.
+ * Without this, `LIMIT_FILE_SIZE` would surface as `INTERNAL_ERROR`.
+ */
+const wrapMulter =
+  (mw: (req: Request, res: Response, next: NextFunction) => void) =>
+  (req: Request, res: Response, next: NextFunction): void => {
+    mw(req, res, (err: unknown) => {
+      if (!err) return next();
+      const mapped = mapMulterError(err);
+      next(mapped ?? err);
+    });
+  };
+
+prescriptionsRouter.post("/upload", wrapMulter(prescriptionUploadMultipart), controller.postUpload);
+
+prescriptionsRouter.get("/:id", controller.getOne);
+
+prescriptionsRouter.post(
+  "/:id/items/:itemId/clarify",
+  wrapMulter(singlePhotoMultipart),
+  controller.postClarify,
+);
+
+prescriptionsRouter.post("/:id/approve", controller.postApprove);
+
+prescriptionsRouter.post("/:id/reject", controller.postReject);
