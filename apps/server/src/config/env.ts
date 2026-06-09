@@ -69,6 +69,13 @@ const envSchema = z.object({
   R2_ACCESS_KEY: z.string().optional(),
   R2_SECRET_KEY: z.string().optional(),
   R2_BUCKET: z.string().optional(),
+  // Phase 4 §F.5 — public CDN host for R2 objects (e.g.
+  // `https://media.swasthparivar.com`). The Vision wrapper fetches the
+  // photo by URL; an unsigned public host keeps the Vision call simple.
+  // When unset, the upload route falls back to a presigned GET URL
+  // (1-hour TTL) embedded in the response — the OCR worker still
+  // fetches via that URL before it expires.
+  R2_PUBLIC_BASE_URL: z.string().url().optional(),
 
   WHATSAPP_BUSINESS_API_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
