@@ -51,6 +51,16 @@ export const QUEUE_NAMES = {
   // `(scheduleId, expectedAt)`. Idempotent across re-runs. Gated by
   // `schedule_compliance_check_enabled` (default true).
   SCHEDULE_COMPLIANCE_CHECK: "schedule-compliance-check",
+
+  // Phase 4 Feature F — runs the two Vision passes (prescription text +
+  // medicine bottles) on a newly uploaded `Prescription`, reconciles
+  // them via `prescription-paired-reconciliation`, classifies each
+  // resulting item via `prescription-color-classifier`, and persists
+  // `PrescriptionItem` rows with their initial colour + audit trail.
+  // Idempotent by `prescriptionId` — re-running on an in-progress
+  // prescription is a no-op because the job early-returns when the
+  // row is no longer in `pending_ocr`. Gated by `prescription_ocr_enabled`.
+  PRESCRIPTION_OCR: "prescription-ocr",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

@@ -114,6 +114,18 @@ export interface EventPropsMap {
     spend_usd: number;
     cap_usd: number;
   };
+  // Emitted by the PRESCRIPTION_OCR worker after the row of
+  // PrescriptionItem inserts lands. `item_count` is the number of
+  // PrescriptionItems persisted (possibly 0 if Vision returned a
+  // blank prescription — those move to `partial` so the approver can
+  // hand-add via the F.5 `/items` route).
+  prescription_ocr_completed: {
+    prescription_id: string;
+    item_count: number;
+    bottle_count: number;
+    page_count: number;
+    request_id: string;
+  };
   // Fired by the CHAT_SAFETY_REVIEW worker after persisting the
   // human-audit row. Drives the safety-review dashboard +
   // weekly-flag-rate alarm.

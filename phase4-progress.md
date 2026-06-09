@@ -2,7 +2,7 @@
 
 > **Companion to `phase4.md`** (the original spec). This file tracks what's done, what's in flight, and what's next. Update on every merged PR. The spec stays canonical for HOW things should be built.
 >
-> Last updated: **2026-06-09** (Feature F chunks 1+2 merged via PR #137 squash (`1b2a51c`); splash-logo fix in flight on PR #138; Feature F chunk 3 — Claude Vision wrapper + `CLAUDE_VISION_DAILY_SPEND_CAP_USD` + `prescription-paired-reconciliation` pure module — landed locally, PR pending).
+> Last updated: **2026-06-09** (Feature F chunks 1+2 merged via PR #137 squash (`1b2a51c`); splash-logo fix in flight on PR #138; F.3 in flight on PR #139; F.4 — `PRESCRIPTION_OCR` BullMQ job orchestrating the two-pass Vision pipeline + reconciliation + classification — landed locally, PR pending).
 
 ---
 
@@ -24,7 +24,7 @@
 | **UI polish + dark mode + new settings** | ✅ Antigravity rollup (#117-121) cleaned up + shippable in #118 | Visual click-through on Light/Dark/System across all screens before EAS build |
 | **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + mobile log surfaces + voice parser + **mobile-voice integration** landed (2026-06-05 → 07); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + cohort flag-ramp still pending | Cohort flag-ramp (`cardiac_logging_enabled` / `respiratory_logging_enabled`), Activity/Sleep schema for Feature I |
 | **Feature E — Multi-condition health logs** | 🟡 In progress — schema + classifiers + server modules + multi-category dispatch + integration tests + trend detectors + ANALYZE_READING wiring + mobile log surfaces + **voice parser** landed (2026-06-05 → 06); ActivityDaily/SleepLog + activity-aggregator + sleep-quality + mobile-voice integration still pending. Cohort ramp runbook: `docs/runbooks/feature-e-cohort-ramp.md` | Mobile voice integration (wire `VoiceInput` to the new parsers), Activity/Sleep schema for Feature I, then operational cohort ramp per the runbook |
-| **Feature F — Prescription OCR** | 🟡 In progress — chunks 1+2 merged to main (PR #137, squashed `1b2a51c`): schema + 5 enums + audit trail + `prescription-color-classifier` + `prescription-approver-resolver` (both 100% branch coverage per phase4.md §F.6). Chunk 3 in progress: `prescription-paired-reconciliation/` + `claude-vision.ts` wrapper + `CLAUDE_VISION_DAILY_SPEND_CAP_USD` flag-flip on `prescription_ocr_enabled` | Land F.3, then `PRESCRIPTION_OCR` BullMQ job (F.4), then HTTP routes `/upload` `/clarify` `/approve` `/reject` (F.5) |
+| **Feature F — Prescription OCR** | 🟡 In progress — chunks 1+2 merged to main (PR #137 squashed `1b2a51c`); chunk 3 in flight on PR #139 (Vision wrapper + paired-reconciliation + spend cap); chunk 4 landed locally (PR pending): `PRESCRIPTION_OCR` BullMQ job orchestrates Pass A + Pass B + reconcile + classify + audit-trail writes, idempotent on `prescriptionId` | HTTP routes `/upload` `/clarify` `/approve` `/reject` (F.5), then mobile upload + approver surfaces (F.5b), then operational ramp |
 | **Feature G — Doctor portal** | ❌ Not started (Week 17) | — |
 | **Feature H — Indian food DB** | ❌ Not started (Week 18) | — |
 | **Feature I — Wearables** | ❌ Not started (Week 19-20) | Blocks `activity_drop` SG signal from going live |
@@ -73,6 +73,24 @@ Earliest first within each cluster; most recent cluster last.
 - PR #112 (2026-05-31) — `defaultRateLimit` now keys per-userId when JWT verifiable, IP fallback otherwise. Defeats Indian carrier-NAT mass-throttling.
 - PR #113 (2026-05-31) — Surface Expo's `errors[].code` + `errors[].message` in admin UI instead of opaque `HTTP_400`.
 - PR #114 (2026-05-31) — Auto-prune push tokens that return `PushTooManyExperienceIds` or `MismatchSenderId` (was only `DeviceNotRegistered`).
+
+### Feature F (chunk 4) — `PRESCRIPTION_OCR` BullMQ job (2026-06-09)
+
+Fourth chunk of phase4.md §F. The async worker that drives every prescription upload through the two-pass Vision pipeline and lands the per-item state on `PrescriptionItem`. Consumes F.2's classifier + F.3's wrapper + reconciliation; emitted by the F.5 upload route (next chunk).
+
+- **`apps/server/src/workers/prescription-ocr.processor.ts`** — the orchestrator. Five steps:
+  1. **Kill-switch + idempotency guards.** Reads `prescription_ocr_enabled` (auto-flipped off by the F.3 Vision spend cap → cheap early-return). Loads `Prescription` + linked `MedicinePhoto[]`. If row not in `pending_ocr`, return — BullMQ retries are safe. If `job.userId !== prescription.userId`, log + return — wrong-patient enqueue defends against operator footgun.
+  2. **Pass A.** One `generateVisionResponse({mode: "prescription_text"})` per `originalPhotoUrls[i]`. Flatten all lines into a single `PassACandidate[]` tagged `${pageIndex}:${rowIndex}` so the audit trail can replay which page + row produced each item.
+  3. **Pass B.** One `generateVisionResponse({mode: "medicine_bottle"})` per `MedicinePhoto` where `uploadedAt === "initial_upload"`. Clarification + post-schedule photos belong to their own future workers (F.5/F.5b), so this processor leaves them alone.
+  4. **Reconcile + classify (pure).** `reconcilePassAB({passA, passB})` from F.3 → `classifyPrescriptionItem({...})` from F.2 per item. No Prisma calls inside the pure pipeline — the boundary stays clean.
+  5. **Persist in one transaction.** Update every `MedicinePhoto.aiReadName + matchConfidence + matchStatus`. Create one `PrescriptionItem` per reconciled candidate with `ocrConfidence` (reconciled), `ocrColor`, `pairedMedicinePhotoIds`, and an append-only `aiSuggestionHistory` recording both the Pass-A and (when matched) Pass-B Vision calls with model + tokens + latency + raw read + alternatives. Update `Prescription.status` to `partial` if any item is `need_clarification` OR Vision returned zero lines, otherwise `pending_approval`. Stamp `approvalRequestedAt` when transitioning to `pending_approval` — drives the §C' "guardian sent, not yet seen" Silent Guardian signal in a later chunk.
+- **PII guard.** `processPrescriptionOcr` hashes the raw `userId` to `anon_${sha256(userId).slice(0, 16)}` and passes it as `PrescriptionContext.anonymizedPatientId`. The raw `userId` stays on the server side for PostHog correlation. The F.3 wrapper's compile-time guard would reject anything else.
+- **`apps/server/src/workers/prescription-ocr.worker.ts`** — one-liner that registers the processor against the BullMQ queue. Side-effecting; tests import the processor directly.
+- **Queue + worker plumbing.** New `PRESCRIPTION_OCR` entry in `QUEUE_NAMES` (`apps/server/src/shared/queue.ts`); `prescriptionOcrWorker` added to the workers array + `workerNames` registry in `apps/server/src/workers/index.ts`. BullMQ retries (3 attempts, exponential backoff) inherited from the global queue defaults.
+- **Spend-cap interaction.** A mid-prescription Vision cap breach surfaces as an exception from `generateVisionResponse`; BullMQ retries, and the next attempt sees `prescription_ocr_enabled=false` and aborts cleanly. The prescription stays in `pending_ocr` for ops to re-enqueue after lifting the cap — never half-classified.
+- **PostHog event.** New `prescription_ocr_completed{prescription_id, item_count, bottle_count, page_count, request_id}` fires after the transaction commits. `prescription_ocr_call` (from F.3) covers per-call telemetry; this one closes the loop on per-job outcomes.
+- **11 new unit tests.** Cover kill-switch / idempotency (4 cases: flag off, already-classified, userId mismatch, row missing) + happy path (4 cases: multi-line YELLOW → `pending_approval`, mixed line with `need_clarification` → `partial`, blank prescription → `partial` with zero items, bottle match drives `pairedMedicinePhotoIds` + matched `matchStatus`) + audit trail / Pass-B isolation (2 cases) + PII guard (1 case asserting anonymised id matches `^anon_[a-f0-9]{16}$`). Total server unit tests: **74** (up from 63).
+- **Verify gates** — `pnpm format:check` ✅ · `pnpm typecheck` ✅ (6/6) · `pnpm lint` ✅ (6/6) · `pnpm -r build` ✅ · purity ✅ (88 files unchanged) · 797 domain-logic tests ✅ · 74 server unit tests ✅.
 
 ### Feature F (chunk 3) — Claude Vision wrapper + paired-reconciliation (2026-06-09)
 
