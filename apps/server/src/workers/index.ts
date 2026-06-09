@@ -33,6 +33,8 @@ import {
   bootstrapScheduleComplianceCron,
 } from "./schedule-compliance.worker.js";
 
+import { prescriptionOcrWorker } from "./prescription-ocr.worker.js";
+
 import { logger } from "../shared/logger.js";
 
 const workers = [
@@ -53,6 +55,8 @@ const workers = [
   criticalBypassAutoEscalateWorker,
 
   scheduleComplianceWorker,
+
+  prescriptionOcrWorker,
 ];
 
 export const workerNames = [
@@ -73,6 +77,8 @@ export const workerNames = [
   "critical-bypass-auto-escalate",
 
   "schedule-compliance",
+
+  "prescription-ocr",
 ];
 
 export const startWorkers = (): void => {

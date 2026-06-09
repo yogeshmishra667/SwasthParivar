@@ -45,7 +45,8 @@
       "@hono/node-server": "^1.19.13",
       "@babel/runtime": "^7.26.10",
       "ws": "^8.20.1",
-      "cookie": "^0.7.0"
+      "cookie": "^0.7.0",
+      "shell-quote": ">=1.8.4"
     }
   },
   "dependencies": {
