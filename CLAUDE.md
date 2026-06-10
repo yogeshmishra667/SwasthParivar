@@ -565,6 +565,13 @@ DATABASE_URL, REDIS_URL, JWT_SECRET, JWT_REFRESH_SECRET, OTP_SECRET, CLAUDE_API_
 - Graceful shutdown: SIGTERM → drain BullMQ → close DB → exit
 - Express 5: async errors propagate natively — do NOT add express-async-errors
 
+## Branch & PR Hygiene (ENFORCE — repo squash-merges)
+
+- **Base every PR on `main`.** Never base a PR on another open feature branch unless the work genuinely depends on unmerged code.
+- **Stacked branches must be flagged BEFORE either merges.** If branch B is built on branch A (A not yet in main), tell the user explicitly: _"B is stacked on A — do NOT merge B yet; merge A into main first, then I rebase B onto main."_ Do not stay silent and let them merge in the wrong order.
+- **Why it bites:** this repo squash-merges. When A squash-merges into main it gets a NEW sha, so B still carries A's original commit → B can't merge to main cleanly (duplicate commit / conflicts), and B's changes silently never reach main.
+- **Recovery for an orphaned stacked PR:** `git checkout -b fix origin/main && git cherry-pick <squashed-child-commit>` → open a fresh PR to main. (This is exactly how PR #141 → #143 was rescued on 2026-06-10.)
+
 ---
 
 # Edge Case Fixes
