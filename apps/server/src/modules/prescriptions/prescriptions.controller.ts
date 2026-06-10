@@ -9,8 +9,10 @@ import { resolveHouseholdMember } from "../../shared/auth/household.js";
 import { ok } from "../../shared/http.js";
 import * as service from "./prescriptions.service.js";
 import {
+  appendPhotosFormFieldsSchema,
   approveBodySchema,
   clarifyBodySchema,
+  manualItemBodySchema,
   rejectBodySchema,
   uploadFormFieldsSchema,
 } from "./prescriptions.validation.js";
@@ -144,4 +146,74 @@ export const postReject = async (req: Request, res: Response): Promise<void> => 
     requestId: requestIdOf(req),
   });
   ok(res, result);
+};
+
+// ── POST /prescriptions/:id/photos (§F.10b.2 append) ───────────────
+
+export const postAppendPhotos = async (req: Request, res: Response): Promise<void> => {
+  const prescriptionId = req.params.id;
+  if (typeof prescriptionId !== "string" || !prescriptionId)
+    throw new DomainError("VALIDATION_ERROR", "missing prescription id");
+
+  const files = (req.files ?? {}) as {
+    prescriptionPhotos?: Express.Multer.File[];
+    medicinePhotos?: Express.Multer.File[];
+  };
+  const prescriptionPhotos = (files.prescriptionPhotos ?? []).map((f) => ({
+    buffer: f.buffer,
+    mimeType: f.mimetype,
+  }));
+  const medicinePhotos = (files.medicinePhotos ?? []).map((f) => ({
+    buffer: f.buffer,
+    mimeType: f.mimetype,
+  }));
+
+  const formFields = (req.body ?? {}) as Record<string, unknown>;
+  const parsed = appendPhotosFormFieldsSchema.parse({
+    deltaUploadId:
+      typeof formFields.deltaUploadId === "string" ? formFields.deltaUploadId : undefined,
+  });
+
+  const result = await service.appendPhotos({
+    auth: req.auth!,
+    prescriptionId,
+    deltaUploadId: parsed.deltaUploadId,
+    prescriptionPhotos,
+    medicinePhotos,
+    requestId: requestIdOf(req),
+  });
+  ok(res, result, 202);
+};
+
+// ── POST /prescriptions/:id/items (§F.10b.3 manual add) ────────────
+
+export const postManualItem = async (req: Request, res: Response): Promise<void> => {
+  const prescriptionId = req.params.id;
+  if (typeof prescriptionId !== "string" || !prescriptionId)
+    throw new DomainError("VALIDATION_ERROR", "missing prescription id");
+  const body = manualItemBodySchema.parse(req.body);
+  const result = await service.addManualItem({
+    auth: req.auth!,
+    prescriptionId,
+    body,
+    requestId: requestIdOf(req),
+  });
+  ok(res, result, 201);
+};
+
+// ── POST /medicines/:id/photo (routine cross-check) ────────────────
+
+export const postMedicinePhoto = async (req: Request, res: Response): Promise<void> => {
+  const scheduleId = req.params.id;
+  if (typeof scheduleId !== "string" || !scheduleId)
+    throw new DomainError("VALIDATION_ERROR", "missing medication schedule id");
+  const file = req.file;
+  if (!file) throw new DomainError("VALIDATION_ERROR", "a `photo` file is required");
+  const result = await service.addMedicinePhoto({
+    auth: req.auth!,
+    scheduleId,
+    photo: { buffer: file.buffer, mimeType: file.mimetype },
+    requestId: requestIdOf(req),
+  });
+  ok(res, result, 202);
 };

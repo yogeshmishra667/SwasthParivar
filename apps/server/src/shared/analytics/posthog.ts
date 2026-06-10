@@ -125,6 +125,9 @@ export interface EventPropsMap {
     bottle_count: number;
     page_count: number;
     request_id: string;
+    // §F.6 delta runs set these — absent on the initial OCR pass.
+    delta?: boolean;
+    promotions?: number;
   };
   // Phase 4 §F.5 — fired by the upload route AFTER R2 + DB lands but
   // BEFORE BullMQ enqueue. Pivot by `requires_guardian_approval` and
@@ -166,7 +169,7 @@ export interface EventPropsMap {
   // attempts without leaking the user id.
   prescription_approval_authority_blocked: {
     prescription_id: string;
-    action: "approve" | "reject" | "clarify";
+    action: "approve" | "reject" | "clarify" | "append_photos" | "add_item";
     caller_id_redacted: string;
     requires_guardian_approval: boolean;
   };

@@ -9,6 +9,7 @@ import type { PrescriptionOcrJob } from "../../workers/prescription-ocr.processo
 import type {
   MedicinePhotoCrossCheckJob,
   PrescriptionClarificationOcrJob,
+  PrescriptionOcrDeltaJob,
 } from "./prescriptions.types.js";
 
 const ocrQueue: Queue<PrescriptionOcrJob> = createQueue<PrescriptionOcrJob>(
@@ -18,6 +19,9 @@ const clarificationQueue: Queue<PrescriptionClarificationOcrJob> =
   createQueue<PrescriptionClarificationOcrJob>(QUEUE_NAMES.PRESCRIPTION_CLARIFICATION_OCR);
 const crossCheckQueue: Queue<MedicinePhotoCrossCheckJob> = createQueue<MedicinePhotoCrossCheckJob>(
   QUEUE_NAMES.MEDICINE_PHOTO_CROSS_CHECK,
+);
+const ocrDeltaQueue: Queue<PrescriptionOcrDeltaJob> = createQueue<PrescriptionOcrDeltaJob>(
+  QUEUE_NAMES.PRESCRIPTION_OCR_DELTA,
 );
 
 /**
@@ -53,5 +57,16 @@ export const enqueueMedicinePhotoCrossCheck = async (
 ): Promise<void> => {
   await crossCheckQueue.add("cross-check", job, {
     jobId: `cross-check-${job.medicinePhotoId}`,
+  });
+};
+
+/**
+ * Enqueue an incremental OCR pass for an append upload. Idempotent on
+ * `${prescriptionId}:${deltaUploadId}` so a flaky mobile retry of the
+ * same append never double-charges Vision spend or double-creates items.
+ */
+export const enqueuePrescriptionOcrDelta = async (job: PrescriptionOcrDeltaJob): Promise<void> => {
+  await ocrDeltaQueue.add("ocr-delta", job, {
+    jobId: `ocr-delta-${job.prescriptionId}-${job.deltaUploadId}`,
   });
 };

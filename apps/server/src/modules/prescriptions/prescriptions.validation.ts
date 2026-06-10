@@ -66,7 +66,27 @@ export const rejectBodySchema = z.object({
   reason: z.string().trim().min(1).max(500),
 });
 
+// ── POST /prescriptions/:id/photos (§F.10b.2 append) ────────────────
+// multipart, reuses the upload parser's two photo arrays. The only
+// non-file field is the client idempotency UUID.
+export const appendPhotosFormFieldsSchema = z.object({
+  deltaUploadId: uuid,
+});
+
+// ── POST /prescriptions/:id/items (§F.10b.3 manual add) ─────────────
+// JSON body — the approver types a medicine they know was prescribed
+// but the AI never surfaced. Always lands YELLOW (single source).
+export const manualItemBodySchema = z.object({
+  typedMedicineName: z.string().trim().min(1).max(120),
+  typedDosage: z.string().trim().min(1).max(80),
+  typedFrequency: z.string().trim().min(1).max(80),
+  approverNote: z.string().trim().max(500).optional(),
+  addAttemptId: uuid,
+});
+
 export type UploadFormFields = z.infer<typeof uploadFormFieldsSchema>;
 export type ClarifyBody = z.infer<typeof clarifyBodySchema>;
 export type ApproveBody = z.infer<typeof approveBodySchema>;
 export type RejectBody = z.infer<typeof rejectBodySchema>;
+export type AppendPhotosFormFields = z.infer<typeof appendPhotosFormFieldsSchema>;
+export type ManualItemBody = z.infer<typeof manualItemBodySchema>;

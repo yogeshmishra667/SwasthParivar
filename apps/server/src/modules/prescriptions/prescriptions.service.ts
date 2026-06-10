@@ -40,13 +40,19 @@ import { processPhoto, validateUploadCounts } from "../../shared/storage/photo-u
 import { refreshObjectUrl } from "../../shared/storage/r2.js";
 import { capture as captureAnalyticsEvent } from "../../shared/analytics/posthog.js";
 import { scheduleMedReminders } from "../medications/medications.jobs.js";
-import { enqueueClarificationOcr, enqueuePrescriptionOcr } from "./prescriptions.jobs.js";
+import {
+  enqueueClarificationOcr,
+  enqueueMedicinePhotoCrossCheck,
+  enqueuePrescriptionOcr,
+  enqueuePrescriptionOcrDelta,
+} from "./prescriptions.jobs.js";
 import type {
   ApprovalRequestBody,
   AuditEntry,
   PrescriptionItemView,
   PrescriptionView,
 } from "./prescriptions.types.js";
+import type { ManualItemBody } from "./prescriptions.validation.js";
 
 // Maximum clarification attempts per CLAUDE.md "Up to 3 clarification
 // attempts; further failure → terminal needs_doctor". Counter is the
@@ -588,7 +594,351 @@ export const rejectPrescription = async (
   return { prescriptionId: prescription.id };
 };
 
+// ── append photos (§F.10b.2) ───────────────────────────────────────
+
+export interface AppendPhotosInput {
+  readonly auth: AuthClaims;
+  readonly prescriptionId: string;
+  readonly deltaUploadId: string;
+  readonly prescriptionPhotos: readonly { buffer: Buffer; mimeType: string }[];
+  readonly medicinePhotos: readonly { buffer: Buffer; mimeType: string }[];
+  readonly requestId: string;
+}
+
+export interface AppendPhotosResult {
+  readonly prescriptionId: string;
+  readonly deltaUploadId: string;
+  readonly status: "ocr_delta_queued" | "duplicate_ignored";
+  readonly newPrescriptionPhotoUrls: readonly string[];
+  readonly newMedicinePhotoIds: readonly string[];
+}
+
+export const appendPhotos = async (input: AppendPhotosInput): Promise<AppendPhotosResult> => {
+  validateUploadCounts({
+    prescriptionCount: input.prescriptionPhotos.length,
+    medicineCount: input.medicinePhotos.length,
+  });
+
+  const { prescription } = await loadPrescriptionForApprover({
+    auth: input.auth,
+    prescriptionId: input.prescriptionId,
+    action: "append_photos",
+  });
+  assertAppendable(prescription.status);
+
+  // Idempotency pre-check (best-effort, re-checked in the txn) so a
+  // mobile retry doesn't re-upload to R2 or re-enqueue.
+  if (
+    stringArrayField(prescription.ocrRawResult, "requestedDeltas").includes(input.deltaUploadId)
+  ) {
+    return {
+      prescriptionId: prescription.id,
+      deltaUploadId: input.deltaUploadId,
+      status: "duplicate_ignored",
+      newPrescriptionPhotoUrls: [],
+      newMedicinePhotoIds: [],
+    };
+  }
+
+  const prescriptionPhotoResults = await Promise.all(
+    input.prescriptionPhotos.map((p) =>
+      processPhoto({
+        buffer: p.buffer,
+        mimeType: p.mimeType,
+        kind: "prescription",
+        scopeId: prescription.id,
+      }),
+    ),
+  );
+  const medicinePhotoResults = await Promise.all(
+    input.medicinePhotos.map((p) =>
+      processPhoto({
+        buffer: p.buffer,
+        mimeType: p.mimeType,
+        kind: "medicine_bottle",
+        scopeId: prescription.id,
+      }),
+    ),
+  );
+
+  const newPrescriptionPhotoUrls = prescriptionPhotoResults.map((p) => p.url);
+  const newMedicinePhotoIds: string[] = [];
+  let duplicate = false;
+
+  await prisma.$transaction(async (tx) => {
+    const fresh = await tx.prescription.findUnique({
+      where: { id: prescription.id },
+      select: { ocrRawResult: true, originalPhotoUrls: true },
+    });
+    if (!fresh) return;
+    const requested = stringArrayField(fresh.ocrRawResult, "requestedDeltas");
+    if (requested.includes(input.deltaUploadId)) {
+      duplicate = true;
+      return;
+    }
+
+    for (const photo of medicinePhotoResults) {
+      const created = await tx.medicinePhoto.create({
+        data: {
+          prescriptionId: prescription.id,
+          photoUrl: photo.url,
+          uploadedAt: "initial_upload",
+        },
+        select: { id: true },
+      });
+      newMedicinePhotoIds.push(created.id);
+    }
+
+    const rawObj = asPlainObject(fresh.ocrRawResult);
+    await tx.prescription.update({
+      where: { id: prescription.id },
+      data: {
+        originalPhotoUrls: [...fresh.originalPhotoUrls, ...newPrescriptionPhotoUrls],
+        ocrRawResult: {
+          ...rawObj,
+          requestedDeltas: [...requested, input.deltaUploadId],
+        },
+      },
+    });
+  });
+
+  if (duplicate) {
+    return {
+      prescriptionId: prescription.id,
+      deltaUploadId: input.deltaUploadId,
+      status: "duplicate_ignored",
+      newPrescriptionPhotoUrls: [],
+      newMedicinePhotoIds: [],
+    };
+  }
+
+  await enqueuePrescriptionOcrDelta({
+    prescriptionId: prescription.id,
+    userId: prescription.userId,
+    deltaUploadId: input.deltaUploadId,
+    newPrescriptionPhotoUrls,
+    newMedicinePhotoIds,
+    requestId: input.requestId,
+  });
+
+  return {
+    prescriptionId: prescription.id,
+    deltaUploadId: input.deltaUploadId,
+    status: "ocr_delta_queued",
+    newPrescriptionPhotoUrls,
+    newMedicinePhotoIds,
+  };
+};
+
+// ── manual add (§F.10b.3) ───────────────────────────────────────────
+
+export interface AddManualItemInput {
+  readonly auth: AuthClaims;
+  readonly prescriptionId: string;
+  readonly body: ManualItemBody;
+  readonly requestId: string;
+}
+
+export interface AddManualItemResult {
+  readonly itemId: string;
+  readonly ocrColor: "yellow";
+  readonly status: "pending" | "needs_doctor";
+  readonly duplicate: boolean;
+}
+
+export const addManualItem = async (input: AddManualItemInput): Promise<AddManualItemResult> => {
+  const { prescription } = await loadPrescriptionForApprover({
+    auth: input.auth,
+    prescriptionId: input.prescriptionId,
+    action: "add_item",
+  });
+  assertAppendable(prescription.status);
+
+  // Idempotency — a prior add with this addAttemptId already created an
+  // item. Find it via the append audit marker and return it unchanged.
+  const existing = await prisma.prescriptionItem.findMany({
+    where: { prescriptionId: prescription.id },
+    select: { id: true, status: true, aiSuggestionHistory: true },
+  });
+  for (const it of existing) {
+    if (auditHasAddAttempt(it.aiSuggestionHistory, input.body.addAttemptId)) {
+      return {
+        itemId: it.id,
+        ocrColor: "yellow",
+        status: it.status === "needs_doctor" ? "needs_doctor" : "pending",
+        duplicate: true,
+      };
+    }
+  }
+
+  // §F.10b.6 safety: a manual entry still obeys the frequency cap.
+  const exceedsCap = parseDailyDoseCount(input.body.typedFrequency) > 6;
+  const status: "pending" | "needs_doctor" = exceedsCap ? "needs_doctor" : "pending";
+
+  const audit: AuditEntry[] = [
+    {
+      at: new Date().toISOString(),
+      by: "approver",
+      source: "approver_added",
+      payload: {
+        addAttemptId: input.body.addAttemptId,
+        approverUserId: input.auth.sub,
+        typed: {
+          medicineName: input.body.typedMedicineName,
+          dosage: input.body.typedDosage,
+          frequency: input.body.typedFrequency,
+        },
+        note: input.body.approverNote ?? null,
+        flaggedNeedsDoctor: exceedsCap,
+      },
+    },
+  ];
+
+  const created = await prisma.prescriptionItem.create({
+    data: {
+      prescriptionId: prescription.id,
+      // Manual-add has no AI source — the typed name doubles as the
+      // "ocr" name so the column stays non-null, and confidence is 0.
+      ocrMedicineName: input.body.typedMedicineName,
+      ocrDosage: input.body.typedDosage,
+      ocrFrequency: input.body.typedFrequency,
+      ocrConfidence: 0,
+      // Always YELLOW — single source, no AI corroboration (§F.10b.3).
+      // Bypasses the classifier on purpose (0 confidence would otherwise
+      // resolve to need_clarification).
+      ocrColor: "yellow",
+      status,
+      verifiedMedicineName: input.body.typedMedicineName,
+      verifiedDosage: input.body.typedDosage,
+      verifiedFrequency: input.body.typedFrequency,
+      ...(input.body.approverNote !== undefined ? { approverNote: input.body.approverNote } : {}),
+      aiSuggestionHistory: audit as unknown as Prisma.InputJsonValue,
+    },
+    select: { id: true },
+  });
+
+  return { itemId: created.id, ocrColor: "yellow", status, duplicate: false };
+};
+
+// ── routine medicine-bottle cross-check (POST /medicines/:id/photo) ──
+
+export interface AddMedicinePhotoInput {
+  readonly auth: AuthClaims;
+  readonly scheduleId: string;
+  readonly photo: { buffer: Buffer; mimeType: string };
+  readonly requestId: string;
+}
+
+export interface AddMedicinePhotoResult {
+  readonly medicinePhotoId: string;
+  readonly status: "cross_check_queued";
+}
+
+export const addMedicinePhoto = async (
+  input: AddMedicinePhotoInput,
+): Promise<AddMedicinePhotoResult> => {
+  const schedule = await prisma.medicationSchedule.findUnique({
+    where: { id: input.scheduleId },
+    select: { id: true, userId: true },
+  });
+  if (!schedule) {
+    throw new DomainError("MED_SCHEDULE_NOT_FOUND", "medication schedule not found");
+  }
+  // Household-scoped: the patient, any household member (shared device),
+  // or an accepted guardian may attach a routine cross-check photo.
+  await ensureHouseholdRead(input.auth, schedule.userId);
+
+  const processed = await processPhoto({
+    buffer: input.photo.buffer,
+    mimeType: input.photo.mimeType,
+    kind: "medicine_bottle",
+    scopeId: schedule.id,
+  });
+  const created = await prisma.medicinePhoto.create({
+    data: {
+      medicationScheduleId: schedule.id,
+      photoUrl: processed.url,
+      uploadedAt: "post_schedule_routine_check",
+    },
+    select: { id: true },
+  });
+
+  await enqueueMedicinePhotoCrossCheck({
+    medicinePhotoId: created.id,
+    medicationScheduleId: schedule.id,
+    userId: schedule.userId,
+    requestId: input.requestId,
+  });
+
+  return { medicinePhotoId: created.id, status: "cross_check_queued" };
+};
+
 // ── helpers ────────────────────────────────────────────────────────
+
+/**
+ * Append routes (`/photos`, `/items`) are only valid while the
+ * prescription is still being assembled. `pending_ocr` means the initial
+ * OCR hasn't finished; `approved`/`rejected` are locked. Only
+ * `pending_approval` / `partial` accept more material.
+ */
+const assertAppendable = (status: PrescriptionRow["status"]): void => {
+  if (status === "pending_approval" || status === "partial") return;
+  if (status === "pending_ocr") {
+    throw new DomainError(
+      "PRESCRIPTION_LOCKED",
+      "initial OCR still running — try again once items appear",
+    );
+  }
+  throw new DomainError(
+    "PRESCRIPTION_LOCKED",
+    `prescription is ${status} — open a new prescription instead`,
+  );
+};
+
+const asPlainObject = (raw: Prisma.JsonValue): Record<string, unknown> =>
+  typeof raw === "object" && raw !== null && !Array.isArray(raw) ? raw : {};
+
+const stringArrayField = (raw: Prisma.JsonValue, key: string): string[] => {
+  const obj = asPlainObject(raw);
+  const value = obj[key];
+  return Array.isArray(value) ? value.filter((x): x is string => typeof x === "string") : [];
+};
+
+const auditHasAddAttempt = (history: Prisma.JsonValue, addAttemptId: string): boolean => {
+  if (!Array.isArray(history)) return false;
+  return history.some((entry) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return false;
+    const e = entry as Record<string, unknown>;
+    if (e.source !== "approver_added") return false;
+    const payload = e.payload;
+    return (
+      typeof payload === "object" &&
+      payload !== null &&
+      (payload as Record<string, unknown>).addAttemptId === addAttemptId
+    );
+  });
+};
+
+/**
+ * Total daily dose count from a free-text frequency string. Hyphen forms
+ * (`1-0-1`, `1-1-1-1`) sum their numeric parts; common abbreviations map
+ * to their per-day count; anything else defaults to 1. Used only for the
+ * §F.10b.6 "> 6×/day → needs_doctor" safety gate, so a conservative
+ * under-count on an unknown form is acceptable.
+ */
+const parseDailyDoseCount = (frequency: string): number => {
+  const trimmed = frequency.trim();
+  const parts = trimmed.split("-");
+  if (parts.length >= 2 && parts.every((p) => /^[0-9]+$/.test(p.trim()))) {
+    return parts.reduce((sum, p) => sum + Number.parseInt(p.trim(), 10), 0);
+  }
+  const lower = trimmed.toLowerCase();
+  if (lower === "od" || lower === "once daily") return 1;
+  if (lower === "bd" || lower === "bid" || lower === "twice daily") return 2;
+  if (lower === "tds" || lower === "tid" || lower === "thrice daily") return 3;
+  if (lower === "qid" || lower === "qds") return 4;
+  return 1;
+};
 
 type PrescriptionRow = NonNullable<Awaited<ReturnType<typeof prisma.prescription.findUnique>>>;
 type PrescriptionItemRow = NonNullable<
@@ -599,7 +949,7 @@ interface LoadApproverInput {
   readonly auth: AuthClaims;
   readonly prescriptionId: string;
   readonly itemId?: string;
-  readonly action: "clarify" | "approve" | "reject";
+  readonly action: "clarify" | "approve" | "reject" | "append_photos" | "add_item";
 }
 
 const TERMINAL_PRESCRIPTION_STATUSES = new Set<PrescriptionRow["status"]>(["approved", "rejected"]);

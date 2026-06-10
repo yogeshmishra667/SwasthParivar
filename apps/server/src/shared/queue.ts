@@ -79,6 +79,17 @@ export const QUEUE_NAMES = {
   // dashboard but never auto-disables the schedule — phase4.md §F.8
   // "Mismatch flag only (NOT auto-action)". Idempotent by photo id.
   MEDICINE_PHOTO_CROSS_CHECK: "medicine-photo-cross-check",
+
+  // Phase 4 §F.6 / §F.10b — fired by `POST /prescriptions/:id/photos`
+  // (the guardian "add what the patient missed" append flow). Runs the
+  // two Vision passes on ONLY the newly-appended photos, then uses the
+  // pure `prescription-delta-reconciliation` to (a) create new
+  // `PrescriptionItem` rows for drugs the new page introduces and
+  // (b) promote existing single-source items to GREEN when a fresh
+  // bottle photo corroborates them. Idempotent per
+  // `${prescriptionId}:${deltaUploadId}` (BullMQ jobId) AND a guard on
+  // `ocrRawResult.appliedDeltas`. Gated by `prescription_ocr_enabled`.
+  PRESCRIPTION_OCR_DELTA: "prescription-ocr-delta",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
