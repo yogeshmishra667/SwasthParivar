@@ -1,0 +1,93 @@
+{
+  "title": "Parchi",
+  "upload": {
+    "title": "Parchi add karein",
+    "parchiLabel": "Doctor ki parchi",
+    "parchiHint": "Parchi ki 1–3 photo",
+    "packetLabel": "Dawai ke packet",
+    "packetHint": "Optional — 1–5 packet/strip photo. Packet ki photo se dawai confirm ho jaati hai.",
+    "addPhoto": "Photo add karein",
+    "clearAll": "Sab hatayein",
+    "count": "{{count}} add hui",
+    "cta": "Upload karein",
+    "uploading": "Upload ho raha hai…",
+    "needAtLeastOne": "Pehle parchi ki kam se kam ek photo add karein.",
+    "success": "Upload ho gaya. Parchi padhi jaa rahi hai…",
+    "failed": "Upload nahi hua. Dobara try karein?"
+  },
+  "status": {
+    "pending_ocr": "Parchi padhi jaa rahi hai…",
+    "pending_approval": "Approval ka intezaar",
+    "partial": "Kuch dawaiyon par dhyan dein",
+    "approved": "Approve ho gaya",
+    "rejected": "Reject kiya"
+  },
+  "patient": {
+    "sentToGuardian": "{{name}} ko approval ke liye bheja gaya hai. Notification jaa chuki hai.",
+    "sentToGuardianGeneric": "Aapke family member ko approval ke liye bheja gaya hai.",
+    "readOnly": "In dawaiyon ko sirf approver hi confirm kar sakta hai.",
+    "resend": "Phir se yaad dilayein",
+    "resent": "Reminder bhej diya"
+  },
+  "item": {
+    "green": "Sahi lag raha hai",
+    "yellow": "Zara check karein",
+    "red": "Dhyan se dekhein",
+    "need_clarification": "Yeh dawai padhi nahi gayi",
+    "confidence": "AI confidence: {{pct}}%",
+    "name": "Dawai ka naam",
+    "dosage": "Dose",
+    "frequency": "Frequency (jaise 1-0-1)",
+    "note": "Note (optional)",
+    "needClarificationBody": "AI is dawai ka naam padh nahi paayi.",
+    "takePhoto": "Dawai ki photo lein",
+    "typeName": "Naam type karein",
+    "needsDoctor": "Doctor se confirm karke khud add karein.",
+    "approvedTag": "Approved",
+    "rejectedTag": "Reject",
+    "needsDoctorTag": "Doctor zaroori"
+  },
+  "actions": {
+    "approve": "Approve karein",
+    "reject": "Reject karein",
+    "markNeedsDoctor": "Doctor se poochein",
+    "addPhotos": "Aur photo add karein",
+    "addManual": "Dawai khud add karein",
+    "approveAll": "Parchi approve karein",
+    "approving": "Approve ho raha hai…",
+    "clarifySubmit": "Submit",
+    "saveManual": "Dawai add karein"
+  },
+  "manual": {
+    "title": "Dawai add karein",
+    "name": "Dawai ka naam",
+    "dosage": "Dose",
+    "frequency": "Frequency (jaise 1-0-1)",
+    "note": "Kahan dekha? (optional)"
+  },
+  "solo": {
+    "confirmTitle": "Kya doctor ne bilkul yahi prescribe ki hai?",
+    "confirmBody": "Galat dawai khatarnak ho sakti hai. Bilkul pakka kar lein.",
+    "confirmYes": "Haan, mujhe pakka hai",
+    "confirmNo": "Ek baar check karun",
+    "wait": "Dhyan se padhein… ({{secs}}s)",
+    "nudgeTitle": "Family member add karein",
+    "nudgeBody": "Family member ke dawai double-check karne se sabki safety badhti hai.",
+    "nudgeCta": "Family member add karein",
+    "nudgeDismiss": "Baad mein"
+  },
+  "camera": {
+    "permissionTitle": "Camera ki anumati chahiye",
+    "permissionBody": "Parchi ki photo lene ke liye camera chahiye.",
+    "grant": "Camera allow karein",
+    "capture": "Photo lein",
+    "retake": "Dobara lein",
+    "use": "Photo use karein",
+    "cancel": "Cancel"
+  },
+  "errors": {
+    "loadFailed": "Parchi load nahi hui. Refresh karein.",
+    "approveFailed": "Approval nahi hua. Dobara try karein?",
+    "actionFailed": "Yeh nahi hua. Dobara try karein?"
+  }
+}

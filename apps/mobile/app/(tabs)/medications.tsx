@@ -11,6 +11,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { ActiveProfileBadge } from "@/components/profile/ActiveProfileBadge";
 import { Card } from "@/components/ui/Card";
@@ -37,6 +38,7 @@ const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 export default function MedicationsScreen(): JSX.Element {
   const { t } = useTranslation();
+  const router = useRouter();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +121,14 @@ export default function MedicationsScreen(): JSX.Element {
           {t("medications.title")}
         </Text>
         <ActiveProfileBadge />
+      </View>
+
+      <View className="mx-4 mb-2">
+        <Button
+          label={t("prescriptions.upload.title")}
+          variant="secondary"
+          onPress={() => router.push("/prescriptions/upload")}
+        />
       </View>
 
       {error !== null && (
