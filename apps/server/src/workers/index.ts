@@ -34,6 +34,7 @@ import {
 } from "./schedule-compliance.worker.js";
 
 import { prescriptionOcrWorker } from "./prescription-ocr.worker.js";
+import { prescriptionOcrDeltaWorker } from "./prescription-ocr-delta.worker.js";
 import { prescriptionClarificationOcrWorker } from "./prescription-clarification-ocr.worker.js";
 import { medicinePhotoCrossCheckWorker } from "./medicine-photo-cross-check.worker.js";
 
@@ -59,6 +60,7 @@ const workers = [
   scheduleComplianceWorker,
 
   prescriptionOcrWorker,
+  prescriptionOcrDeltaWorker,
   prescriptionClarificationOcrWorker,
   medicinePhotoCrossCheckWorker,
 ];
@@ -83,6 +85,7 @@ export const workerNames = [
   "schedule-compliance",
 
   "prescription-ocr",
+  "prescription-ocr-delta",
   "prescription-clarification-ocr",
   "medicine-photo-cross-check",
 ];

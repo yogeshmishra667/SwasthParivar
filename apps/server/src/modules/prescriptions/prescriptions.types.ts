@@ -110,3 +110,21 @@ export interface MedicinePhotoCrossCheckJob {
   readonly userId: string;
   readonly requestId: string;
 }
+
+/**
+ * Payload for `PRESCRIPTION_OCR_DELTA` (§F.10b append flow). The route
+ * has already stored the new photos in R2 and (for bottles) created
+ * `MedicinePhoto` rows; it passes the new artefacts by reference so the
+ * worker Vision-runs ONLY them — never re-OCRs the whole prescription.
+ */
+export interface PrescriptionOcrDeltaJob {
+  readonly prescriptionId: string;
+  readonly userId: string;
+  /** Client-supplied UUID — idempotency key (BullMQ jobId + applied-delta guard). */
+  readonly deltaUploadId: string;
+  /** R2 URLs of the newly-appended prescription pages (Pass A targets). */
+  readonly newPrescriptionPhotoUrls: readonly string[];
+  /** Ids of the newly-created `MedicinePhoto` rows (Pass B targets). */
+  readonly newMedicinePhotoIds: readonly string[];
+  readonly requestId: string;
+}

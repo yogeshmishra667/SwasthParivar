@@ -21,3 +21,4 @@ export * from "./respiratory-thresholds/index.js";
 export * from "./prescription-color-classifier/index.js";
 export * from "./prescription-approver-resolver/index.js";
 export * from "./prescription-paired-reconciliation/index.js";
+export * from "./prescription-delta-reconciliation/index.js";

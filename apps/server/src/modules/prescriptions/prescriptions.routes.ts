@@ -1,7 +1,9 @@
-// Phase 4 §F.5 prescription router. Routes:
+// Phase 4 §F.5 / §F.6 prescription router. Routes:
 //
 //   POST   /upload                         multipart, paired upload
 //   GET    /:id                            full prescription detail
+//   POST   /:id/photos                     append missed pages/bottles (§F.10b.2)
+//   POST   /:id/items                      approver manual-add (§F.10b.3)
 //   POST   /:id/items/:itemId/clarify      mid-approval clarification
 //   POST   /:id/approve                    per-item decisions
 //   POST   /:id/reject                     whole-prescription reject
@@ -42,6 +44,14 @@ const wrapMulter =
 prescriptionsRouter.post("/upload", wrapMulter(prescriptionUploadMultipart), controller.postUpload);
 
 prescriptionsRouter.get("/:id", controller.getOne);
+
+prescriptionsRouter.post(
+  "/:id/photos",
+  wrapMulter(prescriptionUploadMultipart),
+  controller.postAppendPhotos,
+);
+
+prescriptionsRouter.post("/:id/items", controller.postManualItem);
 
 prescriptionsRouter.post(
   "/:id/items/:itemId/clarify",
