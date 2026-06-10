@@ -126,6 +126,50 @@ export interface EventPropsMap {
     page_count: number;
     request_id: string;
   };
+  // Phase 4 §F.5 — fired by the upload route AFTER R2 + DB lands but
+  // BEFORE BullMQ enqueue. Pivot by `requires_guardian_approval` and
+  // `approver_reason` for the funnel.
+  prescription_uploaded: {
+    prescription_id: string;
+    prescription_photos: number;
+    medicine_photos: number;
+    requires_guardian_approval: boolean;
+    approver_friction_level: "none" | "high";
+    approver_reason: string;
+  };
+  // Fired by the clarify route on enqueue. `source` distinguishes the
+  // two F.5 clarification paths — bottle photo (high-confidence) vs
+  // typed name (single-source YELLOW).
+  prescription_clarified: {
+    prescription_id: string;
+    item_id: string;
+    attempt_number: number;
+    source: "bottle_photo" | "typed";
+  };
+  // Fired per-item from the approve route when the approver typed-in
+  // verified fields that differ from the AI suggestion. `fields_changed`
+  // is the array of `"name" | "dosage" | "frequency"` deltas.
+  prescription_approver_corrected: {
+    prescription_id: string;
+    item_id: string;
+    fields_changed: readonly string[];
+  };
+  // Fired by the approve route in the solo-patient branch. Drives the
+  // "is solo-OCR error rate higher than guardian-OCR?" dashboard.
+  prescription_self_approved: {
+    prescription_id: string;
+    items_count: number;
+  };
+  // Fired whenever the approver-authority gate blocks a write —
+  // wrong-caller `/approve`, `/clarify`, or `/reject`. `caller_id_redacted`
+  // is a non-reversible hash so dashboards can pivot on repeated
+  // attempts without leaking the user id.
+  prescription_approval_authority_blocked: {
+    prescription_id: string;
+    action: "approve" | "reject" | "clarify";
+    caller_id_redacted: string;
+    requires_guardian_approval: boolean;
+  };
   // Fired by the CHAT_SAFETY_REVIEW worker after persisting the
   // human-audit row. Drives the safety-review dashboard +
   // weekly-flag-rate alarm.

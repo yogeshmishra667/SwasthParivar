@@ -46,6 +46,30 @@ export type ErrorCode =
   | "INSIGHT_NOT_FOUND"
   | "INSUFFICIENT_DATA"
   | "RX_PENDING_APPROVAL"
+  // Phase 4 §F.5 — prescription approval flow. Caller is authenticated
+  // but the upload's `prescription-approver-resolver` snapshot named a
+  // different approver (e.g. the guardian). Maps to 403 — patient sees
+  // "Maa ji ko approval ke liye bheja gaya hai" copy, not a retry.
+  | "APPROVAL_REQUIRES_GUARDIAN"
+  // The prescription has already transitioned to `approved` or
+  // `rejected`. Append-photos / manual-add / clarify / re-approve are
+  // all rejected at this terminal — open a new prescription instead.
+  // 409 (state conflict).
+  | "PRESCRIPTION_LOCKED"
+  | "PRESCRIPTION_NOT_FOUND"
+  | "PRESCRIPTION_ITEM_NOT_FOUND"
+  // Hit the F.4 "max 3 clarification attempts per item" guardrail —
+  // the item auto-promoted to `needs_doctor`. 409 surfaces the terminal
+  // state so the mobile UI can swap in the "add by hand" copy.
+  | "PRESCRIPTION_CLARIFICATION_EXHAUSTED"
+  // Multipart upload outside the per-file size / per-array count limits
+  // declared by the F.5 upload route. multer's own error mapped to a
+  // typed code so the mobile client can show a localised banner.
+  | "UPLOAD_TOO_LARGE"
+  // Object storage (R2) is not configured — env vars missing in the
+  // current environment. Fails the upload route at the boundary; OCR
+  // never enqueues. 503.
+  | "STORAGE_UNAVAILABLE"
   | "FAMILY_LINK_EXISTS"
   | "FAMILY_LINK_NOT_FOUND"
   | "FAMILY_INVITE_INVALID"
