@@ -61,6 +61,24 @@ export const QUEUE_NAMES = {
   // prescription is a no-op because the job early-returns when the
   // row is no longer in `pending_ocr`. Gated by `prescription_ocr_enabled`.
   PRESCRIPTION_OCR: "prescription-ocr",
+
+  // Phase 4 §F.5 — fired by `POST /prescriptions/:id/items/:itemId/clarify`.
+  // Runs one Vision pass on either a new bottle photo or a typed
+  // medicine name, appends a `vision_clarification_pass` audit entry,
+  // increments `clarificationAttempts`, and re-classifies the single
+  // item via `prescription-color-classifier`. Hitting attempt #3 with
+  // no resolution promotes the item to terminal `needs_doctor`.
+  // Idempotent by `${itemId}:${clarificationAttemptId}` so a flaky
+  // mobile retry never double-charges Vision spend.
+  PRESCRIPTION_CLARIFICATION_OCR: "prescription-clarification-ocr",
+
+  // Phase 4 §F.5 — fired by `POST /medicines/:id/photo` per CLAUDE.md
+  // "post-schedule routine cross-check". Runs one Vision Pass-B against
+  // the existing `MedicationSchedule.medicineName`, writes `matchStatus`
+  // to the `MedicinePhoto` row. Mismatch is flagged for the approver
+  // dashboard but never auto-disables the schedule — phase4.md §F.8
+  // "Mismatch flag only (NOT auto-action)". Idempotent by photo id.
+  MEDICINE_PHOTO_CROSS_CHECK: "medicine-photo-cross-check",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

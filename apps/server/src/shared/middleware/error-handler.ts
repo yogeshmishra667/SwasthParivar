@@ -22,6 +22,7 @@ const statusFor = (code: ErrorCode): number => {
     case "ADMIN_CSRF_INVALID":
     case "USER_DEACTIVATED":
     case "SOS_FORBIDDEN":
+    case "APPROVAL_REQUIRES_GUARDIAN":
       return 403;
     case "MED_SCHEDULE_NOT_FOUND":
     case "READING_NOT_FOUND":
@@ -33,6 +34,8 @@ const statusFor = (code: ErrorCode): number => {
     case "ADMIN_NOT_FOUND":
     case "SOS_NOT_FOUND":
     case "SCHEDULE_NOT_FOUND":
+    case "PRESCRIPTION_NOT_FOUND":
+    case "PRESCRIPTION_ITEM_NOT_FOUND":
       return 404;
     case "FAMILY_INVITE_INVALID":
     case "SCHEDULE_INVALID":
@@ -42,7 +45,11 @@ const statusFor = (code: ErrorCode): number => {
     case "READING_STALE_VERSION":
     case "MEAL_STALE_VERSION":
     case "HOUSEHOLD_PROFILE_LIMIT":
+    case "PRESCRIPTION_LOCKED":
+    case "PRESCRIPTION_CLARIFICATION_EXHAUSTED":
       return 409;
+    case "UPLOAD_TOO_LARGE":
+      return 413;
     case "CHAT_RATE_LIMITED":
     case "RATE_LIMITED":
       return 429;
@@ -59,6 +66,7 @@ const statusFor = (code: ErrorCode): number => {
     case "CARDIAC_DISABLED": // cardiac_logging_enabled=false
     case "RESPIRATORY_DISABLED": // respiratory_logging_enabled=false
     case "VISION_CIRCUIT_OPEN": // claude vision circuit breaker open
+    case "STORAGE_UNAVAILABLE": // R2 unconfigured / unreachable — retry later
       return 503;
     case "CHAT_UPSTREAM_TIMEOUT":
     case "VISION_UPSTREAM_TIMEOUT":
