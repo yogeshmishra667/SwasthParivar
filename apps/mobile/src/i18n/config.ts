@@ -7,6 +7,8 @@ import chatEn from "./phase3/chat.en.json";
 import chatHi from "./phase3/chat.hi.json";
 import guardianEn from "./phase3/guardian.en.json";
 import guardianHi from "./phase3/guardian.hi.json";
+import prescriptionsEn from "./phase4/prescriptions.en.json";
+import prescriptionsHi from "./phase4/prescriptions.hi.json";
 
 const deviceLocale = getLocales()[0]?.languageCode ?? "hi";
 const initialLanguage = deviceLocale === "en" ? "en" : "hi";
@@ -15,8 +17,12 @@ void i18n.use(initReactI18next).init({
   resources: {
     // Phase 3 chat copy is authored in its own files (i18n/phase3/) and
     // merged in under the `chat` key — components read `t("chat.…")`.
-    en: { translation: { ...en, chat: chatEn, guardian: guardianEn } },
-    hi: { translation: { ...hi, chat: chatHi, guardian: guardianHi } },
+    en: {
+      translation: { ...en, chat: chatEn, guardian: guardianEn, prescriptions: prescriptionsEn },
+    },
+    hi: {
+      translation: { ...hi, chat: chatHi, guardian: guardianHi, prescriptions: prescriptionsHi },
+    },
   },
   lng: initialLanguage,
   fallbackLng: "hi",

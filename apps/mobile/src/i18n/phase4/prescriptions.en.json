@@ -1,0 +1,93 @@
+{
+  "title": "Prescription",
+  "upload": {
+    "title": "Add prescription",
+    "parchiLabel": "Doctor's prescription",
+    "parchiHint": "1–3 photos of the prescription",
+    "packetLabel": "Medicine packets",
+    "packetHint": "Optional — 1–5 bottle/strip photos. A matching packet photo lets us confirm the medicine.",
+    "addPhoto": "Add photo",
+    "clearAll": "Clear all",
+    "count": "{{count}} added",
+    "cta": "Upload",
+    "uploading": "Uploading…",
+    "needAtLeastOne": "Add at least one prescription photo first.",
+    "success": "Uploaded. Reading the prescription…",
+    "failed": "Upload didn't go through. Try again?"
+  },
+  "status": {
+    "pending_ocr": "Reading prescription…",
+    "pending_approval": "Waiting for approval",
+    "partial": "Some items need attention",
+    "approved": "Approved",
+    "rejected": "Rejected"
+  },
+  "patient": {
+    "sentToGuardian": "Sent to {{name}} for approval. They've been notified.",
+    "sentToGuardianGeneric": "Sent to your family member for approval.",
+    "readOnly": "Only the approver can confirm these medicines.",
+    "resend": "Remind again",
+    "resent": "Reminder sent"
+  },
+  "item": {
+    "green": "Looks correct",
+    "yellow": "Please check",
+    "red": "Needs a closer look",
+    "need_clarification": "Couldn't read this medicine",
+    "confidence": "AI confidence: {{pct}}%",
+    "name": "Medicine name",
+    "dosage": "Dosage",
+    "frequency": "Frequency (e.g. 1-0-1)",
+    "note": "Note (optional)",
+    "needClarificationBody": "The AI couldn't read this medicine's name.",
+    "takePhoto": "Take a medicine photo",
+    "typeName": "Type the name",
+    "needsDoctor": "Confirm with the doctor and add it by hand.",
+    "approvedTag": "Approved",
+    "rejectedTag": "Rejected",
+    "needsDoctorTag": "Needs doctor"
+  },
+  "actions": {
+    "approve": "Approve",
+    "reject": "Reject",
+    "markNeedsDoctor": "Ask doctor",
+    "addPhotos": "Add more photos",
+    "addManual": "Add a medicine myself",
+    "approveAll": "Approve prescription",
+    "approving": "Approving…",
+    "clarifySubmit": "Submit",
+    "saveManual": "Add medicine"
+  },
+  "manual": {
+    "title": "Add a medicine",
+    "name": "Medicine name",
+    "dosage": "Dosage",
+    "frequency": "Frequency (e.g. 1-0-1)",
+    "note": "Where did you see it? (optional)"
+  },
+  "solo": {
+    "confirmTitle": "Is this exactly what the doctor prescribed?",
+    "confirmBody": "Wrong medicine can be dangerous. Please be completely sure.",
+    "confirmYes": "Yes, I'm sure",
+    "confirmNo": "Let me check",
+    "wait": "Please read carefully… ({{secs}}s)",
+    "nudgeTitle": "Add a family member",
+    "nudgeBody": "Having a family member double-check medicines keeps everyone safer.",
+    "nudgeCta": "Add family member",
+    "nudgeDismiss": "Maybe later"
+  },
+  "camera": {
+    "permissionTitle": "Camera access needed",
+    "permissionBody": "We need the camera to photograph the prescription.",
+    "grant": "Allow camera",
+    "capture": "Capture",
+    "retake": "Retake",
+    "use": "Use photo",
+    "cancel": "Cancel"
+  },
+  "errors": {
+    "loadFailed": "Couldn't load the prescription. Pull to refresh.",
+    "approveFailed": "Approval didn't go through. Try again?",
+    "actionFailed": "That didn't work. Try again?"
+  }
+}
