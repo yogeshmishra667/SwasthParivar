@@ -427,6 +427,12 @@ model User {
   // (the guardian approves but doesn't own the row). Guardian access
   // is via the household join, not a separate relation.
   prescriptions          Prescription[]
+  // Phase 4 Feature G — Doctor portal. All patient-owned: a doctor row
+  // is created by the patient/guardian (no doctor-side auth in Phase 4).
+  // Appointments + pre-visit reports cascade-delete with the user.
+  doctorProfiles         DoctorProfile[]
+  doctorAppointments     DoctorAppointment[]
+  reports                Report[]
 
   @@index([householdId])
   // Admin "show deactivated users" filter — partial-like coverage via
@@ -1183,9 +1189,10 @@ model SOSEvent {
 model Prescription {
   id                       String             @id @default(uuid()) @db.Uuid
   userId                   String             @map("user_id") @db.Uuid
-  // Optional link to a `DoctorProfile` row (Feature G, Week 17). Plain
-  // string so this schema lands before doctor-portal models exist;
-  // Feature G adds the relation + FK in a follow-up migration.
+  // Optional link to a `DoctorProfile` row (Feature G, Week 17). The
+  // FK relation lands with the doctor-portal models below. `onDelete:
+  // SetNull` — deleting a doctor row must never cascade-delete a
+  // prescription (medical record retention).
   doctorId                 String?            @map("doctor_id") @db.Uuid
   originalPhotoUrls        String[]           @map("original_photo_urls")
   // Full Vision response retained for audit. Pass A + Pass B + every
@@ -1213,6 +1220,7 @@ model Prescription {
   updatedAt                DateTime           @updatedAt @map("updated_at")
 
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  doctor         DoctorProfile?     @relation(fields: [doctorId], references: [id], onDelete: SetNull)
   items          PrescriptionItem[]
   medicinePhotos MedicinePhoto[]
 
@@ -1376,4 +1384,100 @@ model AdminAuditLog {
   @@index([action, createdAt(sort: Desc)])
   @@index([targetId, createdAt(sort: Desc)])
   @@map("admin_audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Doctor portal (Phase 4 — Feature G, Week 17)
+// ─────────────────────────────────────────────────────────────
+
+enum AppointmentStatus {
+  scheduled
+  completed
+  cancelled
+  missed
+}
+
+enum ReportStatus {
+  generating
+  ready
+  failed
+}
+
+// A doctor the patient sees. Patient-owned — created by the patient or
+// the household primary, NOT by the doctor (doctor-side auth is out of
+// scope for Phase 4). `onDelete: SetNull` on the prescription/appointment
+// side keeps medical records intact when a doctor row is removed.
+model DoctorProfile {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  name       String
+  specialty  String
+  clinicName String?  @map("clinic_name")
+  phone      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments  DoctorAppointment[]
+  prescriptions Prescription[]
+
+  @@index([userId])
+  @@map("doctor_profiles")
+}
+
+// A scheduled visit. `reminderSent*` flags make the hourly
+// APPOINTMENT_REMINDER cron idempotent: each window fires once, and a
+// reschedule (PUT) resets them so the new date re-arms all three.
+// `preVisitReportId` is a convenience pointer to the latest generated
+// report; the authoritative link is `Report.appointmentId`.
+model DoctorAppointment {
+  id               String            @id @default(uuid()) @db.Uuid
+  userId           String            @map("user_id") @db.Uuid
+  doctorId         String            @map("doctor_id") @db.Uuid
+  scheduledAt      DateTime          @map("scheduled_at")
+  purpose          String
+  status           AppointmentStatus @default(scheduled)
+  preVisitReportId String?           @map("pre_visit_report_id") @db.Uuid
+  reminderSent7d   Boolean           @default(false) @map("reminder_sent_7d")
+  reminderSent1d   Boolean           @default(false) @map("reminder_sent_1d")
+  reminderSent2h   Boolean           @default(false) @map("reminder_sent_2h")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  doctor  DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  reports Report[]
+
+  // Patient-facing "my appointments" list, newest scheduled first.
+  @@index([userId, scheduledAt])
+  // Reminder-cron scan: the hourly worker filters `status = 'scheduled'`
+  // then ranges on `scheduledAt`. Status-leading composite serves it.
+  @@index([status, scheduledAt])
+  @@map("doctor_appointments")
+}
+
+// Async pre-visit PDF report. Backs the /reports/* status+download flow:
+// `generating` on enqueue, `ready` once the PDF lands in R2, `failed` on
+// a Puppeteer/Claude error. `aiSummaryIncluded` records whether the
+// Claude executive-summary paragraph made it in (false when the report
+// spend cap is tripped — the PDF still generates, just without the
+// summary). `appointmentId` is optional: reports can be generated
+// stand-alone, not only for a booked visit.
+model Report {
+  id                String       @id @default(uuid()) @db.Uuid
+  userId            String       @map("user_id") @db.Uuid
+  appointmentId     String?      @map("appointment_id") @db.Uuid
+  status            ReportStatus @default(generating)
+  pdfUrl            String?      @map("pdf_url")
+  pdfR2Key          String?      @map("pdf_r2_key")
+  aiSummaryIncluded Boolean      @default(false) @map("ai_summary_included")
+  error             String?
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointment DoctorAppointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("reports")
 }
