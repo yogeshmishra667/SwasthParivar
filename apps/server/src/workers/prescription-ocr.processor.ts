@@ -234,6 +234,11 @@ export const processPrescriptionOcr = async (job: Job<PrescriptionOcrJob>): Prom
     reconciledItems,
   });
 
+  // Items parked in `need_clarification` are collected here and emitted to
+  // PostHog after the transaction commits (phase4.md §F.12). Fires the
+  // `need_clarification rate > 20%/week → photo-quality` developer alert.
+  const needClarificationItems: { itemId: string; reason: string }[] = [];
+
   await prisma.$transaction(async (tx) => {
     // 1. Update MedicinePhoto rows with their Pass-B readings + match status.
     for (const bottle of passBByPhoto) {
@@ -282,7 +287,7 @@ export const processPrescriptionOcr = async (job: Job<PrescriptionOcrJob>): Prom
 
       const canonicalKey = canonicaliseMedicineName(line.name);
 
-      await tx.prescriptionItem.create({
+      const createdItem = await tx.prescriptionItem.create({
         data: {
           prescriptionId,
           ocrMedicineName: line.name,
@@ -302,7 +307,12 @@ export const processPrescriptionOcr = async (job: Job<PrescriptionOcrJob>): Prom
           // last 30 days" without reparsing free text.
           ...(canonicalKey !== null ? { approverNote: `canonical:${canonicalKey}` } : {}),
         },
+        select: { id: true },
       });
+
+      if (ocrColor.color === "need_clarification") {
+        needClarificationItems.push({ itemId: createdItem.id, reason: ocrColor.reason });
+      }
     }
 
     // 3. Update the prescription envelope. Any item parked in
@@ -311,16 +321,7 @@ export const processPrescriptionOcr = async (job: Job<PrescriptionOcrJob>): Prom
     //    blank prescription (no Pass-A lines extracted) is treated as
     //    `partial` so the approver can manually add items via the F.5
     //    `/items` route — never auto-rejected.
-    const hasNeedsClarification = reconciledItems.some((item) => {
-      const line = passALineMap.get(item.passACandidateId);
-      if (!line) return false;
-      const cls = classifyPrescriptionItem({
-        ocrConfidence: item.reconciledConfidence,
-        photoCrossCheckStatus: item.photoCrossCheckStatus,
-        hasPairedMedicinePhoto: passBCandidates.length > 0,
-      });
-      return cls.color === "need_clarification";
-    });
+    const hasNeedsClarification = needClarificationItems.length > 0;
 
     const nextStatus =
       reconciledItems.length === 0 || hasNeedsClarification ? "partial" : "pending_approval";
@@ -343,6 +344,15 @@ export const processPrescriptionOcr = async (job: Job<PrescriptionOcrJob>): Prom
     page_count: prescription.originalPhotoUrls.length,
     request_id: requestId,
   });
+
+  // phase4.md §F.12 — one event per parked item so the
+  // `need_clarification rate > 20%/week` developer alert can fire.
+  for (const item of needClarificationItems) {
+    captureAnalyticsEvent("prescription_need_clarification_item", userId, {
+      itemId: item.itemId,
+      reason: item.reason,
+    });
+  }
 };
 
 // ─────────────────────────────────────────────────────────────────────

@@ -414,7 +414,17 @@ export const approvePrescription = async (input: ApproveInput): Promise<ApproveR
         ? [...item.aiSuggestionHistory, correction]
         : [correction];
 
-      if (decision.decision === "approve") {
+      // CLAUDE.md safety invariant: an "approve" whose frequency exceeds
+      // 6×/day is forced to terminal needs_doctor regardless of colour —
+      // no MedicationSchedule is created. Routed through the existing
+      // needs_doctor branch so its audit stamps + telemetry are identical.
+      // (Same > 6×/day gate also lives in addManualItem.)
+      const effectiveDecision =
+        decision.decision === "approve" && parseDailyDoseCount(decision.verifiedFrequency!) > 6
+          ? "needs_doctor"
+          : decision.decision;
+
+      if (effectiveDecision === "approve") {
         const schedule = await tx.medicationSchedule.create({
           data: {
             userId: prescription.userId,
@@ -459,7 +469,7 @@ export const approvePrescription = async (input: ApproveInput): Promise<ApproveR
             data: { medicationScheduleId: schedule.id },
           });
         }
-      } else if (decision.decision === "reject") {
+      } else if (effectiveDecision === "reject") {
         await tx.prescriptionItem.update({
           where: { id: item.id },
           data: {

@@ -117,6 +117,10 @@ beforeEach(() => {
   ]) {
     m.mockReset();
   }
+  // Real Prisma `create` returns the persisted row; the delta processor
+  // reads `.id` to emit the §F.12 need_clarification event.
+  let itemSeq = 0;
+  mocks.createItem.mockImplementation(() => Promise.resolve({ id: `item-${++itemSeq}` }));
   mocks.findManyMedicinePhoto.mockResolvedValue([]);
   mocks.findManyItems.mockResolvedValue([{ status: "pending" }]);
   mocks.state.rx = null;

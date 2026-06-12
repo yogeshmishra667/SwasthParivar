@@ -173,6 +173,14 @@ export interface EventPropsMap {
     caller_id_redacted: string;
     requires_guardian_approval: boolean;
   };
+  // Phase 4 §F.12 — fired once per item the OCR (or OCR-delta) job parks
+  // in `need_clarification`. Feeds the developer alert "need_clarification
+  // rate > 20%/week → handwriting / photo-quality issue". `reason` is the
+  // classifier verdict (e.g. `no_bottle_low_confidence`).
+  prescription_need_clarification_item: {
+    itemId: string;
+    reason: string;
+  };
   // Fired by the CHAT_SAFETY_REVIEW worker after persisting the
   // human-audit row. Drives the safety-review dashboard +
   // weekly-flag-rate alarm.

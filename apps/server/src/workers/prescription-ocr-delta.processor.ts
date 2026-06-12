@@ -181,6 +181,10 @@ export const processPrescriptionOcrDelta = async (
   );
 
   // ── Persist atomically ────────────────────────────────────────────
+  // New items parked in `need_clarification` by this delta — emitted to
+  // PostHog post-commit (phase4.md §F.12), same as the initial OCR job.
+  const needClarificationItems: { itemId: string; reason: string }[] = [];
+
   await prisma.$transaction(async (tx) => {
     // Re-read inside the txn for race safety against a concurrent retry.
     const fresh = await tx.prescription.findUnique({
@@ -251,7 +255,7 @@ export const processPrescriptionOcrDelta = async (
         });
       }
       const canonicalKey = canonicaliseMedicineName(line.name);
-      await tx.prescriptionItem.create({
+      const createdItem = await tx.prescriptionItem.create({
         data: {
           prescriptionId,
           ocrMedicineName: line.name,
@@ -268,7 +272,12 @@ export const processPrescriptionOcrDelta = async (
           aiSuggestionHistory: audit as unknown as Prisma.InputJsonValue,
           ...(canonicalKey !== null ? { approverNote: `canonical:${canonicalKey}` } : {}),
         },
+        select: { id: true },
       });
+
+      if (cls.color === "need_clarification") {
+        needClarificationItems.push({ itemId: createdItem.id, reason: cls.reason });
+      }
     }
 
     // 3. Apply promotions to existing single-source items.
@@ -359,4 +368,12 @@ export const processPrescriptionOcrDelta = async (
     delta: true,
     promotions: promotions.length,
   });
+
+  // phase4.md §F.12 — one event per newly-parked item.
+  for (const item of needClarificationItems) {
+    captureAnalyticsEvent("prescription_need_clarification_item", userId, {
+      itemId: item.itemId,
+      reason: item.reason,
+    });
+  }
 };
