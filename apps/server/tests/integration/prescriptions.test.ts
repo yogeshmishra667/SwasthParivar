@@ -420,6 +420,33 @@ describe("approve transaction — mixed decisions + status math", () => {
     expect(res.body.data.needsDoctorItemIds).toHaveLength(1);
     expect(res.body.data.status).toBe("approved"); // all items now terminal
   });
+
+  it("CLAUDE.md safety invariant — approve with frequency > 6×/day flips item to needs_doctor without creating a schedule", async () => {
+    vision.lines = [line("Glycomet", 0.95)];
+    const id = await upload(patientToken, { pages: 1 });
+    await runOcr(id, patientId);
+    const detail = await getRx(patientToken, id);
+    const [item] = detail.body.data.items;
+
+    const res = await request(app)
+      .post(`/api/v1/prescriptions/${id}/approve`)
+      .set(...bearer(guardianToken))
+      .send({
+        items: [
+          {
+            id: item.id,
+            decision: "approve",
+            verifiedMedicineName: "Glycomet",
+            verifiedDosage: "500mg",
+            verifiedFrequency: "1-1-1-1-1-1-1", // 7×/day → exceeds cap
+          },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.data.approvedItemIds).toHaveLength(0);
+    expect(res.body.data.needsDoctorItemIds).toHaveLength(1);
+    expect(res.body.data.createdScheduleIds).toHaveLength(0);
+  });
 });
 
 describe("manual add — POST /:id/items (§F.10b.3)", () => {

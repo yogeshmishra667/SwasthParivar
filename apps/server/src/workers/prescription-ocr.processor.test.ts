@@ -71,7 +71,10 @@ const getFlagMock = mocks.getFlag;
 
 // SUT — import AFTER mocks
 import { processPrescriptionOcr, type PrescriptionOcrJob } from "./prescription-ocr.processor.js";
+import { capture } from "../shared/analytics/posthog.js";
 import type { Job } from "bullmq";
+
+const captureMock = vi.mocked(capture);
 
 const job = (data: Partial<PrescriptionOcrJob> = {}): Job<PrescriptionOcrJob> =>
   ({
@@ -92,6 +95,10 @@ const mkRx = (overrides: Partial<FakePrescription> = {}): FakePrescription => ({
 beforeEach(() => {
   updateMedicinePhoto.mockReset();
   createPrescriptionItem.mockReset();
+  // Real Prisma `create` returns the persisted row; the processor reads
+  // `.id` to emit the §F.12 need_clarification event. Return distinct ids.
+  let itemSeq = 0;
+  createPrescriptionItem.mockImplementation(() => Promise.resolve({ id: `item-${++itemSeq}` }));
   updatePrescription.mockReset();
   generateVisionResponseMock.mockReset();
   getFlagMock.mockReset();
@@ -220,6 +227,13 @@ describe("processPrescriptionOcr — happy path", () => {
       data: { status: string };
     };
     expect(finalUpdate.data.status).toBe("partial");
+
+    // §F.12 — one need_clarification event for the parked (blur) item.
+    const clarifEvents = captureMock.mock.calls.filter(
+      ([event]) => event === "prescription_need_clarification_item",
+    );
+    expect(clarifEvents).toHaveLength(1);
+    expect(clarifEvents[0]![2]).toMatchObject({ reason: "no_bottle_low_confidence" });
   });
 
   it("flips to 'partial' with zero items when Vision returns no readable lines (blank prescription)", async () => {
