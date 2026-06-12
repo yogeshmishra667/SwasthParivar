@@ -190,6 +190,15 @@ export interface EventPropsMap {
     doctor_id: string;
     days_until: number;
   };
+  // Fired by the APPOINTMENT_REMINDER cron once per window it sends.
+  // `window` is the lead bucket; `channel` is "push" when a household
+  // token received it, "none" when zero tokens were available (the
+  // on-device local reminder still fires — the server path is just dead).
+  appointment_reminder_sent: {
+    appointment_id: string;
+    window: "7d" | "1d" | "2h";
+    channel: "push" | "none";
+  };
   // Fired by the CHAT_SAFETY_REVIEW worker after persisting the
   // human-audit row. Drives the safety-review dashboard +
   // weekly-flag-rate alarm.

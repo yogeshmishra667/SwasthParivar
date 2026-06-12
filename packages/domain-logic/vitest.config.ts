@@ -152,6 +152,11 @@ export default defineConfig({
           branches: 94,
           statements: 97,
         },
+        // Phase 4 Feature G.3 — appointment-reminder window calculator.
+        // The hourly cron's "which reminder fires now" decision. A
+        // regression here would double-send (spammy) or silently drop a
+        // pre-visit reminder. Pure + small; locked at 100%.
+        "src/appointment-reminders/due-windows.ts": { 100: true },
 
         // Ratchet floors at CURRENT measured values (2026-05-14 baseline).
         // Raise these as tests close the gap to CLAUDE.md targets.

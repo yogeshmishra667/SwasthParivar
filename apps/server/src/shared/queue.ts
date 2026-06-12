@@ -90,6 +90,14 @@ export const QUEUE_NAMES = {
   // `${prescriptionId}:${deltaUploadId}` (BullMQ jobId) AND a guard on
   // `ocrRawResult.appliedDeltas`. Gated by `prescription_ocr_enabled`.
   PRESCRIPTION_OCR_DELTA: "prescription-ocr-delta",
+
+  // Phase 4 Feature G.3 — hourly tick. Scans `scheduled` appointments
+  // inside the 7-day reminder horizon, runs the pure `dueReminderWindows`
+  // per row, and fires a push (via `resolveHouseholdDelivery`) for the
+  // due window, then flips the matching `reminderSent7d/1d/2h` flag so it
+  // never re-fires. Idempotent across re-runs via those flags. Gated by
+  // `doctor_portal_enabled` (default false).
+  APPOINTMENT_REMINDER: "appointment-reminder",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

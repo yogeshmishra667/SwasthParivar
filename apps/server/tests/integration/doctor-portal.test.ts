@@ -28,13 +28,12 @@ let postgresContainer: StartedPostgreSqlContainer;
 let redisContainer: StartedRedisContainer;
 let app: any;
 let prisma: any;
-let setFlag: (key: string, value: unknown, actor: string) => Promise<void>;
+let setFlag: (key: string, value: boolean, actor: string) => Promise<unknown>;
 let resetFlagCache: () => void;
 
 let patientId: string;
 let subProfileId: string;
 let patientToken: string;
-let outsiderId: string;
 let outsiderToken: string;
 
 const setPortal = async (enabled: boolean): Promise<void> => {
@@ -105,7 +104,6 @@ beforeAll(async () => {
   });
   patientId = patient.id;
   subProfileId = subProfile.id;
-  outsiderId = outsider.id;
 
   patientToken = jwt.sign(
     { sub: patient.id, householdId: patient.householdId },
@@ -390,7 +388,3 @@ describe("POST/GET/PUT /api/v1/appointments", () => {
     expect(res.body.error.code).toBe("FAMILY_NO_ACCESS");
   });
 });
-
-// Reference the ids so noUnusedLocals stays satisfied even as the suite
-// evolves; `outsiderId` is asserted indirectly through the 403 paths.
-void outsiderId;

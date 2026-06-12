@@ -33,6 +33,11 @@ import {
   bootstrapScheduleComplianceCron,
 } from "./schedule-compliance.worker.js";
 
+import {
+  appointmentReminderWorker,
+  bootstrapAppointmentReminderCron,
+} from "./appointment-reminder.worker.js";
+
 import { prescriptionOcrWorker } from "./prescription-ocr.worker.js";
 import { prescriptionOcrDeltaWorker } from "./prescription-ocr-delta.worker.js";
 import { prescriptionClarificationOcrWorker } from "./prescription-clarification-ocr.worker.js";
@@ -59,6 +64,8 @@ const workers = [
 
   scheduleComplianceWorker,
 
+  appointmentReminderWorker,
+
   prescriptionOcrWorker,
   prescriptionOcrDeltaWorker,
   prescriptionClarificationOcrWorker,
@@ -83,6 +90,8 @@ export const workerNames = [
   "critical-bypass-auto-escalate",
 
   "schedule-compliance",
+
+  "appointment-reminder",
 
   "prescription-ocr",
   "prescription-ocr-delta",
@@ -111,6 +120,9 @@ export const startWorkers = (): void => {
   );
   bootstrapScheduleComplianceCron().catch((err) =>
     logger.error({ err }, "failed to bootstrap schedule-compliance cron"),
+  );
+  bootstrapAppointmentReminderCron().catch((err) =>
+    logger.error({ err }, "failed to bootstrap appointment-reminder cron"),
   );
   logger.info({ count: workers.length }, "workers started");
 };
