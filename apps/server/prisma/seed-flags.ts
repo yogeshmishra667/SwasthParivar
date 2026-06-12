@@ -36,6 +36,17 @@ const DEFAULT_FLAGS = {
   // explicit `POST /approve` with verified fields — auto-approve
   // stays false. Listed here so an operator can see it.
   prescription_auto_approve_green: false,
+  // Phase 4 Feature G — doctor portal (profiles + appointments +
+  // pre-visit reports). Kill-switch, default OFF per phase4.md "Phase 4
+  // kill-switch flags". Gates every /api/v1/{doctors,appointments,reports}
+  // route → 503 DOCTOR_PORTAL_DISABLED when off.
+  doctor_portal_enabled: false,
+  // Phase 4 Feature G.4 — pre-visit PDF report generation. Default OFF.
+  // Gates the GENERATE_PDF job's Claude executive-summary call; auto-
+  // flipped OFF on `CLAUDE_REPORT_DAILY_SPEND_CAP_USD` breach (per
+  // CLAUDE.md "Spend-Cap Parity"). When off, the PDF still renders —
+  // just without the AI summary paragraph.
+  report_generation_enabled: false,
 };
 
 async function main() {

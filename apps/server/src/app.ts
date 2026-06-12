@@ -31,6 +31,9 @@ import { chatRouter } from "./modules/chat/chat.routes.js";
 import { configRouter } from "./modules/config/config.routes.js";
 import { prescriptionsRouter } from "./modules/prescriptions/prescriptions.routes.js";
 import { medicinesRouter } from "./modules/prescriptions/medicines.routes.js";
+import { doctorsRouter } from "./modules/doctors/doctors.routes.js";
+import { appointmentsRouter } from "./modules/appointments/appointments.routes.js";
+import { reportsRouter } from "./modules/reports/reports.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { adminRouter } from "./modules/admin/admin.routes.js";
 import { setupBullBoard } from "./shared/bull-board.js";
@@ -132,6 +135,9 @@ export const buildApp = (): Express => {
   app.use("/api/v1/config", configRouter);
   app.use("/api/v1/prescriptions", prescriptionsRouter);
   app.use("/api/v1/medicines", medicinesRouter);
+  app.use("/api/v1/doctors", doctorsRouter);
+  app.use("/api/v1/appointments", appointmentsRouter);
+  app.use("/api/v1/reports", reportsRouter);
 
   // Bull-board UI for queue inspection — mounted BEFORE the main admin
   // router so its routes match first (`/admin/queues/*` would otherwise

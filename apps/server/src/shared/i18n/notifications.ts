@@ -129,6 +129,27 @@ const hi = {
     title: `🚨 ${p.patientName}: Saans Lene Mein Takleef`,
     body: `Bahut zyada takleef hai. Turant hospital le jayein ya 108 dial karein.`,
   }),
+  // Phase 4 Feature G.3 — pre-visit appointment reminder. Copy varies by
+  // window: the 7d bucket is phrased generically ("aane wali hai") since
+  // an appointment booked only 3 days out also lands in it.
+  appointment_reminder: (p: { doctorName: string; window: "7d" | "1d" | "2h" }): NotifContent => {
+    if (p.window === "2h") {
+      return {
+        title: "Aaj doctor appointment",
+        body: `Aaj ${p.doctorName} ke saath appointment hai — kuch hi ghante mein. Nikalne ki taiyari karein 🙏`,
+      };
+    }
+    if (p.window === "1d") {
+      return {
+        title: "Kal doctor appointment",
+        body: `Kal ${p.doctorName} ke saath appointment hai. Yaad rakhein 🙏`,
+      };
+    }
+    return {
+      title: "Doctor appointment aane wali hai",
+      body: `${p.doctorName} ke saath appointment aane wali hai. Taiyari kar lein.`,
+    };
+  },
 } as const;
 
 type Bundle = typeof hi;
@@ -216,6 +237,24 @@ const en: Bundle = {
     title: `🚨 ${p.patientName}: Severe Breathing Distress`,
     body: `Severe symptoms. Go to hospital immediately or dial 108.`,
   }),
+  appointment_reminder: (p): NotifContent => {
+    if (p.window === "2h") {
+      return {
+        title: "Doctor visit today",
+        body: `You see ${p.doctorName} today — in a few hours. Get ready to leave 🙏`,
+      };
+    }
+    if (p.window === "1d") {
+      return {
+        title: "Doctor visit tomorrow",
+        body: `Tomorrow you see ${p.doctorName}. Don't forget 🙏`,
+      };
+    }
+    return {
+      title: "Upcoming doctor visit",
+      body: `An appointment with ${p.doctorName} is coming up. Start preparing.`,
+    };
+  },
 };
 
 const BUNDLES: Record<Language, Bundle> = { hi, en };
