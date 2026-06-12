@@ -103,6 +103,16 @@ export type ErrorCode =
   | "VISION_INVALID_JSON"
   | "VISION_NO_IMAGES"
   | "REPORT_GENERATING"
+  // Phase 4 Feature G — doctor portal. `DOCTOR_PORTAL_DISABLED` is the
+  // kill-switch (`doctor_portal_enabled=false`, default off) → 503 so the
+  // mobile client retries later. The two NOT_FOUND codes are 404 and are
+  // also returned on a cross-household access attempt that resolves to a
+  // row the caller can't see (we 404 rather than 403 to avoid leaking
+  // existence — household authz itself still throws FAMILY_NO_ACCESS for
+  // an explicit cross-household `targetUserId`).
+  | "DOCTOR_PORTAL_DISABLED"
+  | "DOCTOR_NOT_FOUND"
+  | "APPOINTMENT_NOT_FOUND"
   | "VALIDATION_ERROR"
   | "RATE_LIMITED"
   | "MAINTENANCE_MODE"

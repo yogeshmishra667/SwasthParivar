@@ -36,6 +36,8 @@ const statusFor = (code: ErrorCode): number => {
     case "SCHEDULE_NOT_FOUND":
     case "PRESCRIPTION_NOT_FOUND":
     case "PRESCRIPTION_ITEM_NOT_FOUND":
+    case "DOCTOR_NOT_FOUND":
+    case "APPOINTMENT_NOT_FOUND":
       return 404;
     case "FAMILY_INVITE_INVALID":
     case "SCHEDULE_INVALID":
@@ -67,6 +69,7 @@ const statusFor = (code: ErrorCode): number => {
     case "RESPIRATORY_DISABLED": // respiratory_logging_enabled=false
     case "VISION_CIRCUIT_OPEN": // claude vision circuit breaker open
     case "STORAGE_UNAVAILABLE": // R2 unconfigured / unreachable — retry later
+    case "DOCTOR_PORTAL_DISABLED": // doctor_portal_enabled=false — retry later
       return 503;
     case "CHAT_UPSTREAM_TIMEOUT":
     case "VISION_UPSTREAM_TIMEOUT":

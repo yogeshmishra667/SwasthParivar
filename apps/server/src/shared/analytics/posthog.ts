@@ -181,6 +181,15 @@ export interface EventPropsMap {
     itemId: string;
     reason: string;
   };
+  // Phase 4 Feature G — fired by the appointments service when a visit is
+  // booked. `days_until` is floor((scheduled_at - now)/1d); negative when
+  // back-dating a past visit (allowed — e.g. logging a completed visit).
+  // Drives the "are reminders firing for near-term appointments?" funnel.
+  appointment_created: {
+    appointment_id: string;
+    doctor_id: string;
+    days_until: number;
+  };
   // Fired by the CHAT_SAFETY_REVIEW worker after persisting the
   // human-audit row. Drives the safety-review dashboard +
   // weekly-flag-rate alarm.
