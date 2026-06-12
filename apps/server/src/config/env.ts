@@ -64,6 +64,14 @@ const envSchema = z.object({
   // ceiling is higher than CHAT_HARD_TIMEOUT_MS, but still short
   // enough that a runaway OCR call cannot block the BullMQ worker.
   VISION_HARD_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  // Phase 4 Feature G — Claude report-summary daily spend ceiling (USD,
+  // org-wide, UTC reset). When estimated cumulative report-summary spend
+  // exceeds this, the wrapper auto-flips `report_generation_enabled=false`
+  // and pages Sentry. Per CLAUDE.md "Spend-Cap Parity Across AI Surfaces"
+  // — a separate cap so ops can kill the expensive PDF-summary surface
+  // without touching chat or OCR. The PDF still generates without the AI
+  // paragraph when this trips.
+  CLAUDE_REPORT_DAILY_SPEND_CAP_USD: z.coerce.number().positive().default(10),
 
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY: z.string().optional(),

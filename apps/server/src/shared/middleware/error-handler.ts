@@ -38,6 +38,7 @@ const statusFor = (code: ErrorCode): number => {
     case "PRESCRIPTION_ITEM_NOT_FOUND":
     case "DOCTOR_NOT_FOUND":
     case "APPOINTMENT_NOT_FOUND":
+    case "REPORT_NOT_FOUND":
       return 404;
     case "FAMILY_INVITE_INVALID":
     case "SCHEDULE_INVALID":
@@ -49,6 +50,7 @@ const statusFor = (code: ErrorCode): number => {
     case "HOUSEHOLD_PROFILE_LIMIT":
     case "PRESCRIPTION_LOCKED":
     case "PRESCRIPTION_CLARIFICATION_EXHAUSTED":
+    case "REPORT_NOT_READY":
       return 409;
     case "UPLOAD_TOO_LARGE":
       return 413;

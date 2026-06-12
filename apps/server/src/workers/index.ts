@@ -38,6 +38,8 @@ import {
   bootstrapAppointmentReminderCron,
 } from "./appointment-reminder.worker.js";
 
+import { generateReportWorker } from "./generate-report.worker.js";
+
 import { prescriptionOcrWorker } from "./prescription-ocr.worker.js";
 import { prescriptionOcrDeltaWorker } from "./prescription-ocr-delta.worker.js";
 import { prescriptionClarificationOcrWorker } from "./prescription-clarification-ocr.worker.js";
@@ -65,6 +67,7 @@ const workers = [
   scheduleComplianceWorker,
 
   appointmentReminderWorker,
+  generateReportWorker,
 
   prescriptionOcrWorker,
   prescriptionOcrDeltaWorker,
@@ -92,6 +95,7 @@ export const workerNames = [
   "schedule-compliance",
 
   "appointment-reminder",
+  "generate-pdf",
 
   "prescription-ocr",
   "prescription-ocr-delta",

@@ -199,6 +199,25 @@ export interface EventPropsMap {
     window: "7d" | "1d" | "2h";
     channel: "push" | "none";
   };
+  // Phase 4 Feature G.4 — fired by the reports service when a generation
+  // is enqueued (distinctId = the patient).
+  report_requested: {
+    report_id: string;
+    has_appointment: boolean;
+  };
+  // Fired by the GENERATE_PDF worker after the PDF lands in R2.
+  report_generated: {
+    report_id: string;
+    appointment_id: string | null;
+    ai_summary_included: boolean;
+    generation_ms: number;
+  };
+  // Parity with ai_chat_spend_cap_reached — fired when the report-summary
+  // daily cap trips and report_generation_enabled is auto-flipped off.
+  report_spend_cap_reached: {
+    spend_usd: number;
+    cap_usd: number;
+  };
   // Fired by the CHAT_SAFETY_REVIEW worker after persisting the
   // human-audit row. Drives the safety-review dashboard +
   // weekly-flag-rate alarm.

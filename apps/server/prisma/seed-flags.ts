@@ -41,6 +41,12 @@ const DEFAULT_FLAGS = {
   // kill-switch flags". Gates every /api/v1/{doctors,appointments,reports}
   // route → 503 DOCTOR_PORTAL_DISABLED when off.
   doctor_portal_enabled: false,
+  // Phase 4 Feature G.4 — pre-visit PDF report generation. Default OFF.
+  // Gates the GENERATE_PDF job's Claude executive-summary call; auto-
+  // flipped OFF on `CLAUDE_REPORT_DAILY_SPEND_CAP_USD` breach (per
+  // CLAUDE.md "Spend-Cap Parity"). When off, the PDF still renders —
+  // just without the AI summary paragraph.
+  report_generation_enabled: false,
 };
 
 async function main() {

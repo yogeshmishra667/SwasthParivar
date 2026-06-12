@@ -91,6 +91,15 @@ export const QUEUE_NAMES = {
   // `ocrRawResult.appliedDeltas`. Gated by `prescription_ocr_enabled`.
   PRESCRIPTION_OCR_DELTA: "prescription-ocr-delta",
 
+  // Phase 4 Feature G.4 — on-demand pre-visit PDF generation. Enqueued
+  // by `POST /reports/generate` (jobId = reportId, so a duplicate request
+  // is a BullMQ no-op). The processor gathers 30d trends + HbA1c +
+  // adherence + insights, builds the PII-stripped model, calls the Claude
+  // summary (gated by `report_generation_enabled`), renders HTML →
+  // Puppeteer PDF, uploads to R2, and flips `Report.status` to ready.
+  // Idempotent: a row already `ready` is skipped. 3 retries.
+  GENERATE_PDF: "generate-pdf",
+
   // Phase 4 Feature G.3 — hourly tick. Scans `scheduled` appointments
   // inside the 7-day reminder horizon, runs the pure `dueReminderWindows`
   // per row, and fires a push (via `resolveHouseholdDelivery`) for the
