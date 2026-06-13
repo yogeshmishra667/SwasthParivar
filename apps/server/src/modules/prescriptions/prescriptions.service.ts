@@ -221,6 +221,52 @@ export const getPrescription = async (input: GetPrescriptionInput): Promise<Pres
   };
 };
 
+// ── list (Phase 4 §G dashboard surface) ────────────────────────────
+
+export interface PrescriptionListItem {
+  readonly id: string;
+  readonly status: string;
+  readonly createdAt: string;
+  /** Items still awaiting an approver decision (pending / need_clarification). */
+  readonly pendingItemCount: number;
+}
+
+export interface ListPrescriptionsInput {
+  readonly auth: AuthClaims;
+  /** Patient whose prescriptions to list; defaults to the caller. */
+  readonly targetUserId: string | undefined;
+  readonly status: string | undefined;
+}
+
+// Lists a patient's prescriptions (optionally status-filtered), newest
+// first. Powers the dashboard "pending approval" nudge. Authz reuses
+// `ensureHouseholdRead` — same household OR an accepted guardian link —
+// so a guardian sees the prescriptions they're responsible for approving.
+export const listPrescriptions = async (
+  input: ListPrescriptionsInput,
+): Promise<PrescriptionListItem[]> => {
+  const targetUserId = input.targetUserId ?? input.auth.sub;
+  await ensureHouseholdRead(input.auth, targetUserId);
+
+  const rows = await prisma.prescription.findMany({
+    where: {
+      userId: targetUserId,
+      ...(input.status ? { status: input.status as never } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    include: { items: { select: { status: true } } },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    status: row.status,
+    createdAt: row.createdAt.toISOString(),
+    pendingItemCount: row.items.filter(
+      (i) => i.status === "pending" || i.status === "need_clarification",
+    ).length,
+  }));
+};
+
 // ── clarify ────────────────────────────────────────────────────────
 
 export interface ClarifyInput {

@@ -12,6 +12,7 @@ import {
   appendPhotosFormFieldsSchema,
   approveBodySchema,
   clarifyBodySchema,
+  listPrescriptionsQuerySchema,
   manualItemBodySchema,
   rejectBodySchema,
   uploadFormFieldsSchema,
@@ -62,6 +63,18 @@ export const postUpload = async (req: Request, res: Response): Promise<void> => 
     requestId: requestIdOf(req),
   });
   ok(res, result, 201);
+};
+
+// ── GET /prescriptions ─────────────────────────────────────────────
+
+export const list = async (req: Request, res: Response): Promise<void> => {
+  const query = listPrescriptionsQuerySchema.parse(req.query);
+  const prescriptions = await service.listPrescriptions({
+    auth: req.auth!,
+    targetUserId: query.targetUserId,
+    status: query.status,
+  });
+  ok(res, { prescriptions });
 };
 
 // ── GET /prescriptions/:id ─────────────────────────────────────────
