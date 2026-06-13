@@ -20,3 +20,17 @@ export const relativeDate = (iso: string, t: TFunction): string => {
   if (days < 7) return t("chat.date.daysAgo", { count: days });
   return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 };
+
+// Forward-looking date+time label for appointments ("Mon, 16 Jun · 2:00 PM").
+// Uses the device locale via the same toLocale* options the rest of the
+// app relies on.
+export const appointmentDateTime = (iso: string): string => {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `${date} · ${time}`;
+};
