@@ -353,3 +353,52 @@ export function useResetAdminPassword() {
       adminApi.resetAdminPassword(id, password),
   });
 }
+
+// ── Ops appoint (Phase 4 §G) ─────────────────────────────────────
+// Both mutations invalidate the patient detail + the resource panels
+// (so the new doctor / appointment appears on refresh) AND the audit
+// log (every write lands a row).
+
+interface AdminCreateDoctorInput {
+  name: string;
+  specialty: string;
+  clinicName?: string;
+  phone?: string;
+  reason: string;
+}
+
+export function useAdminCreateDoctor(userId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AdminCreateDoctorInput) => adminApi.adminCreateDoctorForUser(userId, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.user(userId) });
+      void queryClient.invalidateQueries({
+        queryKey: ["user", userId, "resource", "doctor_profiles"],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
+  });
+}
+
+interface AdminCreateAppointmentInput {
+  doctorId: string;
+  scheduledAt: string;
+  purpose: string;
+  reason: string;
+}
+
+export function useAdminCreateAppointment(userId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AdminCreateAppointmentInput) =>
+      adminApi.adminCreateAppointmentForUser(userId, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.user(userId) });
+      void queryClient.invalidateQueries({
+        queryKey: ["user", userId, "resource", "doctor_appointments"],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
+  });
+}

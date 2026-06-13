@@ -42,3 +42,25 @@ export const changeTierSchema = z.object({
 export const deactivateUserSchema = z.object({
   reason: z.string().trim().min(3).max(280),
 });
+
+// ── Ops appoint (Phase 4 §G admin surface) ──────────────────────────
+// Ops creates a doctor and/or books an appointment on a patient's
+// behalf (support flow). `reason` is mandatory on every write so the
+// audit row always records the WHY (e.g. ticket ref). Phone uses the
+// same E.164 shape the patient-facing surfaces enforce.
+const e164 = z.string().regex(/^\+[1-9]\d{9,14}$/, "phone must be E.164 (e.g. +9198…)");
+
+export const adminCreateDoctorSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  specialty: z.string().trim().min(1).max(60),
+  clinicName: z.string().trim().min(1).max(120).optional(),
+  phone: e164.optional(),
+  reason: z.string().trim().min(3).max(280),
+});
+
+export const adminCreateAppointmentSchema = z.object({
+  doctorId: z.uuid(),
+  scheduledAt: z.coerce.date(),
+  purpose: z.string().trim().min(1).max(200),
+  reason: z.string().trim().min(3).max(280),
+});

@@ -19,7 +19,9 @@ import type {
 import { request } from "./client";
 import type { FlagValue } from "@/flags/types";
 import type {
+  AdminAppointmentResult,
   AdminAuditListResponse,
+  AdminDoctorResult,
   AdminListResponse,
   AdminMetricResult,
   AdminResetPasswordResult,
@@ -149,6 +151,38 @@ export const adminApi = {
   sendTestPush: (id: string) =>
     request<AdminTestPushResult>(`/admin/users/${enc(id)}/test-push`, {
       method: "POST",
+    }),
+
+  // Ops appoint (Phase 4 §G) — create a doctor and book an appointment
+  // for a patient. super_admin + ops only; server audits every call
+  // with the mandatory `reason`.
+  adminCreateDoctorForUser: (
+    id: string,
+    body: {
+      name: string;
+      specialty: string;
+      clinicName?: string;
+      phone?: string;
+      reason: string;
+    },
+  ) =>
+    request<AdminDoctorResult>(`/admin/users/${enc(id)}/doctors`, {
+      method: "POST",
+      json: body,
+    }),
+
+  adminCreateAppointmentForUser: (
+    id: string,
+    body: {
+      doctorId: string;
+      scheduledAt: string;
+      purpose: string;
+      reason: string;
+    },
+  ) =>
+    request<AdminAppointmentResult>(`/admin/users/${enc(id)}/appointments`, {
+      method: "POST",
+      json: body,
     }),
 
   // ── Analytics ────────────────────────────────────────────────

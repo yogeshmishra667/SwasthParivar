@@ -273,6 +273,120 @@ const RESOURCES: readonly AdminResource[] = [
       return buildPage(rows, total, offset);
     },
   },
+  // ── Phase 4 entities (read-only 360°). Convention per
+  // docs/admin-dashboard-plan.md: "add a Phase 4 entity = one registry
+  // entry." Doctor portal (G) + prescriptions (F) + cardiac/respiratory
+  // (E). Doctor profiles are an address book (not patient health data) →
+  // non-sensitive; the rest carry medical context → sensitive (support+,
+  // audited view).
+  {
+    key: "doctor_profiles",
+    label: "Doctors",
+    description: "Patient's saved doctors.",
+    sensitive: false,
+    fetch: async (userId, { limit, offset }: AdminResourceQuery) => {
+      const [rows, total] = await Promise.all([
+        prisma.doctorProfile.findMany({
+          where: { userId },
+          orderBy: { createdAt: "desc" },
+          take: limit,
+          skip: offset,
+        }),
+        prisma.doctorProfile.count({ where: { userId } }),
+      ]);
+      return buildPage(rows, total, offset);
+    },
+  },
+  {
+    key: "doctor_appointments",
+    label: "Appointments",
+    description: "Doctor appointments, soonest first.",
+    sensitive: true,
+    fetch: async (userId, { limit, offset }: AdminResourceQuery) => {
+      const [rows, total] = await Promise.all([
+        prisma.doctorAppointment.findMany({
+          where: { userId },
+          orderBy: { scheduledAt: "desc" },
+          take: limit,
+          skip: offset,
+        }),
+        prisma.doctorAppointment.count({ where: { userId } }),
+      ]);
+      return buildPage(rows, total, offset);
+    },
+  },
+  {
+    key: "reports",
+    label: "Pre-visit reports",
+    description: "Generated PDF report rows, newest first.",
+    sensitive: true,
+    fetch: async (userId, { limit, offset }: AdminResourceQuery) => {
+      const [rows, total] = await Promise.all([
+        prisma.report.findMany({
+          where: { userId },
+          orderBy: { createdAt: "desc" },
+          take: limit,
+          skip: offset,
+        }),
+        prisma.report.count({ where: { userId } }),
+      ]);
+      return buildPage(rows, total, offset);
+    },
+  },
+  {
+    key: "prescriptions",
+    label: "Prescriptions",
+    description: "Uploaded prescriptions + OCR status, newest first.",
+    sensitive: true,
+    fetch: async (userId, { limit, offset }: AdminResourceQuery) => {
+      const [rows, total] = await Promise.all([
+        prisma.prescription.findMany({
+          where: { userId },
+          orderBy: { createdAt: "desc" },
+          take: limit,
+          skip: offset,
+        }),
+        prisma.prescription.count({ where: { userId } }),
+      ]);
+      return buildPage(rows, total, offset);
+    },
+  },
+  {
+    key: "cardiac_logs",
+    label: "Cardiac logs",
+    description: "Heart-rate / rhythm / chest-pain logs, newest first.",
+    sensitive: true,
+    fetch: async (userId, { limit, offset }: AdminResourceQuery) => {
+      const [rows, total] = await Promise.all([
+        prisma.cardiacLog.findMany({
+          where: { userId },
+          orderBy: { measuredAt: "desc" },
+          take: limit,
+          skip: offset,
+        }),
+        prisma.cardiacLog.count({ where: { userId } }),
+      ]);
+      return buildPage(rows, total, offset);
+    },
+  },
+  {
+    key: "respiratory_logs",
+    label: "Respiratory logs",
+    description: "Peak-flow / inhaler / symptom logs, newest first.",
+    sensitive: true,
+    fetch: async (userId, { limit, offset }: AdminResourceQuery) => {
+      const [rows, total] = await Promise.all([
+        prisma.respiratoryLog.findMany({
+          where: { userId },
+          orderBy: { measuredAt: "desc" },
+          take: limit,
+          skip: offset,
+        }),
+        prisma.respiratoryLog.count({ where: { userId } }),
+      ]);
+      return buildPage(rows, total, offset);
+    },
+  },
 ];
 
 /** All registered resources, in display order. */

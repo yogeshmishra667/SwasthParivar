@@ -297,6 +297,104 @@ export const changeUserTier = async (params: {
   return { id: updated.id, previousTier, tier: updated.tier };
 };
 
+// ── Ops appoint (Phase 4 §G admin surface) ──────────────────────────
+//
+// Lets ops create a doctor and book an appointment for a patient (a
+// support flow — e.g. the patient phones in). These are admin-side
+// writes into patient-owned tables, so authority is the admin RBAC
+// (super_admin / ops, enforced on the route) and every write is audited
+// by the controller with a mandatory reason. We do NOT reuse the
+// patient-facing services (those resolve a patient JWT via
+// `resolveHouseholdMember`); the admin caller is a different principal.
+
+export interface AdminDoctorResult {
+  id: string;
+  userId: string;
+  name: string;
+  specialty: string;
+  clinicName: string | null;
+  phone: string | null;
+  createdAt: string;
+}
+
+export const adminCreateDoctorForUser = async (params: {
+  userId: string;
+  name: string;
+  specialty: string;
+  clinicName?: string | undefined;
+  phone?: string | undefined;
+}): Promise<AdminDoctorResult> => {
+  const user = await prisma.user.findUnique({ where: { id: params.userId }, select: { id: true } });
+  if (!user) throw new DomainError("ADMIN_NOT_FOUND", "patient user not found");
+
+  const doctor = await prisma.doctorProfile.create({
+    data: {
+      userId: params.userId,
+      name: params.name,
+      specialty: params.specialty,
+      clinicName: params.clinicName ?? null,
+      phone: params.phone ?? null,
+    },
+  });
+  return {
+    id: doctor.id,
+    userId: doctor.userId,
+    name: doctor.name,
+    specialty: doctor.specialty,
+    clinicName: doctor.clinicName,
+    phone: doctor.phone,
+    createdAt: doctor.createdAt.toISOString(),
+  };
+};
+
+export interface AdminAppointmentResult {
+  id: string;
+  userId: string;
+  doctorId: string;
+  scheduledAt: string;
+  purpose: string;
+  status: string;
+  createdAt: string;
+}
+
+export const adminCreateAppointmentForUser = async (params: {
+  userId: string;
+  doctorId: string;
+  scheduledAt: Date;
+  purpose: string;
+}): Promise<AdminAppointmentResult> => {
+  const user = await prisma.user.findUnique({ where: { id: params.userId }, select: { id: true } });
+  if (!user) throw new DomainError("ADMIN_NOT_FOUND", "patient user not found");
+
+  // The doctor must exist AND belong to this same patient — ops can't
+  // attach another patient's doctor row to this appointment.
+  const doctor = await prisma.doctorProfile.findUnique({
+    where: { id: params.doctorId },
+    select: { userId: true },
+  });
+  if (doctor?.userId !== params.userId) {
+    throw new DomainError("ADMIN_NOT_FOUND", "doctor not found for this patient");
+  }
+
+  const appt = await prisma.doctorAppointment.create({
+    data: {
+      userId: params.userId,
+      doctorId: params.doctorId,
+      scheduledAt: params.scheduledAt,
+      purpose: params.purpose,
+    },
+  });
+  return {
+    id: appt.id,
+    userId: appt.userId,
+    doctorId: appt.doctorId,
+    scheduledAt: appt.scheduledAt.toISOString(),
+    purpose: appt.purpose,
+    status: appt.status,
+    createdAt: appt.createdAt.toISOString(),
+  };
+};
+
 // ── Test push ────────────────────────────────────────────────────
 //
 // Lets an admin verify end-to-end push delivery to a specific user

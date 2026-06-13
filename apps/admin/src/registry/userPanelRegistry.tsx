@@ -62,6 +62,13 @@ export const userPanelRegistry: Record<string, UserPanelEntry> = {
   family_links: generic,
   emergency_contacts: generic,
   push_tokens: generic,
+  // Phase 4 entities (read-only 360°).
+  doctor_profiles: generic,
+  doctor_appointments: generic,
+  reports: generic,
+  prescriptions: generic,
+  cardiac_logs: generic,
+  respiratory_logs: generic,
 };
 
 /** Single entry point used by the User Detail page. */
