@@ -1,6 +1,9 @@
 {
   "title": "Doctor appointments",
   "settingsHint": "Doctor visits and pre-visit reports",
+  "dashboard": {
+    "nextVisit": "Next visit"
+  },
   "loading": "Loading…",
   "loadFailed": "Couldn't load. Please try again.",
   "disabled": "This feature isn't available yet.",

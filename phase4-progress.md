@@ -83,6 +83,8 @@ Mobile UI for Feature G, on `feat/doctor-portal-mobile` (branched off main AFTER
 - **i18n** `doctorPortal` namespace (hi canonical + en), registered in `i18n/config.ts`. **Settings → Health** entry added. New `appointmentDateTime` formatter in `utils/date.ts`.
 - **Tests** — `__tests__/appointments/DoctorFormModal.test.tsx` (3 RNTL: empty-name block, malformed-phone block, valid create forwards result). Full mobile suite 10/10 green; typecheck + lint clean.
 - **Accessibility** — 48dp targets on every Pressable/Button, `text-important`/`text-body` sizing, `ActiveProfileBadge` on all three screens, no swipe/drag, Hindi-first copy.
+- **Dashboard surface (audit follow-up)** — added `NextAppointmentCard` to `(tabs)/dashboard`: soonest upcoming visit (doctor name + date), tappable into detail; fetched best-effort/non-fatal alongside the trend chart, hidden when none or portal disabled. 3 RNTL tests (null-render, tap, purpose fallback). Full mobile suite now 11/11.
+- **F-on-dashboard gap (audit finding):** surfacing "pending prescription approvals" on the dashboard is NOT done — Feature F exposes no list endpoint (only `GET /prescriptions/:id`). Needs a server `GET /prescriptions?status=pending_approval` first; deferred as a separate server+mobile change.
 
 ### Feature G (chunk 4) — reports + GENERATE_PDF (2026-06-13)
 

@@ -14,6 +14,7 @@ import { HealthScoreCard } from "@/components/dashboard/HealthScoreCard";
 import { HbA1cCard } from "@/components/dashboard/HbA1cCard";
 import { InsightsBadge } from "@/components/dashboard/InsightsBadge";
 import { GlucoseTrendChart, type TrendPoint } from "@/components/dashboard/GlucoseTrendChart";
+import { NextAppointmentCard } from "@/components/dashboard/NextAppointmentCard";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -23,6 +24,7 @@ import { useSOSForegroundRehydrate } from "@/hooks/useSOSForegroundRehydrate";
 import { useActiveProfile } from "@/hooks/useActiveProfile";
 import { useProfileStore } from "@/stores/profile.store";
 import { api } from "@/services/api";
+import { listAppointments, listDoctors, type DoctorAppointmentDto } from "@/services/doctor-portal";
 import { logError } from "@/services/analytics";
 import { getFirstName } from "@/utils/getFirstName";
 import {
@@ -101,6 +103,8 @@ export default function DashboardScreen(): JSX.Element {
   const [timeAnomaly, setTimeAnomaly] = useState(false);
   const [userStageDays, setUserStageDays] = useState(0);
   const [trendPoints, setTrendPoints] = useState<readonly TrendPoint[]>([]);
+  const [nextAppointment, setNextAppointment] = useState<DoctorAppointmentDto | null>(null);
+  const [nextAppointmentDoctor, setNextAppointmentDoctor] = useState("");
 
   useEffect(() => {
     void (async () => {
@@ -177,6 +181,29 @@ export default function DashboardScreen(): JSX.Element {
         setTrendPoints(trendRes.data.data);
       } catch (e) {
         logError("dashboard.trend", e);
+      }
+
+      // Phase 4 §G — surface the soonest upcoming doctor visit. Fully
+      // non-fatal and best-effort: a disabled portal (503) or any error
+      // just hides the card. Server returns scheduled appointments
+      // ordered soonest-first, so the first future row is the next visit.
+      try {
+        const [appts, doctors] = await Promise.all([
+          listAppointments({
+            status: "scheduled",
+            ...(activeProfileId ? { targetUserId: activeProfileId } : {}),
+          }),
+          listDoctors(activeProfileId ?? undefined),
+        ]);
+        const now = Date.now();
+        const next = appts.find((a) => new Date(a.scheduledAt).getTime() > now) ?? null;
+        setNextAppointment(next);
+        setNextAppointmentDoctor(
+          next ? (doctors.find((d) => d.id === next.doctorId)?.name ?? "") : "",
+        );
+      } catch {
+        // Portal disabled or unreachable — leave the card hidden.
+        setNextAppointment(null);
       }
 
       setStale(false);
@@ -369,6 +396,16 @@ export default function DashboardScreen(): JSX.Element {
             card before day 14, then the estimate (or "need more
             readings" copy) once unlocked. */}
         <HbA1cCard userStageDays={userStageDays} />
+
+        {/* Phase 4 §G — next doctor visit. Renders nothing when there's
+            no upcoming appointment or the portal is disabled. */}
+        <NextAppointmentCard
+          appointment={nextAppointment}
+          doctorName={nextAppointmentDoctor}
+          onPress={() => {
+            if (nextAppointment) router.push(`/appointments/${nextAppointment.id}`);
+          }}
+        />
 
         {/* AI chat entry — placed below the medical cards so the
             glucose reading stays top-of-fold. */}

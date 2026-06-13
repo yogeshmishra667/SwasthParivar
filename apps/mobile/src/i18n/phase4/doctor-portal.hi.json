@@ -1,6 +1,9 @@
 {
   "title": "Doctor appointments",
   "settingsHint": "Doctor visits aur pre-visit report",
+  "dashboard": {
+    "nextVisit": "Agli appointment"
+  },
   "loading": "Load ho raha hai…",
   "loadFailed": "Load nahi ho paya. Phir try karein.",
   "disabled": "Yeh feature abhi available nahi hai.",
