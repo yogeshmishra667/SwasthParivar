@@ -1,5 +1,9 @@
 {
   "title": "Prescription",
+  "dashboard": {
+    "pendingTitle": "{{count}} prescription(s) waiting for approval",
+    "tapToReview": "Tap to review"
+  },
   "upload": {
     "title": "Add prescription",
     "parchiLabel": "Doctor's prescription",

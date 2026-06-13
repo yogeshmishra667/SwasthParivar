@@ -1,5 +1,9 @@
 {
   "title": "Parchi",
+  "dashboard": {
+    "pendingTitle": "{{count}} parchi approval ke liye pending",
+    "tapToReview": "Review karne ke liye tap karein"
+  },
   "upload": {
     "title": "Parchi add karein",
     "parchiLabel": "Doctor ki parchi",

@@ -15,6 +15,7 @@ import { HbA1cCard } from "@/components/dashboard/HbA1cCard";
 import { InsightsBadge } from "@/components/dashboard/InsightsBadge";
 import { GlucoseTrendChart, type TrendPoint } from "@/components/dashboard/GlucoseTrendChart";
 import { NextAppointmentCard } from "@/components/dashboard/NextAppointmentCard";
+import { PendingPrescriptionsCard } from "@/components/dashboard/PendingPrescriptionsCard";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -25,6 +26,7 @@ import { useActiveProfile } from "@/hooks/useActiveProfile";
 import { useProfileStore } from "@/stores/profile.store";
 import { api } from "@/services/api";
 import { listAppointments, listDoctors, type DoctorAppointmentDto } from "@/services/doctor-portal";
+import { listPrescriptions, type PrescriptionListItem } from "@/services/prescriptions";
 import { logError } from "@/services/analytics";
 import { getFirstName } from "@/utils/getFirstName";
 import {
@@ -105,6 +107,9 @@ export default function DashboardScreen(): JSX.Element {
   const [trendPoints, setTrendPoints] = useState<readonly TrendPoint[]>([]);
   const [nextAppointment, setNextAppointment] = useState<DoctorAppointmentDto | null>(null);
   const [nextAppointmentDoctor, setNextAppointmentDoctor] = useState("");
+  const [pendingPrescriptions, setPendingPrescriptions] = useState<readonly PrescriptionListItem[]>(
+    [],
+  );
 
   useEffect(() => {
     void (async () => {
@@ -204,6 +209,19 @@ export default function DashboardScreen(): JSX.Element {
       } catch {
         // Portal disabled or unreachable — leave the card hidden.
         setNextAppointment(null);
+      }
+
+      // Phase 4 §F — pending prescription approvals nudge. Independent
+      // best-effort fetch: a server without the list endpoint (404) or
+      // any error just hides the card. Scoped to the active profile.
+      try {
+        const pending = await listPrescriptions({
+          status: "pending_approval",
+          ...(activeProfileId ? { targetUserId: activeProfileId } : {}),
+        });
+        setPendingPrescriptions(pending);
+      } catch {
+        setPendingPrescriptions([]);
       }
 
       setStale(false);
@@ -316,6 +334,13 @@ export default function DashboardScreen(): JSX.Element {
         )}
 
         {userStageDays >= 14 && <InsightsBadge count={data.insightsUnacknowledgedCount} />}
+
+        {/* Phase 4 §F — pending prescription approvals (safety nudge).
+            Renders nothing when none pending or endpoint unavailable. */}
+        <PendingPrescriptionsCard
+          pending={pendingPrescriptions}
+          onPress={(id) => router.push(`/prescriptions/${id}`)}
+        />
 
         {/* Hero — latest glucose reading. */}
         <Card>
