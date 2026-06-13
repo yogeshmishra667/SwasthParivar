@@ -84,6 +84,18 @@ export const manualItemBodySchema = z.object({
   addAttemptId: uuid,
 });
 
+// ── GET /prescriptions — list (Phase 4 §G dashboard surface) ───────
+// Lists a patient's prescriptions, optionally filtered by status. The
+// dashboard "pending approval" nudge passes `status=pending_approval`.
+// `targetUserId` follows the household pattern (primary on a sub-profile's
+// behalf); authz is enforced in the service via `ensureHouseholdRead`.
+export const listPrescriptionsQuerySchema = z.object({
+  status: z.enum(["pending_ocr", "pending_approval", "partial", "approved", "rejected"]).optional(),
+  targetUserId: uuid.optional(),
+});
+
+export type ListPrescriptionsQuery = z.infer<typeof listPrescriptionsQuerySchema>;
+
 export type UploadFormFields = z.infer<typeof uploadFormFieldsSchema>;
 export type ClarifyBody = z.infer<typeof clarifyBodySchema>;
 export type ApproveBody = z.infer<typeof approveBodySchema>;

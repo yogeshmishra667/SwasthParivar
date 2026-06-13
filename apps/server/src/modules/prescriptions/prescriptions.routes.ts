@@ -1,6 +1,7 @@
 // Phase 4 §F.5 / §F.6 prescription router. Routes:
 //
 //   POST   /upload                         multipart, paired upload
+//   GET    /                               list (status-filtered; dashboard nudge)
 //   GET    /:id                            full prescription detail
 //   POST   /:id/photos                     append missed pages/bottles (§F.10b.2)
 //   POST   /:id/items                      approver manual-add (§F.10b.3)
@@ -42,6 +43,9 @@ const wrapMulter =
   };
 
 prescriptionsRouter.post("/upload", wrapMulter(prescriptionUploadMultipart), controller.postUpload);
+
+// List MUST be registered before "/:id" so "/" isn't captured as an id.
+prescriptionsRouter.get("/", controller.list);
 
 prescriptionsRouter.get("/:id", controller.getOne);
 
