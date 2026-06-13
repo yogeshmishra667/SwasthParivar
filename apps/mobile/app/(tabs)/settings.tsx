@@ -189,6 +189,36 @@ export default function SettingsScreen(): JSX.Element {
 
         <View className="mb-8">
           <Text className="text-important font-bold text-gray-900 dark:text-gray-100 mb-2">
+            {t("settings.healthSection", { defaultValue: "Health" })}
+          </Text>
+          <View className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800">
+            <Pressable
+              onPress={() => router.push("/appointments")}
+              accessibilityRole="button"
+              accessibilityLabel={t("doctorPortal.title", { defaultValue: "Doctor appointments" })}
+              style={{ minHeight: TOUCH_TARGET_MIN }}
+              className="flex-row items-center gap-3 p-4"
+            >
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/40">
+                <Icon name="medkit-outline" size={22} color="#2563EB" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-important font-semibold text-gray-900 dark:text-gray-100">
+                  {t("doctorPortal.title", { defaultValue: "Doctor appointments" })}
+                </Text>
+                <Text className="text-body text-neutral dark:text-gray-400">
+                  {t("doctorPortal.settingsHint", {
+                    defaultValue: "Doctor visits aur pre-visit report",
+                  })}
+                </Text>
+              </View>
+              <Icon name="chevron-forward" size={20} color="#9CA3AF" />
+            </Pressable>
+          </View>
+        </View>
+
+        <View className="mb-8">
+          <Text className="text-important font-bold text-gray-900 dark:text-gray-100 mb-2">
             {t("settings.safetySection", { defaultValue: "Safety" })}
           </Text>
           <View className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800">

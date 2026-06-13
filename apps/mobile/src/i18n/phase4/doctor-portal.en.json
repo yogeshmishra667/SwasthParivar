@@ -1,0 +1,68 @@
+{
+  "title": "Doctor appointments",
+  "settingsHint": "Doctor visits and pre-visit reports",
+  "dashboard": {
+    "nextVisit": "Next visit"
+  },
+  "loading": "Loading…",
+  "loadFailed": "Couldn't load. Please try again.",
+  "disabled": "This feature isn't available yet.",
+  "list": {
+    "upcomingTitle": "Upcoming appointments",
+    "emptyTitle": "No appointments yet",
+    "emptyBody": "Add a doctor visit — we'll remind you in time.",
+    "add": "New appointment",
+    "reminderNote": "We'll remind you 7 days, 1 day, and 2 hours before."
+  },
+  "status": {
+    "scheduled": "Scheduled",
+    "completed": "Completed",
+    "cancelled": "Cancelled",
+    "missed": "Missed"
+  },
+  "new": {
+    "title": "New appointment",
+    "doctorSection": "Choose a doctor",
+    "noDoctors": "No doctors added yet.",
+    "addDoctor": "Add a new doctor",
+    "dateSection": "When?",
+    "timeSection": "What time?",
+    "timeMorning": "Morning",
+    "timeAfternoon": "Afternoon",
+    "timeEvening": "Evening",
+    "purposeSection": "What for?",
+    "purposePlaceholder": "e.g. Regular checkup, Sugar review",
+    "save": "Save appointment",
+    "missingDoctor": "Please choose a doctor first.",
+    "missingPurpose": "Please say what the visit is for.",
+    "saveFailed": "Couldn't save. Please try again."
+  },
+  "doctorForm": {
+    "title": "New doctor",
+    "name": "Doctor's name",
+    "namePlaceholder": "Dr. Mehta",
+    "specialty": "Specialty",
+    "specialtyPlaceholder": "e.g. Diabetes, Heart",
+    "clinic": "Clinic / hospital (optional)",
+    "phone": "Phone (optional)",
+    "save": "Save doctor",
+    "invalidPhone": "Phone must start with +91.",
+    "missingName": "Please enter the doctor's name.",
+    "missingSpecialty": "Please enter a specialty."
+  },
+  "detail": {
+    "title": "Appointment",
+    "purposeLabel": "Purpose",
+    "markComplete": "Mark visit done",
+    "completedNote": "This visit is complete.",
+    "reportSection": "Pre-visit report",
+    "reportHint": "Generate a 30-day report to show the doctor.",
+    "generate": "Generate report",
+    "generating": "Generating report… please wait.",
+    "ready": "Report ready",
+    "open": "Open report",
+    "failed": "Report failed. Please try again.",
+    "aiIncluded": "Includes an AI summary (for discussion only).",
+    "openFailed": "Couldn't open the report. Please try again."
+  }
+}
