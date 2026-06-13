@@ -93,6 +93,32 @@ export const getPrescription = async (id: string): Promise<PrescriptionView> => 
   return res.data;
 };
 
+export interface PrescriptionListItem {
+  id: string;
+  status: PrescriptionStatus;
+  createdAt: string;
+  pendingItemCount: number;
+}
+
+/**
+ * Lists prescriptions for the active profile, optionally status-filtered.
+ * Backs the dashboard "pending approval" nudge. `targetUserId` follows
+ * the household pattern. Throws on failure — the dashboard wraps this in
+ * a best-effort try/catch and hides the nudge on any error.
+ */
+export const listPrescriptions = async (params?: {
+  status?: PrescriptionStatus;
+  targetUserId?: string;
+}): Promise<PrescriptionListItem[]> => {
+  const query: Record<string, string> = {};
+  if (params?.status) query.status = params.status;
+  if (params?.targetUserId) query.targetUserId = params.targetUserId;
+  const res = await api.get<Envelope<{ prescriptions: PrescriptionListItem[] }>>("/prescriptions", {
+    params: Object.keys(query).length > 0 ? query : undefined,
+  });
+  return res.data.prescriptions;
+};
+
 export interface ApproverItemDecision {
   id: string;
   decision: "approve" | "reject" | "needs_doctor";
