@@ -2,6 +2,8 @@ import { Router } from "express";
 import { validateBody, validateParams, validateQuery } from "../../../shared/validate.js";
 import { requireAdminRole } from "../../../shared/middleware/admin-rbac.js";
 import {
+  adminCreateAppointmentSchema,
+  adminCreateDoctorSchema,
   changeTierSchema,
   deactivateUserSchema,
   listUsersQuerySchema,
@@ -71,4 +73,23 @@ adminUsersRouter.post(
   requireAdminRole("super_admin", "ops"),
   validateParams(userIdParamSchema),
   controller.sendTestPush,
+);
+
+// Ops appoint (Phase 4 §G) — create a doctor and/or book an appointment
+// on a patient's behalf (support flow). super_admin + ops only; every
+// write audited with a mandatory reason.
+adminUsersRouter.post(
+  "/:id/doctors",
+  requireAdminRole("super_admin", "ops"),
+  validateParams(userIdParamSchema),
+  validateBody(adminCreateDoctorSchema),
+  controller.createPatientDoctor,
+);
+
+adminUsersRouter.post(
+  "/:id/appointments",
+  requireAdminRole("super_admin", "ops"),
+  validateParams(userIdParamSchema),
+  validateBody(adminCreateAppointmentSchema),
+  controller.createPatientAppointment,
 );

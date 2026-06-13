@@ -110,6 +110,74 @@ export const reactivateUser = async (req: Request, res: Response): Promise<void>
   ok(res, result);
 };
 
+// ── Ops appoint (Phase 4 §G admin surface) ──────────────────────────
+//
+// Create a doctor and/or book an appointment for a patient. super_admin
+// + ops only (route-gated). Always audited with the mandatory reason.
+
+export const createPatientDoctor = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const body = req.body as {
+    name: string;
+    specialty: string;
+    clinicName?: string;
+    phone?: string;
+    reason: string;
+  };
+  const admin = req.admin!;
+
+  const result = await service.adminCreateDoctorForUser({
+    userId: id,
+    name: body.name,
+    specialty: body.specialty,
+    clinicName: body.clinicName,
+    phone: body.phone,
+  });
+
+  await recordAdminAction({
+    adminUserId: admin.id,
+    action: "patient.doctor_created",
+    targetType: "user",
+    targetId: id,
+    metadata: { doctorId: result.id, specialty: result.specialty, reason: body.reason },
+    ip: req.ip,
+  });
+  ok(res, result, 201);
+};
+
+export const createPatientAppointment = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const body = req.body as {
+    doctorId: string;
+    scheduledAt: Date;
+    purpose: string;
+    reason: string;
+  };
+  const admin = req.admin!;
+
+  const result = await service.adminCreateAppointmentForUser({
+    userId: id,
+    doctorId: body.doctorId,
+    scheduledAt: body.scheduledAt,
+    purpose: body.purpose,
+  });
+
+  await recordAdminAction({
+    adminUserId: admin.id,
+    action: "patient.appointment_created",
+    targetType: "user",
+    targetId: id,
+    metadata: {
+      appointmentId: result.id,
+      doctorId: result.doctorId,
+      scheduledAt: result.scheduledAt,
+      reason: body.reason,
+    },
+    ip: req.ip,
+  });
+  ok(res, result, 201);
+};
+
 /**
  * Admin "Send test push" — fires a single non-critical push to every
  * device this user's household has registered. Lets ops verify

@@ -99,3 +99,25 @@ export interface AdminAuditListResponse {
   offset: number;
   hasMore: boolean;
 }
+
+// ── Ops appoint (Phase 4 §G) ─────────────────────────────────────
+
+export interface AdminDoctorResult {
+  id: string;
+  userId: string;
+  name: string;
+  specialty: string;
+  clinicName: string | null;
+  phone: string | null;
+  createdAt: string;
+}
+
+export interface AdminAppointmentResult {
+  id: string;
+  userId: string;
+  doctorId: string;
+  scheduledAt: string;
+  purpose: string;
+  status: string;
+  createdAt: string;
+}

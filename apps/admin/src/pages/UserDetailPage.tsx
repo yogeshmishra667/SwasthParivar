@@ -17,6 +17,8 @@ import type {
 } from "@swasth/shared-types";
 import { toast } from "sonner";
 import {
+  useAdminCreateAppointment,
+  useAdminCreateDoctor,
   useChangeUserTier,
   useDeactivateUser,
   useReactivateUser,
@@ -25,6 +27,8 @@ import {
   useUserFeatureMap,
   useUserResource,
 } from "@/api/queries";
+import { Input } from "@/components/ui/input";
+import { CalendarPlus } from "lucide-react";
 import { humanizeApiError } from "@/lib/errorMessage";
 import { cn } from "@/lib/cn";
 import { userDetailRoute } from "@/router/router";
@@ -67,6 +71,371 @@ const computeInitials = (name: string): string =>
     .slice(0, 2)
     .join("")
     .toUpperCase();
+
+// ── Ops appoint (Phase 4 §G) ─────────────────────────────────────
+//
+// Two server writes behind one ops workflow: optionally create a doctor
+// row, then book an appointment. The dialog enforces this by always
+// requiring a chosen doctor before "Book" enables — if none exist or
+// ops wants a new one, the "Create doctor" tab handles that first and
+// auto-selects the result. Mandatory reason on every call so the audit
+// row always records the WHY.
+
+interface AppointDoctorControlProps {
+  userId: string;
+}
+
+interface DoctorRow {
+  id: string;
+  name: string;
+  specialty: string;
+}
+
+const isDoctorRow = (r: unknown): r is DoctorRow => {
+  if (typeof r !== "object" || r === null) return false;
+  const obj = r as Record<string, unknown>;
+  return (
+    typeof obj.id === "string" && typeof obj.name === "string" && typeof obj.specialty === "string"
+  );
+};
+
+const E164 = /^\+[1-9]\d{9,14}$/;
+
+const isoFromLocalDateTime = (date: string, time: string): string | null => {
+  if (!date || !time) return null;
+  const d = new Date(`${date}T${time}`);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+};
+
+function AppointDoctorControl({ userId }: AppointDoctorControlProps) {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"book" | "create">("book");
+
+  // Doctor list — read from the read-only registry so the dropdown
+  // matches what the patient sees in the mobile app.
+  const doctorsQuery = useUserResource(
+    userId,
+    "doctor_profiles",
+    { limit: 100 },
+    { enabled: open },
+  );
+  const doctorRows: DoctorRow[] = useMemo(() => {
+    const rows = doctorsQuery.data?.rows ?? [];
+    return rows.filter(isDoctorRow);
+  }, [doctorsQuery.data]);
+
+  // Book-appointment form.
+  const [doctorId, setDoctorId] = useState<string>("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [bookReason, setBookReason] = useState("");
+
+  // Create-doctor form.
+  const [name, setName] = useState("");
+  const [specialty, setSpecialty] = useState("");
+  const [clinicName, setClinicName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [createReason, setCreateReason] = useState("");
+
+  const createDoctor = useAdminCreateDoctor(userId);
+  const createAppointment = useAdminCreateAppointment(userId);
+
+  // Default selection: first doctor when the dialog opens (saves one
+  // click in the common case).
+  if (open && !doctorId && doctorRows[0]) setDoctorId(doctorRows[0].id);
+
+  const reset = (): void => {
+    setMode("book");
+    setDoctorId("");
+    setDate("");
+    setTime("");
+    setPurpose("");
+    setBookReason("");
+    setName("");
+    setSpecialty("");
+    setClinicName("");
+    setPhone("");
+    setCreateReason("");
+  };
+
+  const scheduledAtIso = isoFromLocalDateTime(date, time);
+  const phoneTrim = phone.trim();
+  const phoneValid = phoneTrim.length === 0 || E164.test(phoneTrim);
+  const canBook =
+    doctorId.length > 0 &&
+    scheduledAtIso !== null &&
+    purpose.trim().length > 0 &&
+    bookReason.trim().length >= 3 &&
+    bookReason.trim().length <= 280;
+  const canCreate =
+    name.trim().length > 0 &&
+    specialty.trim().length > 0 &&
+    phoneValid &&
+    createReason.trim().length >= 3 &&
+    createReason.trim().length <= 280;
+
+  const onCreateDoctor = (): void => {
+    createDoctor.mutate(
+      {
+        name: name.trim(),
+        specialty: specialty.trim(),
+        ...(clinicName.trim().length > 0 ? { clinicName: clinicName.trim() } : {}),
+        ...(phoneTrim.length > 0 ? { phone: phoneTrim } : {}),
+        reason: createReason.trim(),
+      },
+      {
+        onSuccess: (doctor) => {
+          toast.success(`Created doctor ${doctor.name}`);
+          setDoctorId(doctor.id);
+          setName("");
+          setSpecialty("");
+          setClinicName("");
+          setPhone("");
+          setCreateReason("");
+          setMode("book");
+        },
+        onError: (err) => {
+          toast.error(humanizeApiError(err, "Couldn't create doctor."));
+        },
+      },
+    );
+  };
+
+  const onBook = (): void => {
+    if (!scheduledAtIso) return;
+    createAppointment.mutate(
+      {
+        doctorId,
+        scheduledAt: scheduledAtIso,
+        purpose: purpose.trim(),
+        reason: bookReason.trim(),
+      },
+      {
+        onSuccess: () => {
+          toast.success("Appointment booked");
+          setOpen(false);
+          reset();
+        },
+        onError: (err) => {
+          toast.error(humanizeApiError(err, "Couldn't book appointment."));
+        },
+      },
+    );
+  };
+
+  const pending = createDoctor.isPending || createAppointment.isPending;
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          reset();
+          setOpen(true);
+        }}
+      >
+        <CalendarPlus className="mr-1.5 h-4 w-4" />
+        Appoint doctor
+      </Button>
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          if (!pending) setOpen(o);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Appoint a doctor for this patient</DialogTitle>
+            <DialogDescription>
+              Both actions are audit-logged with the reason you provide. Use this for support flows
+              (e.g. the patient phoned in) — the patient will see the appointment immediately and
+              the reminder cron fires automatically at 7d / 1d / 2h.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Mode switch */}
+          <div className="flex gap-2 border-b pb-2">
+            <Button
+              size="sm"
+              variant={mode === "book" ? "default" : "ghost"}
+              onClick={() => setMode("book")}
+              disabled={pending}
+            >
+              Book appointment
+            </Button>
+            <Button
+              size="sm"
+              variant={mode === "create" ? "default" : "ghost"}
+              onClick={() => setMode("create")}
+              disabled={pending}
+            >
+              Create doctor
+            </Button>
+          </div>
+
+          {mode === "book" ? (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="appt-doctor">Doctor</Label>
+                {doctorRows.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No doctors saved for this patient yet. Switch to <strong>Create doctor</strong>{" "}
+                    to add one.
+                  </p>
+                ) : (
+                  <Select value={doctorId} onValueChange={setDoctorId}>
+                    <SelectTrigger id="appt-doctor">
+                      <SelectValue placeholder="Pick a doctor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {doctorRows.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name} — {d.specialty}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="appt-date">Date</Label>
+                  <Input
+                    id="appt-date"
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    disabled={pending}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="appt-time">Time</Label>
+                  <Input
+                    id="appt-time"
+                    type="time"
+                    value={time}
+                    onChange={(e) => setTime(e.target.value)}
+                    disabled={pending}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="appt-purpose">Purpose</Label>
+                <Input
+                  id="appt-purpose"
+                  value={purpose}
+                  onChange={(e) => setPurpose(e.target.value)}
+                  placeholder="e.g. Quarterly review"
+                  disabled={pending}
+                  maxLength={200}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="appt-reason">Audit reason</Label>
+                <textarea
+                  id="appt-reason"
+                  value={bookReason}
+                  onChange={(e) => setBookReason(e.target.value)}
+                  disabled={pending}
+                  placeholder="e.g. Ticket OPS-1234 — patient phoned in"
+                  rows={2}
+                  maxLength={280}
+                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {bookReason.trim().length}/280 · min 3 · recorded verbatim in the audit log.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="doc-name">Doctor name</Label>
+                <Input
+                  id="doc-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Dr. Mehta"
+                  disabled={pending}
+                  maxLength={80}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="doc-specialty">Specialty</Label>
+                <Input
+                  id="doc-specialty"
+                  value={specialty}
+                  onChange={(e) => setSpecialty(e.target.value)}
+                  placeholder="Endocrinology"
+                  disabled={pending}
+                  maxLength={60}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="doc-clinic">Clinic (optional)</Label>
+                  <Input
+                    id="doc-clinic"
+                    value={clinicName}
+                    onChange={(e) => setClinicName(e.target.value)}
+                    disabled={pending}
+                    maxLength={120}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="doc-phone">Phone (optional)</Label>
+                  <Input
+                    id="doc-phone"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+9198…"
+                    disabled={pending}
+                  />
+                  {phone.trim().length > 0 && !phoneValid ? (
+                    <p className="text-xs text-destructive">Phone must be E.164 (+countrycode…).</p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="doc-reason">Audit reason</Label>
+                <textarea
+                  id="doc-reason"
+                  value={createReason}
+                  onChange={(e) => setCreateReason(e.target.value)}
+                  disabled={pending}
+                  placeholder="e.g. Ticket OPS-1234 — adding patient's doctor on request"
+                  rows={2}
+                  maxLength={280}
+                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {createReason.trim().length}/280 · min 3 · recorded verbatim in the audit log.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
+              Cancel
+            </Button>
+            {mode === "book" ? (
+              <Button onClick={onBook} disabled={!canBook || pending}>
+                {createAppointment.isPending ? "Booking…" : "Book appointment"}
+              </Button>
+            ) : (
+              <Button onClick={onCreateDoctor} disabled={!canCreate || pending}>
+                {createDoctor.isPending ? "Creating…" : "Create doctor"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 // ── Tier change ──────────────────────────────────────────────────
 
@@ -677,7 +1046,8 @@ export function UserDetailPage() {
             </div>
           </div>
           <RoleGate allow={["super_admin", "ops"]}>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <AppointDoctorControl userId={user.id} />
               <TierChange userId={user.id} currentTier={user.tier} />
               <AccountState userId={user.id} active={user.active} />
             </div>
