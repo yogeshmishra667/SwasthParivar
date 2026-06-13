@@ -1,0 +1,65 @@
+{
+  "title": "Doctor appointments",
+  "settingsHint": "Doctor visits aur pre-visit report",
+  "loading": "Load ho raha hai…",
+  "loadFailed": "Load nahi ho paya. Phir try karein.",
+  "disabled": "Yeh feature abhi available nahi hai.",
+  "list": {
+    "upcomingTitle": "Aane wali appointments",
+    "emptyTitle": "Koi appointment nahi hai",
+    "emptyBody": "Doctor ke saath visit add karein — hum time par yaad dila denge.",
+    "add": "Nayi appointment",
+    "reminderNote": "Hum 7 din, 1 din aur 2 ghante pehle yaad dilayenge."
+  },
+  "status": {
+    "scheduled": "Tay hai",
+    "completed": "Ho gayi",
+    "cancelled": "Cancel",
+    "missed": "Chhoot gayi"
+  },
+  "new": {
+    "title": "Nayi appointment",
+    "doctorSection": "Doctor chunein",
+    "noDoctors": "Abhi koi doctor add nahi hai.",
+    "addDoctor": "Naya doctor add karein",
+    "dateSection": "Kab?",
+    "timeSection": "Kis samay?",
+    "timeMorning": "Subah",
+    "timeAfternoon": "Dopahar",
+    "timeEvening": "Shaam",
+    "purposeSection": "Kis liye?",
+    "purposePlaceholder": "Jaise: Regular checkup, Sugar review",
+    "save": "Appointment save karein",
+    "missingDoctor": "Pehle doctor chunein.",
+    "missingPurpose": "Kis liye visit hai, likhein.",
+    "saveFailed": "Save nahi ho paya. Phir try karein."
+  },
+  "doctorForm": {
+    "title": "Naya doctor",
+    "name": "Doctor ka naam",
+    "namePlaceholder": "Dr. Mehta",
+    "specialty": "Specialty",
+    "specialtyPlaceholder": "Jaise: Sugar (Diabetes), Dil (Heart)",
+    "clinic": "Clinic / hospital (optional)",
+    "phone": "Phone (optional)",
+    "save": "Doctor save karein",
+    "invalidPhone": "Phone +91 se shuru karein.",
+    "missingName": "Doctor ka naam likhein.",
+    "missingSpecialty": "Specialty likhein."
+  },
+  "detail": {
+    "title": "Appointment",
+    "purposeLabel": "Kis liye",
+    "markComplete": "Visit ho gayi",
+    "completedNote": "Yeh visit complete ho chuki hai.",
+    "reportSection": "Pre-visit report",
+    "reportHint": "Doctor ko dikhane ke liye pichhle 30 din ki report banayein.",
+    "generate": "Report banayein",
+    "generating": "Report ban rahi hai… thoda intezaar karein.",
+    "ready": "Report taiyar hai",
+    "open": "Report kholein",
+    "failed": "Report nahi ban payi. Phir try karein.",
+    "aiIncluded": "Isme AI summary bhi hai (sirf charcha ke liye).",
+    "openFailed": "Report khul nahi payi. Phir try karein."
+  }
+}
