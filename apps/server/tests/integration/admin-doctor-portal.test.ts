@@ -147,7 +147,7 @@ describe("ops appoint — doctors", () => {
     expect(res.body.data).toMatchObject({ userId: patientId, name: "Dr. Mehta" });
 
     const audit = await prisma.adminAuditLog.findMany({
-      where: { action: "patient.doctor_created" },
+      where: { action: "user.doctor_created" },
     });
     expect(audit).toHaveLength(1);
     expect(audit[0].targetId).toBe(patientId);
@@ -202,7 +202,7 @@ describe("ops appoint — appointments", () => {
     expect(res.body.data).toMatchObject({ userId: patientId, doctorId, status: "scheduled" });
 
     const audit = await prisma.adminAuditLog.findMany({
-      where: { action: "patient.appointment_created" },
+      where: { action: "user.appointment_created" },
     });
     expect(audit).toHaveLength(1);
   });

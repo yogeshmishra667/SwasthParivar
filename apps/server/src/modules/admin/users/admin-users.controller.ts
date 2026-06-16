@@ -136,7 +136,7 @@ export const createPatientDoctor = async (req: Request, res: Response): Promise<
 
   await recordAdminAction({
     adminUserId: admin.id,
-    action: "patient.doctor_created",
+    action: "user.doctor_created",
     targetType: "user",
     targetId: id,
     metadata: { doctorId: result.id, specialty: result.specialty, reason: body.reason },
@@ -164,7 +164,7 @@ export const createPatientAppointment = async (req: Request, res: Response): Pro
 
   await recordAdminAction({
     adminUserId: admin.id,
-    action: "patient.appointment_created",
+    action: "user.appointment_created",
     targetType: "user",
     targetId: id,
     metadata: {
