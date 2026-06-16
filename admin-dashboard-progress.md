@@ -36,10 +36,7 @@ build all clean.
 - [x] **M1-T3** `modules/admin/analytics/` — metric-registry KPIs (`/overview`,
       `/:key`); 8 live DB metrics + 3 PostHog-sourced metrics surfaced as unavailable
       until a PostHog query client is wired.
-- [x] **M1-T4** User mutations — tier change (audited). NOTE: **deactivate deferred** —
-      `User` has no `active`/`deactivatedAt` field; adding one + enforcing it in patient
-      auth is a patient-facing change, out of scope for an additive admin API. Revisit
-      with the team / Phase 4.
+- [x] **M1-T4** User mutations — tier change (audited). **Deactivate/Reactivate** — soft-disable an account with an audit-logged reason, enforcing access blocks at the auth layer.
 - [x] **M1-T5** `modules/admin/ops/` — `/ops/queues` (BullMQ depth), `/ops/health`
       (db+redis probe), `/ops/maintenance` (kill switch). super_admin/ops.
 - [x] **M1-T6** `modules/admin/flags/` — moved flags module into `flags/`; typed
@@ -144,10 +141,6 @@ query.ts` runs HogQL queries against the PostHog projects API; the three
 rate`, `retention`) now compute live whenever `POSTHOG_PERSONAL_API_KEY` +
   `POSTHOG_PROJECT_ID` are set, and degrade to `available:false` with the
   registered note otherwise.
-- **Deactivate / suspend a patient user.** `User` has no `active` / `deactivatedAt`
-  field; adding one _and_ enforcing it in patient login is a patient-facing change,
-  beyond the scope of an additive admin API. Needs a schema migration + auth-layer
-  enforcement — coordinate with the team / Phase 4. (Tier change shipped in M1-T4.)
 - **TOTP recovery codes + email-based admin password reset.** v1 password reset is
   super_admin-initiated via the Admin Users page; there is no self-service recovery.
 - **Runtime-adjustable rate limits.** `shared/middleware/rate-limit.ts` limits are
@@ -157,6 +150,15 @@ rate`, `retention`) now compute live whenever `POSTHOG_PERSONAL_API_KEY` +
 ---
 
 ## Session log
+
+### 2026-06-13 — Session 5 (doctor-portal admin audit & fixes)
+
+Audited the already-merged doctor-portal admin surface (registry entries + ops
+appoint endpoints) against the plan docs and fixed:
+
+1. `doctor_profiles` sensitivity: the merged registry entry was `sensitive: false`, leaking a doctor's name/clinic/phone (third-party contact PII) to the `analyst` role. Fixed to `sensitive: true` — matches the `emergency_contacts` precedent and the plan's RBAC matrix (analyst excluded from "Detailed user data").
+2. Audit action naming: `patient.*` actions renamed to `user.*` (`user.doctor_created` / `user.appointment_created`, test assertions updated) to match the `user.*` convention every other user mutation uses.
+3. Docs: `docs/admin-dashboard.md` now documents the 6 live Phase 4 registry entities (doctors, appointments, reports, prescriptions, cardiac_logs, respiratory_logs; `ActivityDaily`/`SleepLog` await Feature I) + the Appoint Doctor workflow; this file marks user deactivation done.
 
 ### 2026-05-23 — Session 4 (production-readiness audit)
 

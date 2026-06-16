@@ -34,11 +34,24 @@ The dashboard features a registry-driven analytics pipeline that aggregates both
 - Monitor active Redis BullMQ queue lengths for the background job workers (e.g., summary generators, notification dispatchers).
 - **Global Maintenance Toggle:** Easily flip the system into maintenance mode during critical outages.
 
+## 5. Phase 4 Operations & Health Records
+
+Phase 4 features are fully integrated into the 360° user detail view via the registry pattern.
+
+- **Read-Only Registries:** Complete health records are available under role-gated resource panels:
+  - `cardiac_logs` and `respiratory_logs` (Feature E)
+  - `prescriptions` (Feature F)
+  - `reports` (Feature G)
+  - `doctor_profiles` and `doctor_appointments` (Feature G)
+  - _(Note: `ActivityDaily` and `SleepLog` registries are pending Feature I)_
+- **Appoint Doctor Workflow:** Super admins and ops can manually create doctors and book appointments on behalf of patients (`POST /admin/users/:id/doctors` and `/appointments`). These actions mandate a 3–280 character reason and are permanently audited.
+- **Test Push Diagnostics:** Trigger non-critical diagnostic push notifications to a user's devices with explicit Expo error-code hint resolution.
+
 ## Architecture
 
 The admin console is structured as a Vite + React SPA (`apps/admin`) backed by an Express 5 API (`apps/server/src/modules/admin`).
 
-- **Registry-driven:** All metrics, user data panels, and feature flag types are strictly defined in registries (e.g., `AdminResourceRegistry` and `flagEditorRegistry`), meaning Phase 4 expansions will slot in automatically without UI rewrites.
+- **Registry-driven:** All metrics, user data panels, and feature flag types are strictly defined in registries (e.g., `AdminResourceRegistry` and `flagEditorRegistry`). Phase 4 expansions (6 of 8 entities) have already slotted in automatically without UI rewrites.
 - **RBAC Security:** Handled transparently by `requireAdminRole(...)` middleware checking `super_admin`, `ops`, `support`, or `analyst` privileges.
 
 _See `admin-dashboard-plan.md` for historical design decisions and Phase 4 Monetization scaffolding._

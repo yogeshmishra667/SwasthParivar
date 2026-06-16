@@ -276,14 +276,15 @@ const RESOURCES: readonly AdminResource[] = [
   // ── Phase 4 entities (read-only 360°). Convention per
   // docs/admin-dashboard-plan.md: "add a Phase 4 entity = one registry
   // entry." Doctor portal (G) + prescriptions (F) + cardiac/respiratory
-  // (E). Doctor profiles are an address book (not patient health data) →
-  // non-sensitive; the rest carry medical context → sensitive (support+,
-  // audited view).
+  // (E). ALL marked sensitive: per the plan's RBAC matrix, "Detailed
+  // user data (incl. health)" is support+ only (analyst excluded), and
+  // doctor profiles carry third-party contact PII (name/clinic/phone) —
+  // same gating as `emergency_contacts`.
   {
     key: "doctor_profiles",
     label: "Doctors",
     description: "Patient's saved doctors.",
-    sensitive: false,
+    sensitive: true,
     fetch: async (userId, { limit, offset }: AdminResourceQuery) => {
       const [rows, total] = await Promise.all([
         prisma.doctorProfile.findMany({
