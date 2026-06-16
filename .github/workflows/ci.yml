@@ -63,6 +63,13 @@ jobs:
     name: Detect changed paths
     runs-on: ubuntu-latest
     timeout-minutes: 1
+    # dorny/paths-filter resolves the PR's changed files via the GitHub API
+    # on pull_request events; the workflow default of contents:read alone
+    # 403s ("Resource not accessible by integration"). pull-requests:read
+    # is the minimum scope that lets the API list the diff.
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       domain_logic: ${{ steps.filter.outputs.domain_logic }}
       server_image: ${{ steps.filter.outputs.server_image }}
