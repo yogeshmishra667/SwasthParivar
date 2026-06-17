@@ -12,6 +12,8 @@ import { authRouter } from "./modules/auth/auth.routes.js";
 import { readingsRouter } from "./modules/readings/readings.routes.js";
 import { mealsRouter } from "./modules/meals/meals.routes.js";
 import { foodsRouter } from "./modules/foods/foods.routes.js";
+import { activityRouter } from "./modules/activity/activity.routes.js";
+import { sleepRouter } from "./modules/sleep/sleep.routes.js";
 import { insightsRouter } from "./modules/insights/insights.routes.js";
 import { hba1cRouter } from "./modules/hba1c/hba1c.routes.js";
 import { healthScoreRouter } from "./modules/health-score/health-score.routes.js";
@@ -117,6 +119,8 @@ export const buildApp = (): Express => {
   app.use("/api/v1/readings", readingsRouter);
   app.use("/api/v1/meals", mealsRouter);
   app.use("/api/v1/foods", foodsRouter);
+  app.use("/api/v1/activity", activityRouter);
+  app.use("/api/v1/sleep", sleepRouter);
   app.use("/api/v1/insights", insightsRouter);
   app.use("/api/v1/hba1c", hba1cRouter);
   app.use("/api/v1/health-score", healthScoreRouter);

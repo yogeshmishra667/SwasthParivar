@@ -96,6 +96,8 @@ export type ErrorCode =
   // local-queued write.
   | "CARDIAC_DISABLED"
   | "RESPIRATORY_DISABLED"
+  | "ACTIVITY_DISABLED"
+  | "SLEEP_DISABLED"
   // Phase 4 Feature F — Claude Vision wrapper failure modes. Map to
   // 503 — the BullMQ OCR job retries with backoff and the upload
   // route surfaces a "OCR busy, try in a few minutes" banner.

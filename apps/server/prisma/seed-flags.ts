@@ -27,6 +27,11 @@ const DEFAULT_FLAGS = {
   // after Week 14 ramp.
   cardiac_logging_enabled: false,
   respiratory_logging_enabled: false,
+  // Phase 4 Feature I.1 — passive wearable surfaces (HealthKit / Google
+  // Fit). Default OFF until the mobile sync ships + a cohort verifies
+  // the manual-wins dedup and 30-day trust window behave (Week 19 gate).
+  activity_logging_enabled: false,
+  sleep_logging_enabled: false,
   // Phase 4 Feature F — prescription OCR. Default OFF — flipped on
   // after the F.4 BullMQ job lands and ops has staffed the approver
   // queue. Auto-flipped OFF on `CLAUDE_VISION_DAILY_SPEND_CAP_USD`
