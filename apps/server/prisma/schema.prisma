@@ -433,6 +433,8 @@ model User {
   doctorProfiles         DoctorProfile[]
   doctorAppointments     DoctorAppointment[]
   reports                Report[]
+  activityDaily          ActivityDaily[]
+  sleepLogs              SleepLog[]
 
   @@index([householdId])
   // Admin "show deactivated users" filter — partial-like coverage via
@@ -1537,4 +1539,70 @@ model IndianFoodItem {
   @@index([nameHi])
   @@index([category])
   @@map("indian_food_items")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Wearables — passive activity + sleep (Phase 4 §I.1)
+// ─────────────────────────────────────────────────────────────
+
+// Where a wearable row came from. `manual` always wins over a
+// device source for the same (userId, date) — CLAUDE.md "Wearable
+// Trust Model: device-sourced data is evidence, not truth". Bluetooth
+// point readings (glucose/BP, §I.2) keep using ReadingSource.device;
+// these two passive surfaces are HealthKit/Google-Fit-sourced.
+enum WearableSource {
+  manual
+  healthkit
+  googlefit
+}
+
+enum SleepQuality {
+  poor
+  fair
+  good
+}
+
+// Daily activity aggregate (steps/distance/active-minutes). One row per
+// (user, day): a manual entry always wins over a device entry for the
+// same day, so the service upserts with manual precedence rather than
+// inserting duplicates. Detector-eligibility of device rows is governed
+// by the 30-day trust window (Redis `wearable_trust:${userId}:until`) —
+// the row is stored + displayed immediately regardless.
+model ActivityDaily {
+  id             String         @id @default(uuid()) @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  date           DateTime       @db.Date
+  steps          Int
+  distanceMeters Int            @map("distance_meters")
+  activeMinutes  Int            @map("active_minutes")
+  source         WearableSource
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("activity_daily")
+}
+
+// Nightly sleep aggregate. Same one-row-per-(user, day) + manual-wins
+// rule as ActivityDaily.
+model SleepLog {
+  id              String         @id @default(uuid()) @db.Uuid
+  userId          String         @map("user_id") @db.Uuid
+  date            DateTime       @db.Date
+  sleepStart      DateTime       @map("sleep_start")
+  sleepEnd        DateTime       @map("sleep_end")
+  durationMinutes Int            @map("duration_minutes")
+  quality         SleepQuality
+  source          WearableSource
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("sleep_logs")
 }

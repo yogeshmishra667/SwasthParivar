@@ -70,6 +70,8 @@ const statusFor = (code: ErrorCode): number => {
     case "SOS_DISABLED": // sos_enabled=false — call emergency services directly
     case "CARDIAC_DISABLED": // cardiac_logging_enabled=false
     case "RESPIRATORY_DISABLED": // respiratory_logging_enabled=false
+    case "ACTIVITY_DISABLED": // activity_logging_enabled=false
+    case "SLEEP_DISABLED": // sleep_logging_enabled=false
     case "VISION_CIRCUIT_OPEN": // claude vision circuit breaker open
     case "STORAGE_UNAVAILABLE": // R2 unconfigured / unreachable — retry later
     case "DOCTOR_PORTAL_DISABLED": // doctor_portal_enabled=false — retry later

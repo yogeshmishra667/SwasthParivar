@@ -163,6 +163,11 @@ export default defineConfig({
         // handed to a doctor. Locked at 100%.
         "src/report-builder/build.ts": { 100: true },
 
+        // Wearable trust gate (Phase 4 §I.1). Decides whether device
+        // data feeds detectors — a regression could silently let
+        // unverified sensor data drive trend/SG alerts. Locked at 100%.
+        "src/wearable-trust/**": { 100: true },
+
         // Ratchet floors at CURRENT measured values (2026-05-14 baseline).
         // Raise these as tests close the gap to CLAUDE.md targets.
         "src/detectors/spike.ts": { lines: 100, functions: 100, branches: 95, statements: 100 },
