@@ -24,6 +24,7 @@ import {
   buildAlertContent,
   classifyAlertType,
   detectTrend,
+  isWearableDetectorEligible,
   scoreSignal,
   type AlertContentSignal,
   type AlertLanguage,
@@ -40,6 +41,7 @@ import type {
 
 import { prisma } from "../shared/database.js";
 import { getFlag } from "../shared/flags/index.js";
+import { readTrustState } from "../shared/wearables/trust-window.js";
 import { logger } from "../shared/logger.js";
 import { captureUnhandled } from "../shared/observability/sentry.js";
 import { capture } from "../shared/analytics/posthog.js";
@@ -57,6 +59,13 @@ const CHAT_WINDOW_DAYS = 7; // rolling window for distress-turn count
 const SCHEDULE_WINDOW_DAYS = 7; // compliance rows to inspect
 // Consecutive-miss threshold that triggers a schedule_miss signal.
 const SCHEDULE_MISS_CONSECUTIVE_MIN = 3;
+// Phase 4 §I.1 — activity_drop windows. Recent 7 days are compared
+// against the prior baseline within a 28-day lookback. Min-data rules
+// keep a sparse logger from producing a spurious "drop".
+const ACTIVITY_LOOKBACK_DAYS = 28;
+const ACTIVITY_RECENT_DAYS = 7;
+const ACTIVITY_MIN_RECENT_DAYS = 3;
+const ACTIVITY_MIN_BASELINE_DAYS = 7;
 
 const SEVERITY_RANK: Record<GuardianAlertSeverity, number> = { yellow: 1, orange: 2 };
 
@@ -333,20 +342,79 @@ const analyzePatient = async (group: PatientGroup, now: Date): Promise<number> =
     signalCutoff,
   );
 
-  // ── activity_drop — wired-but-dormant ──
-  // ActivityDaily table lands in Feature I (Week 14). The scorer branch
-  // exists; the worker does not pull data until the flag
-  // `sg_activity_drop_enabled` goes on. Score is always 0 for now.
-  const activityScored = scoreSignal({
-    source: "activity_drop",
-    evidence: {},
-    userBaseline: null,
-  });
+  // ── activity_drop (Phase 4 §I.1) ──
+  // Gated by `sg_activity_drop_enabled` (default off). When on, compare
+  // the recent 7-day average step count against the prior baseline
+  // inside a 28-day lookback. Only DETECTOR-ELIGIBLE rows count: manual
+  // always, device only once the 30-day wearable trust window has
+  // matured or the user promoted it (CLAUDE.md "evidence, not truth" —
+  // unverified sensor data must not drive an alert). Sparse data → 0.
+  let activityEvidence: Prisma.InputJsonObject = {};
+  let activityScored: ScoredSignal = {
+    contribution: 0,
+    signalType: "activity_ok",
+    reasoning: "activity_drop disabled",
+  };
+  const activityDropEnabled = await getFlag<boolean>("sg_activity_drop_enabled", false);
+  if (activityDropEnabled) {
+    const activityCutoff = new Date(now.getTime() - ACTIVITY_LOOKBACK_DAYS * dayMs);
+    const [activityRows, trust] = await Promise.all([
+      prisma.activityDaily.findMany({
+        where: { userId: patientId, date: { gte: activityCutoff } },
+        select: { date: true, steps: true, source: true },
+        orderBy: { date: "asc" },
+      }),
+      readTrustState(patientId),
+    ]);
+
+    const eligible = activityRows.filter((r) =>
+      isWearableDetectorEligible({
+        source: r.source,
+        now,
+        trustUntilIso: trust.trustUntilIso,
+        promoted: trust.promoted,
+      }),
+    );
+    const recentStartMs = now.getTime() - ACTIVITY_RECENT_DAYS * dayMs;
+    const recent = eligible.filter((r) => r.date.getTime() >= recentStartMs);
+    const baseline = eligible.filter((r) => r.date.getTime() < recentStartMs);
+
+    if (
+      recent.length >= ACTIVITY_MIN_RECENT_DAYS &&
+      baseline.length >= ACTIVITY_MIN_BASELINE_DAYS
+    ) {
+      const avg = (rows: { steps: number }[]): number =>
+        rows.reduce((s, r) => s + r.steps, 0) / rows.length;
+      const recentAvg = avg(recent);
+      const baselineAvg = avg(baseline);
+      const pctDrop = baselineAvg > 0 ? Math.max(0, (baselineAvg - recentAvg) / baselineAvg) : 0;
+      activityEvidence = {
+        pctDrop: Math.round(pctDrop * 100) / 100,
+        recentAvgSteps: Math.round(recentAvg),
+        baselineAvgSteps: Math.round(baselineAvg),
+        recentDays: recent.length,
+        baselineDays: baseline.length,
+        windowDays: ACTIVITY_LOOKBACK_DAYS,
+      };
+    } else {
+      activityEvidence = {
+        pctDrop: 0,
+        insufficientData: true,
+        recentDays: recent.length,
+        baselineDays: baseline.length,
+      };
+    }
+    activityScored = scoreSignal({
+      source: "activity_drop",
+      evidence: activityEvidence,
+      userBaseline: null,
+    });
+  }
   const activitySignal = await persistSignal(
     patientId,
     "activity_drop",
     activityScored,
-    {},
+    activityEvidence,
     now,
     signalCutoff,
   );
