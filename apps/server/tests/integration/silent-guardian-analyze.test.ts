@@ -256,4 +256,110 @@ describe("SILENT_GUARDIAN_ANALYZE", () => {
     // from the previous run suppresses a second alert row.
     expect(await prisma.guardianAlert.count({ where: { patientId: patientMissedId } })).toBe(1);
   });
+
+  // Phase 4 §I.1 — activity_drop wiring against real ActivityDaily.
+  it("scores an activity_drop signal from ActivityDaily once sg_activity_drop_enabled is on", async () => {
+    await setFlag("silent_guardian_enabled", true, "test");
+    await setFlag("sg_activity_drop_enabled", true, "test");
+    resetFlagCache();
+
+    const hh = await prisma.household.create({ data: {} });
+    const patient = await prisma.user.create({
+      data: {
+        phone: "+919830000010",
+        name: "Lata",
+        age: 62,
+        householdId: hh.id,
+        conditions: ["diabetes"],
+        onboardingComplete: true,
+      },
+    });
+    await prisma.familyLink.create({
+      data: { patientId: patient.id, guardianId, status: "accepted", acceptedAt: new Date() },
+    });
+
+    const dayOnly = (offset: number): Date =>
+      new Date(`${new Date(NOW - offset * DAY).toISOString().slice(0, 10)}T00:00:00.000Z`);
+    const mkActivity = (offset: number, steps: number): Promise<unknown> =>
+      prisma.activityDaily.create({
+        data: {
+          userId: patient.id,
+          date: dayOnly(offset),
+          steps,
+          distanceMeters: steps,
+          activeMinutes: Math.round(steps / 100),
+          source: "manual", // manual → always detector-eligible
+        },
+      });
+    // Baseline ~8000 steps (offsets 8..17), recent ~2000 (offsets 1..5)
+    // → pctDrop 0.75 → severe.
+    for (let d = 8; d <= 17; d++) await mkActivity(d, 8000);
+    for (let d = 1; d <= 5; d++) await mkActivity(d, 2000);
+
+    await runAnalyze();
+
+    const signal = await prisma.silentGuardianSignal.findFirst({
+      where: { userId: patient.id, signalSource: "activity_drop" },
+      orderBy: { detectedAt: "desc" },
+    });
+    expect(signal).not.toBeNull();
+    expect(signal!.riskContribution).toBeGreaterThan(0);
+    const ev = signal!.rawEvidence as { pctDrop?: number };
+    expect(ev.pctDrop).toBeGreaterThanOrEqual(0.6);
+  });
+
+  it("keeps activity_drop dormant (score 0) when the flag is off", async () => {
+    await setFlag("sg_activity_drop_enabled", false, "test");
+    resetFlagCache();
+
+    const hh = await prisma.household.create({ data: {} });
+    const patient = await prisma.user.create({
+      data: {
+        phone: "+919830000011",
+        name: "Geeta",
+        age: 61,
+        householdId: hh.id,
+        conditions: ["diabetes"],
+        onboardingComplete: true,
+      },
+    });
+    await prisma.familyLink.create({
+      data: { patientId: patient.id, guardianId, status: "accepted", acceptedAt: new Date() },
+    });
+    const dayOnly = (offset: number): Date =>
+      new Date(`${new Date(NOW - offset * DAY).toISOString().slice(0, 10)}T00:00:00.000Z`);
+    for (let d = 8; d <= 17; d++) {
+      await prisma.activityDaily.create({
+        data: {
+          userId: patient.id,
+          date: dayOnly(d),
+          steps: 9000,
+          distanceMeters: 9000,
+          activeMinutes: 90,
+          source: "manual",
+        },
+      });
+    }
+    for (let d = 1; d <= 5; d++) {
+      await prisma.activityDaily.create({
+        data: {
+          userId: patient.id,
+          date: dayOnly(d),
+          steps: 1000,
+          distanceMeters: 1000,
+          activeMinutes: 10,
+          source: "manual",
+        },
+      });
+    }
+
+    await runAnalyze();
+
+    const signal = await prisma.silentGuardianSignal.findFirst({
+      where: { userId: patient.id, signalSource: "activity_drop" },
+      orderBy: { detectedAt: "desc" },
+    });
+    // Flag off → branch records a zero-contribution signal (or none persisted).
+    expect(signal?.riskContribution ?? 0).toBe(0);
+  });
 });

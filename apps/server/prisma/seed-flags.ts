@@ -18,6 +18,10 @@ const DEFAULT_FLAGS = {
   ai_chat_tier3_enabled: false,
   silent_guardian_enabled: true,
   silent_guardian_alerts_dispatch: false,
+  // Phase 4 §C'/§I.1 — flips the dormant activity_drop SG signal live.
+  // Default OFF until ActivityDaily has real data + the 30-day wearable
+  // trust window has matured for opted-in users.
+  sg_activity_drop_enabled: false,
   correlation_detector_enabled: true,
   cross_condition_detector_enabled: false,
   chat_retention_sweep_enabled: false,
