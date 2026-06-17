@@ -25,7 +25,8 @@
 // One-shot CLI script: console is the user-facing output channel.
 /* eslint-disable no-console */
 
-import type { FoodCategory, Prisma } from "@prisma/client";
+import { pathToFileURL } from "node:url";
+import type { FoodCategory, Prisma, PrismaClient } from "@prisma/client";
 import { prisma, disconnectDatabase } from "../src/shared/database.js";
 
 // ─────────────────────────────────────────────────────────────
@@ -2021,7 +2022,8 @@ const FRUITS: FoodSeed[] = [
   },
 ];
 
-const ALL_FOODS: FoodSeed[] = [
+/** The canonical seed list. Exported so tests reuse the real dataset. */
+export const FOOD_SEED_ITEMS: readonly FoodSeed[] = [
   ...GRAINS,
   ...LENTILS,
   ...VEGETABLES,
@@ -2031,24 +2033,34 @@ const ALL_FOODS: FoodSeed[] = [
   ...FRUITS,
 ];
 
-async function main(): Promise<void> {
+export interface FoodSeedResult {
+  created: number;
+  updated: number;
+  total: number;
+}
+
+/**
+ * Upserts the canonical food list via the given client. No logging / no
+ * process exit, so it is safe to call from the prod seed script (main)
+ * AND from the §H p95 perf test, which needs the real 216-row table to
+ * measure search latency against.
+ */
+export const seedFoodItems = async (client: PrismaClient): Promise<FoodSeedResult> => {
   // Sanity: the §H gate ("≥ 200 IndianFoodItem rows seeded") and the
   // unique-name contract both depend on this. Fail loud rather than
   // silently seed a short or duplicated list.
-  const names = ALL_FOODS.map((f) => f.nameEn);
+  const names = FOOD_SEED_ITEMS.map((f) => f.nameEn);
   const dupes = names.filter((n, i) => names.indexOf(n) !== i);
   if (dupes.length > 0) {
     throw new Error(`Duplicate food nameEn values: ${[...new Set(dupes)].join(", ")}`);
   }
-  if (ALL_FOODS.length < 200) {
-    throw new Error(`Food seed has only ${ALL_FOODS.length} rows; §H gate requires ≥ 200.`);
+  if (FOOD_SEED_ITEMS.length < 200) {
+    throw new Error(`Food seed has only ${FOOD_SEED_ITEMS.length} rows; §H gate requires ≥ 200.`);
   }
 
-  console.log(`Seeding ${ALL_FOODS.length} Indian food items...`);
   let created = 0;
   let updated = 0;
-
-  for (const food of ALL_FOODS) {
+  for (const food of FOOD_SEED_ITEMS) {
     if (food.gi < 0 || food.gi > 110) {
       throw new Error(`${food.nameEn}: GI ${food.gi} out of plausible range (0-110).`);
     }
@@ -2062,11 +2074,11 @@ async function main(): Promise<void> {
       // name_regional stays {} until Feature J ramps a regional language.
       nameRegional: {} as Prisma.InputJsonValue,
     };
-    const existing = await prisma.indianFoodItem.findUnique({
+    const existing = await client.indianFoodItem.findUnique({
       where: { nameEn: food.nameEn },
       select: { id: true },
     });
-    await prisma.indianFoodItem.upsert({
+    await client.indianFoodItem.upsert({
       where: { nameEn: food.nameEn },
       create: { nameEn: food.nameEn, ...data },
       update: data,
@@ -2075,7 +2087,13 @@ async function main(): Promise<void> {
     else created += 1;
   }
 
-  const total = await prisma.indianFoodItem.count();
+  const total = await client.indianFoodItem.count();
+  return { created, updated, total };
+};
+
+async function main(): Promise<void> {
+  console.log(`Seeding ${FOOD_SEED_ITEMS.length} Indian food items...`);
+  const { created, updated, total } = await seedFoodItems(prisma);
   console.log(`Done. created=${created} updated=${updated} total_in_db=${total}`);
   const byCategory = await prisma.indianFoodItem.groupBy({
     by: ["category"],
@@ -2086,11 +2104,15 @@ async function main(): Promise<void> {
   }
 }
 
-main()
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  })
-  .finally(() => {
-    void disconnectDatabase();
-  });
+// Auto-run only when invoked directly (`tsx prisma/seed-food-items.ts`),
+// never when imported — the perf test imports `seedFoodItems`.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main()
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    })
+    .finally(() => {
+      void disconnectDatabase();
+    });
+}
