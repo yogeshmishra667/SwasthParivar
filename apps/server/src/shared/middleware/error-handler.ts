@@ -27,6 +27,7 @@ const statusFor = (code: ErrorCode): number => {
     case "MED_SCHEDULE_NOT_FOUND":
     case "READING_NOT_FOUND":
     case "MEAL_NOT_FOUND":
+    case "FOOD_ITEM_NOT_FOUND":
     case "INSIGHT_NOT_FOUND":
     case "FAMILY_LINK_NOT_FOUND":
     case "GUARDIAN_ALERT_NOT_FOUND":

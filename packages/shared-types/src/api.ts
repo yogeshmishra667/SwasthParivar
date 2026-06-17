@@ -36,6 +36,7 @@ export type ErrorCode =
   | "READING_NOT_FOUND"
   | "MEAL_STALE_VERSION"
   | "MEAL_NOT_FOUND"
+  | "FOOD_ITEM_NOT_FOUND"
   | "MED_SCHEDULE_NOT_FOUND"
   // Phase 4 Week 17 carry-over (Phase 2). Health-check schedules
   // surface — `GET/POST/PUT /api/v1/schedules`. Distinct from

@@ -56,6 +56,19 @@ interface BucketStats {
   readingIds: string[];
 }
 
+// Phase 4 §H — a food-item bucket. Mirrors BucketStats but keyed on a
+// specific IndianFoodItem rather than the coarse 3-bucket category.
+interface FoodBucketStats {
+  readingType: ReadingType;
+  foodItemId: string;
+  foodName: string;
+  count: number;
+  foodMean: number;
+  baseline: number;
+  delta: number;
+  readingIds: string[];
+}
+
 export const detectMealCategoryCorrelation = (
   input: MealCategoryCorrelationInput,
 ): DetectorResult | null => {
@@ -88,22 +101,38 @@ export const detectMealCategoryCorrelation = (
 
   // Attribute each reading to the most recent meal ≤ 3h before it.
   // Meals are walked newest-first so the first in-window hit wins.
+  // §H: the food link is carried only when BOTH id and display name are
+  // present — the id groups, the name renders. A meal with one but not
+  // the other still contributes its category, just not a food bucket.
   const mealsNewestFirst = [...input.mealLogs]
-    .map((m) => ({ category: m.mealCategory, ms: new Date(m.loggedAt).getTime() }))
+    .map((m) => ({
+      category: m.mealCategory,
+      foodItemId: m.foodItemId,
+      foodName: m.foodName,
+      ms: new Date(m.loggedAt).getTime(),
+    }))
     .sort((a, b) => b.ms - a.ms);
   const categoryOf = new Map<string, MealCategory>();
+  // readingId → attributed food (id + display name). Both are stored
+  // together so the bucket always has a name without a second lookup.
+  const foodOf = new Map<string, { id: string; name: string }>();
   for (const reading of inWindow) {
     const readingMs = new Date(reading.measuredAt).getTime();
     for (const entry of mealsNewestFirst) {
       if (entry.ms > readingMs) continue;
       if (readingMs - entry.ms > ATTRIBUTION_WINDOW_MS) break;
       categoryOf.set(reading.id, entry.category);
+      if (entry.foodItemId !== undefined && entry.foodName !== undefined) {
+        foodOf.set(reading.id, { id: entry.foodItemId, name: entry.foodName });
+      }
       break;
     }
   }
 
   // Bucket by (readingType, category); pick the largest upward delta.
-  let worst: BucketStats | null = null;
+  let worstCategory: BucketStats | null = null;
+  // §H: also bucket by (readingType, foodItemId) for a finer pattern.
+  let worstFood: FoodBucketStats | null = null;
   for (const [type, readings] of byType) {
     const baseline = mean(readings.map((r) => r.valueMgDl));
     for (const category of CATEGORIES) {
@@ -111,8 +140,8 @@ export const detectMealCategoryCorrelation = (
       if (bucket.length < minInstances) continue;
       const categoryMean = mean(bucket.map((r) => r.valueMgDl));
       const delta = categoryMean - baseline;
-      if (worst === null || delta > worst.delta) {
-        worst = {
+      if (worstCategory === null || delta > worstCategory.delta) {
+        worstCategory = {
           readingType: type,
           category,
           count: bucket.length,
@@ -123,16 +152,53 @@ export const detectMealCategoryCorrelation = (
         };
       }
     }
+
+    // Food-item buckets within this reading type.
+    const byFood = new Map<string, { name: string; readings: TypedReading[] }>();
+    for (const r of readings) {
+      const food = foodOf.get(r.id);
+      if (food === undefined) continue;
+      const arr = byFood.get(food.id) ?? { name: food.name, readings: [] };
+      arr.readings.push(r);
+      byFood.set(food.id, arr);
+    }
+    for (const [fid, { name, readings: bucket }] of byFood) {
+      if (bucket.length < minInstances) continue;
+      const foodMean = mean(bucket.map((r) => r.valueMgDl));
+      const delta = foodMean - baseline;
+      if (worstFood === null || delta > worstFood.delta) {
+        worstFood = {
+          readingType: type,
+          foodItemId: fid,
+          foodName: name,
+          count: bucket.length,
+          foodMean,
+          baseline,
+          delta,
+          readingIds: bucket.map((r) => r.id),
+        };
+      }
+    }
   }
 
-  if (worst === null || worst.delta < INFO_DELTA) return null;
+  // §H precedence: a qualifying food-item pattern is more actionable
+  // than the coarse category one, so it wins when it clears the noise
+  // floor. Otherwise fall back to the category pattern (existing
+  // behaviour — when no foodItemId is supplied, worstFood is always
+  // null and this is a no-op).
+  const foodQualifies = worstFood !== null && worstFood.delta >= INFO_DELTA;
+  const categoryQualifies = worstCategory !== null && worstCategory.delta >= INFO_DELTA;
+  if (!foodQualifies && !categoryQualifies) return null;
+
+  const winnerDelta = foodQualifies ? worstFood!.delta : worstCategory!.delta;
+  const winnerCount = foodQualifies ? worstFood!.count : worstCategory!.count;
 
   let severityLevel: DetectorResult["severityLevel"];
   let severityScore: number;
-  if (worst.delta >= CRITICAL_DELTA) {
+  if (winnerDelta >= CRITICAL_DELTA) {
     severityLevel = "critical";
     severityScore = 80;
-  } else if (worst.delta >= WARN_DELTA) {
+  } else if (winnerDelta >= WARN_DELTA) {
     severityLevel = "warn";
     severityScore = 60;
   } else {
@@ -143,10 +209,42 @@ export const detectMealCategoryCorrelation = (
   // Confidence blends sample depth and effect size. No floor here —
   // CLAUDE.md's "<70% → stored only" is applied by the service layer,
   // matching the Phase 2 meal-correlation detector.
-  const sampleDepth = Math.min(1, worst.count / 10);
-  const effectScale = Math.min(1, worst.delta / CRITICAL_DELTA);
+  const sampleDepth = Math.min(1, winnerCount / 10);
+  const effectScale = Math.min(1, winnerDelta / CRITICAL_DELTA);
   const confidence = Math.min(1, 0.4 + 0.3 * sampleDepth + 0.3 * effectScale);
 
+  if (foodQualifies) {
+    const w = worstFood!;
+    return {
+      patternType: "meal_correlation",
+      conditionsInvolved: ["glucose", "meal"],
+      severityScore,
+      severityLevel,
+      messageKey: `insight.meal_correlation.food.${severityLevel}`,
+      messageParams: {
+        foodName: w.foodName,
+        foodItemId: w.foodItemId,
+        readingType: w.readingType,
+        foodMean: Math.round(w.foodMean),
+        baseline: Math.round(w.baseline),
+        delta: Math.round(w.delta),
+      },
+      triggerReadings: w.readingIds,
+      evidence: {
+        foodItemId: w.foodItemId,
+        foodName: w.foodName,
+        readingType: w.readingType,
+        count: w.count,
+        foodMean: Math.round(w.foodMean * 10) / 10,
+        baseline: Math.round(w.baseline * 10) / 10,
+        delta: Math.round(w.delta * 10) / 10,
+        windowDays,
+      },
+      confidence: Math.round(confidence * 100) / 100,
+    };
+  }
+
+  const w = worstCategory!;
   return {
     patternType: "meal_correlation",
     conditionsInvolved: ["glucose", "meal"],
@@ -154,20 +252,20 @@ export const detectMealCategoryCorrelation = (
     severityLevel,
     messageKey: `insight.meal_correlation.${severityLevel}`,
     messageParams: {
-      mealCategory: worst.category,
-      readingType: worst.readingType,
-      categoryMean: Math.round(worst.categoryMean),
-      baseline: Math.round(worst.baseline),
-      delta: Math.round(worst.delta),
+      mealCategory: w.category,
+      readingType: w.readingType,
+      categoryMean: Math.round(w.categoryMean),
+      baseline: Math.round(w.baseline),
+      delta: Math.round(w.delta),
     },
-    triggerReadings: worst.readingIds,
+    triggerReadings: w.readingIds,
     evidence: {
-      mealCategory: worst.category,
-      readingType: worst.readingType,
-      count: worst.count,
-      categoryMean: Math.round(worst.categoryMean * 10) / 10,
-      baseline: Math.round(worst.baseline * 10) / 10,
-      delta: Math.round(worst.delta * 10) / 10,
+      mealCategory: w.category,
+      readingType: w.readingType,
+      count: w.count,
+      categoryMean: Math.round(w.categoryMean * 10) / 10,
+      baseline: Math.round(w.baseline * 10) / 10,
+      delta: Math.round(w.delta * 10) / 10,
       windowDays,
     },
     confidence: Math.round(confidence * 100) / 100,

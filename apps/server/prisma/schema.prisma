@@ -658,13 +658,18 @@ model MealLog {
   mealType        MealType     @map("meal_type")
   mealCategory    MealCategory @map("meal_category")
   foodDescription String?      @map("food_description")
+  // Phase 4 §H — optional link to a canonical IndianFoodItem. Free-text
+  // `foodDescription` is unaffected; this is purely additive. ON DELETE
+  // SET NULL so retiring a food-item row never destroys meal history.
+  foodItemId      String?      @map("food_item_id") @db.Uuid
   loggedAt        DateTime     @map("logged_at")
   version         Int          @default(1)
   syncedAt        DateTime?    @map("synced_at")
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  foodItem IndianFoodItem? @relation(fields: [foodItemId], references: [id], onDelete: SetNull)
 
   // Composite primary key matches the TimescaleDB hypertable pattern.
   // Test setup calls `create_hypertable()` after `prisma migrate deploy`;
@@ -673,6 +678,7 @@ model MealLog {
   @@unique([clientUuid, loggedAt])
   @@index([userId, loggedAt])
   @@index([userId, mealCategory, loggedAt])
+  @@index([userId, foodItemId, loggedAt])
   @@map("meal_logs")
 }
 
@@ -1480,4 +1486,55 @@ model Report {
 
   @@index([userId, createdAt(sort: Desc)])
   @@map("reports")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Indian food database (Phase 4 §H)
+// ─────────────────────────────────────────────────────────────
+
+enum FoodCategory {
+  grain
+  lentil
+  vegetable
+  sweet
+  snack
+  beverage
+  fruit
+}
+
+// Canonical, seeded reference table (≥ 200 rows). GI/GL values are
+// sourced from peer-reviewed Indian-population studies — each row cites
+// its publication in `source`. `nameRegional` is a JSONB map keyed per
+// regional language ({ mr, ta, bn, te, gu, pa }); it is populated only
+// as each language flag ramps (Feature J). A missing language falls
+// back to nameEn + nameHi at search time. Never user-writable — meals
+// only reference it via MealLog.foodItemId.
+model IndianFoodItem {
+  id              String       @id @default(uuid()) @db.Uuid
+  nameEn          String       @unique @map("name_en")
+  nameHi          String       @map("name_hi")
+  nameRegional    Json         @default("{}") @map("name_regional")
+  category        FoodCategory
+  // Glycemic index (0-110, glucose reference scale).
+  glycemicIndex   Int          @map("glycemic_index")
+  // Glycemic load for a typical Indian serving (GI × available-carb-g / 100).
+  glycemicLoad    Float        @map("glycemic_load")
+  // ISO-ish region codes the item is commonly eaten in (e.g. "north", "south", "pan_india").
+  commonInRegions String[]     @map("common_in_regions")
+  // Citation for the GI/GL figures (publication / table reference).
+  source          String
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  mealLogs MealLog[]
+
+  // Btree indexes back the prefix (ILIKE 'q%') search on the two
+  // always-present names. The GIN index on name_regional
+  // (jsonb_path_ops) is added in the migration SQL — Prisma cannot
+  // express the operator class — and only earns its keep once a
+  // regional seed lands.
+  @@index([nameEn])
+  @@index([nameHi])
+  @@index([category])
+  @@map("indian_food_items")
 }

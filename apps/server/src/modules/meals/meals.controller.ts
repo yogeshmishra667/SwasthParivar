@@ -11,6 +11,7 @@ export const postMeal = async (req: Request, res: Response): Promise<void> => {
     mealType: "breakfast" | "lunch" | "dinner" | "snack";
     mealCategory: "light" | "normal" | "heavy_fried";
     foodDescription?: string;
+    foodItemId?: string;
     loggedAt: string;
     version: number;
     targetUserId?: string;

@@ -8,6 +8,8 @@ interface CreateMealInput {
   mealType: "breakfast" | "lunch" | "dinner" | "snack";
   mealCategory: "light" | "normal" | "heavy_fried";
   foodDescription?: string | undefined;
+  /** Phase 4 §H — optional canonical IndianFoodItem link. */
+  foodItemId?: string | undefined;
   loggedAt: string;
   version: number;
 }
@@ -23,6 +25,19 @@ export const createMealLog = async (input: CreateMealInput): Promise<CreateMealR
 
   if (existing && input.version <= existing.version) {
     throw new DomainError("MEAL_STALE_VERSION", "incoming version not newer than stored");
+  }
+
+  // Validate the optional food link up-front so a bad id surfaces as a
+  // clean 404 instead of a raw FK violation (P2003 → 500). The free-text
+  // `foodDescription` path is unaffected — foodItemId is purely additive.
+  if (input.foodItemId !== undefined) {
+    const food = await prisma.indianFoodItem.findUnique({
+      where: { id: input.foodItemId },
+      select: { id: true },
+    });
+    if (!food) {
+      throw new DomainError("FOOD_ITEM_NOT_FOUND", "referenced food item does not exist");
+    }
   }
 
   // The update path deliberately preserves logged_at — it is the
@@ -42,6 +57,7 @@ export const createMealLog = async (input: CreateMealInput): Promise<CreateMealR
           ...(input.foodDescription !== undefined
             ? { foodDescription: input.foodDescription }
             : {}),
+          ...(input.foodItemId !== undefined ? { foodItemId: input.foodItemId } : {}),
           version: input.version,
         },
       })
@@ -52,6 +68,9 @@ export const createMealLog = async (input: CreateMealInput): Promise<CreateMealR
           mealCategory: input.mealCategory,
           ...(input.foodDescription !== undefined
             ? { foodDescription: input.foodDescription }
+            : {}),
+          ...(input.foodItemId !== undefined
+            ? { foodItem: { connect: { id: input.foodItemId } } }
             : {}),
           loggedAt: new Date(input.loggedAt),
           version: input.version,
