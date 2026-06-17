@@ -193,6 +193,49 @@ describe("POST /api/v1/meals", () => {
   });
 });
 
+describe("POST /api/v1/meals — foodItemId link (§H)", () => {
+  it("links a meal to a valid IndianFoodItem", async () => {
+    const food = await prisma.indianFoodItem.create({
+      data: {
+        nameEn: `Aloo paratha ${randomUUID()}`,
+        nameHi: "आलू पराठा",
+        category: "grain",
+        glycemicIndex: 56,
+        glycemicLoad: 28,
+        commonInRegions: ["north"],
+        source: "test",
+      },
+    });
+    const res = await request(app)
+      .post("/api/v1/meals")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        clientUuid: randomUUID(),
+        mealType: "breakfast",
+        mealCategory: "heavy_fried",
+        foodItemId: food.id,
+        loggedAt: new Date().toISOString(),
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.data.meal.foodItemId).toBe(food.id);
+  });
+
+  it("rejects an unknown foodItemId with 404 FOOD_ITEM_NOT_FOUND", async () => {
+    const res = await request(app)
+      .post("/api/v1/meals")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        clientUuid: randomUUID(),
+        mealType: "lunch",
+        mealCategory: "normal",
+        foodItemId: randomUUID(),
+        loggedAt: new Date().toISOString(),
+      });
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("FOOD_ITEM_NOT_FOUND");
+  });
+});
+
 describe("GET /api/v1/meals", () => {
   it("filters by mealCategory", async () => {
     const res = await request(app)

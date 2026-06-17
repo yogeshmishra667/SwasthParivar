@@ -5,6 +5,8 @@ export const mealCreateSchema = z.object({
   mealType: z.enum(["breakfast", "lunch", "dinner", "snack"]),
   mealCategory: z.enum(["light", "normal", "heavy_fried"]),
   foodDescription: z.string().max(500).optional(),
+  /** Phase 4 §H — optional link to a canonical IndianFoodItem. */
+  foodItemId: z.string().uuid().optional(),
   loggedAt: z.string().datetime(),
   version: z.number().int().positive().default(1),
   /** Shared-phone profile switcher: log on behalf of a household member. */

@@ -15,7 +15,8 @@
     "prisma/seed-flags.ts",
     "prisma/seed-patients.ts",
     "prisma/seed-test-users.ts",
-    "prisma/seed-coldstart-users.ts"
+    "prisma/seed-coldstart-users.ts",
+    "prisma/seed-food-items.ts"
   ],
   "exclude": ["dist", "node_modules"]
 }

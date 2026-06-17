@@ -46,6 +46,17 @@ export interface MealEntry {
   id: string;
   mealCategory: "light" | "normal" | "heavy_fried";
   loggedAt: string;
+  /**
+   * Phase 4 §H — optional link to a canonical IndianFoodItem and its
+   * display name. When present and the same food recurs ≥ minInstances
+   * times, the meal-correlation detector surfaces a food-specific
+   * pattern ("Aloo paratha ke baad sugar 40 zyada") instead of the
+   * coarser category pattern. BOTH are required to take the food path:
+   * the id groups readings, the name renders the message. Absent →
+   * detector falls back to category grouping (existing behaviour).
+   */
+  foodItemId?: string;
+  foodName?: string;
 }
 
 /**

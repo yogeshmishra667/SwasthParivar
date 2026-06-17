@@ -180,12 +180,23 @@ const toMealEntries = (
     id: string;
     mealCategory: MealEntry["mealCategory"];
     loggedAt: Date;
+    foodItemId: string | null;
+    foodItem: { nameEn: string; nameHi: string } | null;
   }[],
+  lang: "hi" | "en",
 ): MealEntry[] =>
   rows.map((m) => ({
     id: m.id,
     mealCategory: m.mealCategory,
     loggedAt: m.loggedAt.toISOString(),
+    // §H: carry the food link only when both id and a name exist — the
+    // detector needs both to take the food-specific path.
+    ...(m.foodItemId && m.foodItem
+      ? {
+          foodItemId: m.foodItemId,
+          foodName: lang === "hi" ? m.foodItem.nameHi : m.foodItem.nameEn,
+        }
+      : {}),
   }));
 
 const maxSeverity = (results: readonly DetectorResult[]): DetectorResult["severityLevel"] => {
@@ -214,7 +225,7 @@ const runGlucoseDetectors = async (
     getFlag<boolean>("correlation_detector_enabled", false),
   ]);
 
-  const [readings, meals, bpReadings] = await Promise.all([
+  const [readings, meals, bpReadings, user] = await Promise.all([
     prisma.glucoseReading.findMany({
       where: { userId, measuredAt: { gte: readingCutoff } },
       select: { id: true, valueMgDl: true, readingType: true, measuredAt: true, context: true },
@@ -222,7 +233,16 @@ const runGlucoseDetectors = async (
     }),
     prisma.mealLog.findMany({
       where: { userId, loggedAt: { gte: mealCutoff } },
-      select: { id: true, mealCategory: true, loggedAt: true },
+      // §H: pull the optional food link + its names so the
+      // meal-correlation detector can group by food item and render a
+      // food-specific insight in the patient's language.
+      select: {
+        id: true,
+        mealCategory: true,
+        loggedAt: true,
+        foodItemId: true,
+        foodItem: { select: { nameEn: true, nameHi: true } },
+      },
       orderBy: { loggedAt: "asc" },
     }),
     crossCondEnabled
@@ -232,10 +252,11 @@ const runGlucoseDetectors = async (
           orderBy: { measuredAt: "asc" },
         })
       : Promise.resolve([]),
+    prisma.user.findUnique({ where: { id: userId }, select: { preferredLanguage: true } }),
   ]);
 
   const typedReadings = toTyped(readings);
-  const mealEntries = toMealEntries(meals);
+  const mealEntries = toMealEntries(meals, user?.preferredLanguage ?? "hi");
   const typedBP = toTypedBP(bpReadings);
 
   // All detectors are synchronous pure functions. Promise.resolve keeps

@@ -23,6 +23,7 @@
     "db:seed:patients": "tsx prisma/seed-patients.ts",
     "db:seed:test-users": "tsx prisma/seed-test-users.ts",
     "db:seed:coldstart-users": "tsx prisma/seed-coldstart-users.ts",
+    "db:seed:food-items": "tsx prisma/seed-food-items.ts",
     "clean": "rm -rf dist coverage *.tsbuildinfo"
   },
   "dependencies": {

@@ -438,7 +438,12 @@
         "meal_correlation": {
           "info": "Jab aap $t(insights.mealCategory.{{mealCategory}}) khaate hain, aapki sugar thodi zyada rehti hai — lagbhag {{categoryMean}}, aam se kareeb {{delta}} mg/dL upar. Bas dhyaan mein rakhein.",
           "warn": "Jab aap $t(insights.mealCategory.{{mealCategory}}) khaate hain, aapki sugar zyada rehti hai — lagbhag {{categoryMean}}, aam se kareeb {{delta}} mg/dL upar. Thoda kam matra mein khana madad kar sakta hai.",
-          "critical": "Jab aap $t(insights.mealCategory.{{mealCategory}}) khaate hain, aapki sugar bahut zyada ho jaati hai — lagbhag {{categoryMean}}, aam se kareeb {{delta}} mg/dL upar. Apne khaane ke baare mein doctor se baat karein."
+          "critical": "Jab aap $t(insights.mealCategory.{{mealCategory}}) khaate hain, aapki sugar bahut zyada ho jaati hai — lagbhag {{categoryMean}}, aam se kareeb {{delta}} mg/dL upar. Apne khaane ke baare mein doctor se baat karein.",
+          "food": {
+            "info": "{{foodName}} ke baad aapki $t(insights.readingType.{{readingType}}) sugar thodi zyada rehti hai — lagbhag {{foodMean}}, aam se kareeb {{delta}} mg/dL upar. Bas dhyaan mein rakhein.",
+            "warn": "{{foodName}} ke baad aapki $t(insights.readingType.{{readingType}}) sugar zyada rehti hai — lagbhag {{foodMean}}, aam se kareeb {{delta}} mg/dL upar. Thoda kam matra mein khana madad kar sakta hai.",
+            "critical": "{{foodName}} ke baad aapki $t(insights.readingType.{{readingType}}) sugar bahut zyada ho jaati hai — lagbhag {{foodMean}}, aam se kareeb {{delta}} mg/dL upar. Apne khaane ke baare mein doctor se baat karein."
+          }
         },
         "cross_condition": {
           "info": "Jis din aapka BP zyada hota hai ({{systolicThreshold}} se upar), us din sugar bhi thodi zyada rehti hai — lagbhag {{highBpMean}}, normal din {{normalBpMean}}. Dono par saath dhyaan dein.",
