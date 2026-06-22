@@ -122,6 +122,21 @@ export type ErrorCode =
   | "DOCTOR_PORTAL_DISABLED"
   | "DOCTOR_NOT_FOUND"
   | "APPOINTMENT_NOT_FOUND"
+  // Phase 4 Feature K — Monetization. `TIER_UPGRADE_REQUIRED` (403) is
+  // the `requireTier` middleware gate: a free-tier caller hit a
+  // premium-only endpoint. The mobile client swaps in the upgrade
+  // prompt rather than a generic error. `SUBSCRIPTION_NOT_FOUND` (404)
+  // is for a tier/billing lookup with no subscription row;
+  // `SUBSCRIPTION_ALREADY_CANCELLED` (409) guards a duplicate cancel.
+  // `PAYMENT_WEBHOOK_INVALID_SIGNATURE` (401) — Razorpay HMAC (or Apple
+  // JWS) verification failed; the request is rejected with NO state
+  // change and the failure paged to Sentry. `PAYMENT_PROVIDER_UNAVAILABLE`
+  // (503) — the provider endpoint timed out / is unreachable.
+  | "TIER_UPGRADE_REQUIRED"
+  | "SUBSCRIPTION_NOT_FOUND"
+  | "SUBSCRIPTION_ALREADY_CANCELLED"
+  | "PAYMENT_WEBHOOK_INVALID_SIGNATURE"
+  | "PAYMENT_PROVIDER_UNAVAILABLE"
   | "VALIDATION_ERROR"
   | "RATE_LIMITED"
   | "MAINTENANCE_MODE"

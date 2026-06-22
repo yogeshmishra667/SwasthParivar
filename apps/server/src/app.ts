@@ -14,6 +14,7 @@ import { mealsRouter } from "./modules/meals/meals.routes.js";
 import { foodsRouter } from "./modules/foods/foods.routes.js";
 import { activityRouter } from "./modules/activity/activity.routes.js";
 import { sleepRouter } from "./modules/sleep/sleep.routes.js";
+import { paymentsRouter, webhooksRouter } from "./modules/payments/payments.routes.js";
 import { insightsRouter } from "./modules/insights/insights.routes.js";
 import { hba1cRouter } from "./modules/hba1c/hba1c.routes.js";
 import { healthScoreRouter } from "./modules/health-score/health-score.routes.js";
@@ -84,7 +85,17 @@ export const buildApp = (): Express => {
       credentials: true,
     }),
   );
-  app.use(express.json({ limit: "1mb" }));
+  app.use(
+    express.json({
+      limit: "1mb",
+      // Stash the raw bytes so webhook handlers can verify provider
+      // signatures (Razorpay HMAC) over the exact payload — see
+      // `Request.rawBody` in types.d.ts.
+      verify: (req, _res, buf) => {
+        (req as express.Request).rawBody = buf;
+      },
+    }),
+  );
   // Form-encoded body parsing — required by Exotel + Twilio webhook
   // callbacks (`application/x-www-form-urlencoded`) and the Razorpay
   // success redirect (future). Capped to avoid OOM on a runaway
@@ -121,6 +132,8 @@ export const buildApp = (): Express => {
   app.use("/api/v1/foods", foodsRouter);
   app.use("/api/v1/activity", activityRouter);
   app.use("/api/v1/sleep", sleepRouter);
+  app.use("/api/v1/payments", paymentsRouter);
+  app.use("/api/v1/webhooks", webhooksRouter);
   app.use("/api/v1/insights", insightsRouter);
   app.use("/api/v1/hba1c", hba1cRouter);
   app.use("/api/v1/health-score", healthScoreRouter);

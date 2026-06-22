@@ -1,0 +1,271 @@
+import { DomainError } from "@swasth/shared-types";
+import {
+  razorpayEventToTransition,
+  verifyRazorpaySignature,
+  type SubscriptionTier,
+} from "@swasth/domain-logic";
+import type { Prisma, Subscription, SubscriptionProvider } from "@prisma/client";
+import { prisma } from "../../shared/database.js";
+import { redis } from "../../shared/redis.js";
+import { env } from "../../config/env.js";
+import { getFlag } from "../../shared/flags/flags.js";
+import { logger } from "../../shared/logger.js";
+import { capture } from "../../shared/analytics/posthog.js";
+import { captureUnhandled } from "../../shared/observability/sentry.js";
+import { createHash } from "node:crypto";
+
+// CLAUDE.md "Payment Webhook Safety": dedup 24h TTL; subscription mutex
+// 5s lease.
+const DEDUP_TTL_SECONDS = 24 * 60 * 60;
+const MUTEX_LEASE_MS = 5_000;
+const MUTEX_RETRY_MS = 100;
+const MUTEX_MAX_WAIT_MS = 5_000;
+
+export interface RazorpayWebhookInput {
+  rawBody: Buffer;
+  signature: string | undefined;
+  /** `x-razorpay-event-id` header — the idempotency key when present. */
+  eventId: string | undefined;
+}
+
+export interface RazorpayWebhookResult {
+  ok: true;
+  idempotentReplay: boolean;
+  action: string;
+}
+
+interface RazorpayBody {
+  event?: string;
+  payload?: {
+    subscription?: { entity?: RazorpaySubscriptionEntity };
+    refund?: { entity?: { notes?: Record<string, unknown> } };
+  };
+}
+interface RazorpaySubscriptionEntity {
+  id?: string;
+  current_end?: number; // unix seconds
+  notes?: Record<string, unknown>;
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+const acquireSubscriptionLock = async (userId: string): Promise<boolean> => {
+  const key = `lock:subscription:${userId}`;
+  const deadline = Date.now() + MUTEX_MAX_WAIT_MS;
+  for (;;) {
+    const res = await redis.set(key, "1", "PX", MUTEX_LEASE_MS, "NX");
+    if (res === "OK") return true;
+    if (Date.now() >= deadline) return false;
+    await sleep(MUTEX_RETRY_MS);
+  }
+};
+const releaseSubscriptionLock = async (userId: string): Promise<void> => {
+  try {
+    await redis.del(`lock:subscription:${userId}`);
+  } catch {
+    /* lease expires on its own */
+  }
+};
+
+const asString = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+
+/**
+ * Resolve the local user a webhook concerns: prefer an existing
+ * Subscription row keyed by the Razorpay subscription id, else fall back
+ * to `notes.user_id`/`notes.userId` set at create-subscription time.
+ */
+const resolveUser = async (
+  providerSubscriptionId: string | undefined,
+  notes: Record<string, unknown> | undefined,
+): Promise<{ userId: string; existing: Subscription | null } | null> => {
+  if (providerSubscriptionId) {
+    const existing = await prisma.subscription.findFirst({
+      where: { providerSubscriptionId },
+    });
+    if (existing?.userId) return { userId: existing.userId, existing };
+  }
+  const fromNotes = asString(notes?.user_id) ?? asString(notes?.userId);
+  if (fromNotes) {
+    const existing = providerSubscriptionId
+      ? await prisma.subscription.findFirst({ where: { providerSubscriptionId } })
+      : await prisma.subscription.findUnique({ where: { userId: fromNotes } });
+    return { userId: fromNotes, existing };
+  }
+  return null;
+};
+
+export const processRazorpayWebhook = async (
+  input: RazorpayWebhookInput,
+): Promise<RazorpayWebhookResult> => {
+  const enabled = await getFlag<boolean>("payments_razorpay_enabled", false);
+  if (!enabled) {
+    throw new DomainError("PAYMENT_PROVIDER_UNAVAILABLE", "Razorpay payments are not enabled.");
+  }
+
+  const secret = env.RAZORPAY_WEBHOOK_SECRET ?? "";
+  // Signature failure → 401, NO state change, paged to Sentry. We do not
+  // persist an attacker-controllable PaymentEvent on a bad signature.
+  if (!verifyRazorpaySignature(input.rawBody, input.signature, secret)) {
+    captureUnhandled(new Error("razorpay webhook signature verification failed"), {
+      tags: { surface: "payments", provider: "razorpay" },
+    });
+    throw new DomainError("PAYMENT_WEBHOOK_INVALID_SIGNATURE", "invalid webhook signature");
+  }
+
+  // Idempotency — same event id (or body hash) within 24h → no-op.
+  const dedupId =
+    input.eventId ?? createHash("sha256").update(input.rawBody).digest("hex").slice(0, 32);
+  const fresh = await redis.set(
+    `payment:razorpay:event:${dedupId}`,
+    "1",
+    "EX",
+    DEDUP_TTL_SECONDS,
+    "NX",
+  );
+  if (fresh !== "OK") {
+    return { ok: true, idempotentReplay: true, action: "duplicate" };
+  }
+
+  const body = JSON.parse(input.rawBody.toString("utf8")) as RazorpayBody;
+  const eventType = body.event ?? "unknown";
+  const subEntity = body.payload?.subscription?.entity;
+  const notes = subEntity?.notes ?? body.payload?.refund?.entity?.notes;
+
+  const resolved = await resolveUser(subEntity?.id, notes);
+  if (!resolved) {
+    // Verified but unattributable — store for audit, acknowledge (200).
+    await prisma.paymentEvent.create({
+      data: {
+        provider: "razorpay",
+        eventType,
+        rawPayload: body as unknown as Prisma.InputJsonValue,
+        signatureValid: true,
+        errorMessage: "could not resolve user from payload",
+      },
+    });
+    return { ok: true, idempotentReplay: false, action: "unattributed" };
+  }
+
+  const { userId, existing } = resolved;
+  const locked = await acquireSubscriptionLock(userId);
+  if (!locked) {
+    throw new DomainError("PAYMENT_PROVIDER_UNAVAILABLE", "subscription is busy, retry");
+  }
+
+  try {
+    return await applyRazorpayEvent({
+      userId,
+      eventType,
+      body,
+      subEntity,
+      existing,
+      provider: "razorpay",
+    });
+  } finally {
+    await releaseSubscriptionLock(userId);
+  }
+};
+
+interface ApplyInput {
+  userId: string;
+  eventType: string;
+  body: RazorpayBody;
+  subEntity: RazorpaySubscriptionEntity | undefined;
+  existing: Subscription | null;
+  provider: SubscriptionProvider;
+}
+
+const applyRazorpayEvent = async (a: ApplyInput): Promise<RazorpayWebhookResult> => {
+  const user = await prisma.user.findUnique({ where: { id: a.userId }, select: { tier: true } });
+  const currentTier: SubscriptionTier = user?.tier ?? "free";
+  const purchased = asString(a.subEntity?.notes?.tier) as SubscriptionTier | undefined;
+
+  const decision = razorpayEventToTransition({
+    eventType: a.eventType,
+    currentTier,
+    ...(purchased ? { purchasedTier: purchased } : {}),
+  });
+
+  const periodEnd =
+    typeof a.subEntity?.current_end === "number"
+      ? new Date(a.subEntity.current_end * 1000)
+      : (a.existing?.currentPeriodEnd ?? new Date(Date.now() + 30 * 86_400_000));
+
+  // One atomic transaction: never deletes any patient-health row — only
+  // upserts the Subscription and (when the decision says so) writes
+  // User.tier. CLAUDE.md "Tier Downgrade Data-Retention Rule".
+  await prisma.$transaction(async (tx) => {
+    if (a.eventType !== "unknown" && decision.action !== "ignore") {
+      await tx.subscription.upsert({
+        where: { userId: a.userId },
+        create: {
+          userId: a.userId,
+          tier: decision.targetTier,
+          provider: a.provider,
+          ...(a.subEntity?.id ? { providerSubscriptionId: a.subEntity.id } : {}),
+          status: decision.status,
+          currentPeriodEnd: periodEnd,
+          cancelAtPeriodEnd: decision.cancelAtPeriodEnd,
+          ...(decision.action === "downgrade" || decision.action === "schedule_cancel"
+            ? { cancelledAt: new Date() }
+            : {}),
+        },
+        update: {
+          tier: decision.targetTier,
+          status: decision.status,
+          currentPeriodEnd: periodEnd,
+          cancelAtPeriodEnd: decision.cancelAtPeriodEnd,
+          ...(a.subEntity?.id ? { providerSubscriptionId: a.subEntity.id } : {}),
+          ...(decision.action === "downgrade" || decision.action === "schedule_cancel"
+            ? { cancelledAt: new Date() }
+            : {}),
+        },
+      });
+    }
+
+    if (decision.changesTier) {
+      await tx.user.update({ where: { id: a.userId }, data: { tier: decision.targetTier } });
+    }
+
+    await tx.paymentEvent.create({
+      data: {
+        userId: a.userId,
+        provider: a.provider,
+        eventType: a.eventType,
+        rawPayload: a.body as unknown as Prisma.InputJsonValue,
+        signatureValid: true,
+        processedAt: new Date(),
+      },
+    });
+  });
+
+  if (decision.changesTier) {
+    const reason =
+      decision.action === "activate"
+        ? "purchase"
+        : decision.action === "downgrade"
+          ? "refund"
+          : "cancelled";
+    capture("tier_changed", a.userId, {
+      from: currentTier,
+      to: decision.targetTier,
+      reason,
+      provider: a.provider,
+    });
+  }
+  capture("payment_webhook_processed", a.userId, {
+    provider: a.provider,
+    event_type: a.eventType,
+    action: decision.action,
+    idempotent_replay: false,
+  });
+  logger.info(
+    { userId: a.userId, eventType: a.eventType, action: decision.action },
+    "razorpay webhook processed",
+  );
+
+  return { ok: true, idempotentReplay: false, action: decision.action };
+};
+
+export const getSubscriptionForUser = async (userId: string): Promise<Subscription | null> =>
+  await prisma.subscription.findUnique({ where: { userId } });
