@@ -73,7 +73,9 @@ beforeAll(async () => {
 
   runPrisma(["migrate", "deploy"]);
   runPrisma(["db", "execute", "--stdin"], {
-    input: "SELECT create_hypertable('glucose_readings', 'measured_at', if_not_exists => TRUE);",
+    input:
+      "SELECT create_hypertable('glucose_readings', 'measured_at', if_not_exists => TRUE); " +
+      "SELECT create_hypertable('bp_readings', 'measured_at', if_not_exists => TRUE);",
   });
 
   const appModule = await import("../../src/app.js");
@@ -191,8 +193,8 @@ describe("POST /api/v1/webhooks/razorpay — tier transitions", () => {
         userId,
         systolic: 130,
         diastolic: 85,
+        source: "manual",
         measuredAt: new Date(),
-        streakCreditedTo: new Date(new Date().toISOString().slice(0, 10)),
       },
     });
     const glucoseBefore = await prisma.glucoseReading.count({ where: { userId } });
