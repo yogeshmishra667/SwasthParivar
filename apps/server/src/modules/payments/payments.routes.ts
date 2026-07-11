@@ -6,6 +6,7 @@ import * as controller from "./payments.controller.js";
 export const paymentsRouter: Router = Router();
 paymentsRouter.use(requireAuth);
 paymentsRouter.get("/subscription", controller.getSubscription);
+paymentsRouter.post("/razorpay/create-subscription", controller.createSubscription);
 
 // Provider webhooks — mounted at /api/v1/webhooks. NO requireAuth: the
 // payload is authenticated by its provider signature (phase4.md §K.2).

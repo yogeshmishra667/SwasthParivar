@@ -2,7 +2,7 @@
 // Integration tests use `any` for app/prisma bodies per the existing
 // convention (readings/meals tests).
 
-import { describe, it, beforeAll, afterAll, expect } from "vitest";
+import { describe, it, beforeAll, afterAll, afterEach, expect, vi } from "vitest";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
 import { spawnSync } from "node:child_process";
@@ -70,6 +70,12 @@ beforeAll(async () => {
   process.env.JWT_REFRESH_SECRET = "test-refresh-test-refresh-test-refresh-123";
   process.env.OTP_SECRET = "test-otp-test-otp-test-otp-test-otp-12345";
   process.env.RAZORPAY_WEBHOOK_SECRET = WEBHOOK_SECRET;
+  // Create-subscription (K.2) config — read at env parse time, so set
+  // before the app import below.
+  process.env.RAZORPAY_KEY_ID = "rzp_test_keyid";
+  process.env.RAZORPAY_KEY_SECRET = "rzp_test_secret";
+  process.env.RAZORPAY_PLAN_ID_PREMIUM = "plan_premium_test";
+  process.env.RAZORPAY_PLAN_ID_FAMILY = "plan_family_test";
 
   runPrisma(["migrate", "deploy"]);
   runPrisma(["db", "execute", "--stdin"], {
@@ -245,5 +251,101 @@ describe("GET /api/v1/payments/subscription", () => {
   it("requires auth", async () => {
     const res = await request(app).get("/api/v1/payments/subscription");
     expect(res.status).toBe(401);
+  });
+});
+
+describe("POST /api/v1/payments/razorpay/create-subscription", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  const razorpayOk = (id: string, shortUrl: string | null = "https://rzp.io/i/abc") =>
+    vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id, status: "created", short_url: shortUrl }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+
+  const createSub = (tier: unknown) =>
+    request(app)
+      .post("/api/v1/payments/razorpay/create-subscription")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ tier });
+
+  it("creates a Razorpay subscription and returns checkout config (201)", async () => {
+    globalThis.fetch = razorpayOk("sub_NEW999");
+    const tierBefore = await tierOf();
+    const subRowBefore = await prisma.subscription.findUnique({ where: { userId } });
+
+    const res = await createSub("premium");
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.providerSubscriptionId).toBe("sub_NEW999");
+    expect(res.body.data.keyId).toBe("rzp_test_keyid");
+    expect(res.body.data.shortUrl).toBe("https://rzp.io/i/abc");
+    expect(res.body.data.tier).toBe("premium");
+
+    // Correct Razorpay call: url, plan id, cycle count, and the notes
+    // the activation webhook reads to attribute the user + tier.
+    const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(call[0]).toBe("https://api.razorpay.com/v1/subscriptions");
+    const sentBody = JSON.parse((call[1] as { body: string }).body);
+    expect(sentBody.plan_id).toBe("plan_premium_test");
+    expect(sentBody.total_count).toBe(12);
+    expect(sentBody.notes).toEqual({ user_id: userId, tier: "premium" });
+
+    // Tier does NOT change on create — only the activation webhook moves
+    // it. The existing local Subscription row is untouched.
+    expect(await tierOf()).toBe(tierBefore);
+    const subRowAfter = await prisma.subscription.findUnique({ where: { userId } });
+    expect(subRowAfter?.providerSubscriptionId).toBe(subRowBefore?.providerSubscriptionId ?? null);
+  });
+
+  it("maps the family tier to its own plan id", async () => {
+    globalThis.fetch = razorpayOk("sub_FAM1");
+    const res = await createSub("family");
+    expect(res.status).toBe(201);
+    const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    const sentBody = JSON.parse((call[1] as { body: string }).body);
+    expect(sentBody.plan_id).toBe("plan_family_test");
+    expect(sentBody.notes.tier).toBe("family");
+  });
+
+  it("rejects a non-purchasable tier with 400", async () => {
+    globalThis.fetch = razorpayOk("sub_SHOULD_NOT_BE_CALLED");
+    const res = await createSub("free");
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0);
+  });
+
+  it("requires auth", async () => {
+    const res = await request(app)
+      .post("/api/v1/payments/razorpay/create-subscription")
+      .send({ tier: "premium" });
+    expect(res.status).toBe(401);
+  });
+
+  it("503s when payments_razorpay_enabled is off", async () => {
+    globalThis.fetch = razorpayOk("sub_OFF");
+    await setFlag("payments_razorpay_enabled", false, "test");
+    resetFlagCache();
+    const res = await createSub("premium");
+    expect(res.status).toBe(503);
+    expect(res.body.error.code).toBe("PAYMENT_PROVIDER_UNAVAILABLE");
+    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0);
+    await setFlag("payments_razorpay_enabled", true, "test");
+    resetFlagCache();
+  });
+
+  it("503s when the Razorpay API call fails", async () => {
+    globalThis.fetch = vi.fn(() => Promise.resolve(new Response("upstream boom", { status: 500 })));
+    const res = await createSub("premium");
+    expect(res.status).toBe(503);
+    expect(res.body.error.code).toBe("PAYMENT_PROVIDER_UNAVAILABLE");
   });
 });

@@ -12,7 +12,16 @@ import { getFlag } from "../../shared/flags/flags.js";
 import { logger } from "../../shared/logger.js";
 import { capture } from "../../shared/analytics/posthog.js";
 import { captureUnhandled } from "../../shared/observability/sentry.js";
+import {
+  createRazorpaySubscription,
+  razorpayApiConfigured,
+} from "../../shared/payments/razorpay-client.js";
 import { createHash } from "node:crypto";
+
+// Billing cycles the mandate authorises at checkout. Monthly plan × 12
+// = one year of authorised charges; `subscription.charged` webhooks
+// extend `currentPeriodEnd` each cycle.
+const SUBSCRIPTION_TOTAL_COUNT = 12;
 
 // CLAUDE.md "Payment Webhook Safety": dedup 24h TTL; subscription mutex
 // 5s lease.
@@ -269,3 +278,76 @@ const applyRazorpayEvent = async (a: ApplyInput): Promise<RazorpayWebhookResult>
 
 export const getSubscriptionForUser = async (userId: string): Promise<Subscription | null> =>
   await prisma.subscription.findUnique({ where: { userId } });
+
+// ── Create-subscription (phase4.md §K.2) ────────────────────────────
+
+export type PurchasableTier = "premium" | "family";
+
+export interface CreateSubscriptionResult {
+  providerSubscriptionId: string;
+  status: string;
+  /** Hosted-checkout URL, if Razorpay returned one. */
+  shortUrl: string | null;
+  /** Public key id the mobile checkout SDK needs. Never the secret. */
+  keyId: string;
+  tier: PurchasableTier;
+}
+
+const planIdForTier = (tier: PurchasableTier): string | undefined =>
+  tier === "premium" ? env.RAZORPAY_PLAN_ID_PREMIUM : env.RAZORPAY_PLAN_ID_FAMILY;
+
+/**
+ * Create a subscription on Razorpay's side and return the checkout
+ * config the client needs. Does NOT change the caller's tier or write a
+ * local Subscription row — tier only moves when the signature-verified
+ * `subscription.activated` webhook lands. The `notes.user_id`/`tier`
+ * we attach here are exactly what that webhook's `resolveUser` reads to
+ * attribute the activation back to this user.
+ */
+export const createRazorpaySubscriptionForUser = async (input: {
+  userId: string;
+  tier: PurchasableTier;
+}): Promise<CreateSubscriptionResult> => {
+  const enabled = await getFlag<boolean>("payments_razorpay_enabled", false);
+  if (!enabled) {
+    throw new DomainError("PAYMENT_PROVIDER_UNAVAILABLE", "Razorpay payments are not enabled.");
+  }
+
+  const planId = planIdForTier(input.tier);
+  if (!razorpayApiConfigured() || !planId) {
+    throw new DomainError(
+      "PAYMENT_PROVIDER_UNAVAILABLE",
+      `Razorpay is not configured for the ${input.tier} plan.`,
+    );
+  }
+
+  let subscription;
+  try {
+    subscription = await createRazorpaySubscription({
+      planId,
+      totalCount: SUBSCRIPTION_TOTAL_COUNT,
+      notes: { user_id: input.userId, tier: input.tier },
+    });
+  } catch (err) {
+    captureUnhandled(err instanceof Error ? err : new Error(String(err)), {
+      tags: { surface: "payments", provider: "razorpay", op: "create_subscription" },
+    });
+    throw new DomainError(
+      "PAYMENT_PROVIDER_UNAVAILABLE",
+      "Could not start the payment. Try again.",
+    );
+  }
+
+  logger.info(
+    { userId: input.userId, tier: input.tier, providerSubscriptionId: subscription.id },
+    "razorpay subscription created",
+  );
+
+  return {
+    providerSubscriptionId: subscription.id,
+    status: subscription.status,
+    shortUrl: subscription.shortUrl,
+    keyId: env.RAZORPAY_KEY_ID!,
+    tier: input.tier,
+  };
+};
