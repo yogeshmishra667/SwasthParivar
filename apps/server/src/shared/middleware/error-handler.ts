@@ -46,6 +46,7 @@ const statusFor = (code: ErrorCode): number => {
       return 404;
     case "FAMILY_INVITE_INVALID":
     case "SCHEDULE_INVALID":
+    case "PAYMENT_RECEIPT_INVALID": // K — Apple verifyReceipt rejected the receipt
       return 400;
     case "FAMILY_LINK_EXISTS":
     case "SOS_ALREADY_ACTIVE":

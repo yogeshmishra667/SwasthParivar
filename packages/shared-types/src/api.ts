@@ -132,11 +132,14 @@ export type ErrorCode =
   // JWS) verification failed; the request is rejected with NO state
   // change and the failure paged to Sentry. `PAYMENT_PROVIDER_UNAVAILABLE`
   // (503) — the provider endpoint timed out / is unreachable.
+  // `PAYMENT_RECEIPT_INVALID` (400) — Apple's verifyReceipt rejected the
+  // client-supplied receipt (never trusted without server validation).
   | "TIER_UPGRADE_REQUIRED"
   | "SUBSCRIPTION_NOT_FOUND"
   | "SUBSCRIPTION_ALREADY_CANCELLED"
   | "PAYMENT_WEBHOOK_INVALID_SIGNATURE"
   | "PAYMENT_PROVIDER_UNAVAILABLE"
+  | "PAYMENT_RECEIPT_INVALID"
   | "VALIDATION_ERROR"
   | "RATE_LIMITED"
   | "MAINTENANCE_MODE"

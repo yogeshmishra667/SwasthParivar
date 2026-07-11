@@ -58,7 +58,10 @@ interface RazorpaySubscriptionEntity {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-const acquireSubscriptionLock = async (userId: string): Promise<boolean> => {
+// Exported so the Apple IAP service (K.3) shares one subscription mutex
+// with the Razorpay path — a Razorpay and an Apple webhook for the same
+// user still serialise on `lock:subscription:${userId}`.
+export const acquireSubscriptionLock = async (userId: string): Promise<boolean> => {
   const key = `lock:subscription:${userId}`;
   const deadline = Date.now() + MUTEX_MAX_WAIT_MS;
   for (;;) {
@@ -68,7 +71,7 @@ const acquireSubscriptionLock = async (userId: string): Promise<boolean> => {
     await sleep(MUTEX_RETRY_MS);
   }
 };
-const releaseSubscriptionLock = async (userId: string): Promise<void> => {
+export const releaseSubscriptionLock = async (userId: string): Promise<void> => {
   try {
     await redis.del(`lock:subscription:${userId}`);
   } catch {

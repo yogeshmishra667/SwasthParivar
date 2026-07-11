@@ -135,6 +135,18 @@ const envSchema = z.object({
   RAZORPAY_PLAN_ID_PREMIUM: z.string().optional(),
   RAZORPAY_PLAN_ID_FAMILY: z.string().optional(),
 
+  // Apple IAP (phase4.md §K.3). `APPLE_ROOT_CA_PEM` is the PEM of the
+  // Apple Root CA — G3 that every App Store Server Notification V2 JWS
+  // must chain to (we never trust a root the payload itself supplies).
+  // `APPLE_IAP_SHARED_SECRET` is the app-specific shared secret sent as
+  // the verifyReceipt `password`. Product ids map the purchased SKU →
+  // our tier. `APPLE_BUNDLE_ID` guards against receipts for another app.
+  APPLE_ROOT_CA_PEM: z.string().optional(),
+  APPLE_IAP_SHARED_SECRET: z.string().optional(),
+  APPLE_BUNDLE_ID: z.string().optional(),
+  APPLE_PRODUCT_ID_PREMIUM: z.string().optional(),
+  APPLE_PRODUCT_ID_FAMILY: z.string().optional(),
+
   // Phase 4 Feature D' — SOS IVR vendor wrappers. Both vendors are
   // optional at config time; the `sos_test_mode` flag (Redis-backed,
   // default true) is the runtime gate that suppresses real calls

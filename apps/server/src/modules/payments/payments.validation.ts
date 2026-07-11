@@ -7,3 +7,11 @@ export const createSubscriptionSchema = z.object({
 });
 
 export type CreateSubscriptionBody = z.infer<typeof createSubscriptionSchema>;
+
+// Apple IAP (§K.3) — the base64 receipt blob the client obtained from
+// StoreKit. Validated server-side against Apple; never trusted as-is.
+export const verifyReceiptSchema = z.object({
+  receiptData: z.string().min(1),
+});
+
+export type VerifyReceiptBody = z.infer<typeof verifyReceiptSchema>;
