@@ -16,7 +16,7 @@ import {
   createRazorpaySubscription,
   razorpayApiConfigured,
 } from "../../shared/payments/razorpay-client.js";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 // Billing cycles the mandate authorises at checkout. Monthly plan × 12
 // = one year of authorised charges; `subscription.charged` webhooks
@@ -61,19 +61,32 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 // Exported so the Apple IAP service (K.3) shares one subscription mutex
 // with the Razorpay path — a Razorpay and an Apple webhook for the same
 // user still serialise on `lock:subscription:${userId}`.
-export const acquireSubscriptionLock = async (userId: string): Promise<boolean> => {
+// Returns a unique ownership token on success, or null on timeout. The
+// token is required to release — a fixed value would let a worker whose
+// lease already expired (and was re-acquired by someone else) delete the
+// new holder's lock.
+export const acquireSubscriptionLock = async (userId: string): Promise<string | null> => {
   const key = `lock:subscription:${userId}`;
+  const owner = randomUUID();
   const deadline = Date.now() + MUTEX_MAX_WAIT_MS;
   for (;;) {
-    const res = await redis.set(key, "1", "PX", MUTEX_LEASE_MS, "NX");
-    if (res === "OK") return true;
-    if (Date.now() >= deadline) return false;
+    const res = await redis.set(key, owner, "PX", MUTEX_LEASE_MS, "NX");
+    if (res === "OK") return owner;
+    if (Date.now() >= deadline) return null;
     await sleep(MUTEX_RETRY_MS);
   }
 };
-export const releaseSubscriptionLock = async (userId: string): Promise<void> => {
+
+// Ownership-checked release: only clear the lock if it still holds OUR
+// owner id, so a lease that already expired and was re-acquired by
+// another worker is never deleted out from under it. The short lease is
+// the backstop for the residual GET→DEL window.
+export const releaseSubscriptionLock = async (userId: string, owner: string): Promise<void> => {
+  const key = `lock:subscription:${userId}`;
   try {
-    await redis.del(`lock:subscription:${userId}`);
+    if ((await redis.get(key)) === owner) {
+      await redis.del(key);
+    }
   } catch {
     /* lease expires on its own */
   }
@@ -127,54 +140,57 @@ export const processRazorpayWebhook = async (
   // Idempotency — same event id (or body hash) within 24h → no-op.
   const dedupId =
     input.eventId ?? createHash("sha256").update(input.rawBody).digest("hex").slice(0, 32);
-  const fresh = await redis.set(
-    `payment:razorpay:event:${dedupId}`,
-    "1",
-    "EX",
-    DEDUP_TTL_SECONDS,
-    "NX",
-  );
+  const dedupKey = `payment:razorpay:event:${dedupId}`;
+  const fresh = await redis.set(dedupKey, "1", "EX", DEDUP_TTL_SECONDS, "NX");
   if (fresh !== "OK") {
     return { ok: true, idempotentReplay: true, action: "duplicate" };
   }
 
-  const body = JSON.parse(input.rawBody.toString("utf8")) as RazorpayBody;
-  const eventType = body.event ?? "unknown";
-  const subEntity = body.payload?.subscription?.entity;
-  const notes = subEntity?.notes ?? body.payload?.refund?.entity?.notes;
-
-  const resolved = await resolveUser(subEntity?.id, notes);
-  if (!resolved) {
-    // Verified but unattributable — store for audit, acknowledge (200).
-    await prisma.paymentEvent.create({
-      data: {
-        provider: "razorpay",
-        eventType,
-        rawPayload: body as unknown as Prisma.InputJsonValue,
-        signatureValid: true,
-        errorMessage: "could not resolve user from payload",
-      },
-    });
-    return { ok: true, idempotentReplay: false, action: "unattributed" };
-  }
-
-  const { userId, existing } = resolved;
-  const locked = await acquireSubscriptionLock(userId);
-  if (!locked) {
-    throw new DomainError("PAYMENT_PROVIDER_UNAVAILABLE", "subscription is busy, retry");
-  }
-
+  // The dedup slot is claimed BEFORE processing to serialise concurrent
+  // duplicates. If processing then fails, release the slot so the
+  // provider's retry re-processes instead of being deduped into a no-op.
   try {
-    return await applyRazorpayEvent({
-      userId,
-      eventType,
-      body,
-      subEntity,
-      existing,
-      provider: "razorpay",
-    });
-  } finally {
-    await releaseSubscriptionLock(userId);
+    const body = JSON.parse(input.rawBody.toString("utf8")) as RazorpayBody;
+    const eventType = body.event ?? "unknown";
+    const subEntity = body.payload?.subscription?.entity;
+    const notes = subEntity?.notes ?? body.payload?.refund?.entity?.notes;
+
+    const resolved = await resolveUser(subEntity?.id, notes);
+    if (!resolved) {
+      // Verified but unattributable — store for audit, acknowledge (200).
+      await prisma.paymentEvent.create({
+        data: {
+          provider: "razorpay",
+          eventType,
+          rawPayload: body as unknown as Prisma.InputJsonValue,
+          signatureValid: true,
+          errorMessage: "could not resolve user from payload",
+        },
+      });
+      return { ok: true, idempotentReplay: false, action: "unattributed" };
+    }
+
+    const { userId, existing } = resolved;
+    const lockToken = await acquireSubscriptionLock(userId);
+    if (!lockToken) {
+      throw new DomainError("PAYMENT_PROVIDER_UNAVAILABLE", "subscription is busy, retry");
+    }
+
+    try {
+      return await applyRazorpayEvent({
+        userId,
+        eventType,
+        body,
+        subEntity,
+        existing,
+        provider: "razorpay",
+      });
+    } finally {
+      await releaseSubscriptionLock(userId, lockToken);
+    }
+  } catch (err) {
+    await redis.del(dedupKey).catch(() => undefined);
+    throw err;
   }
 };
 
@@ -190,7 +206,12 @@ interface ApplyInput {
 const applyRazorpayEvent = async (a: ApplyInput): Promise<RazorpayWebhookResult> => {
   const user = await prisma.user.findUnique({ where: { id: a.userId }, select: { tier: true } });
   const currentTier: SubscriptionTier = user?.tier ?? "free";
-  const purchased = asString(a.subEntity?.notes?.tier) as SubscriptionTier | undefined;
+  // Validate rather than blind-cast: an unexpected `notes.tier` must not
+  // reach the DB as a bogus enum. Unknown → undefined (the transition
+  // helper then defaults `activate` to premium).
+  const rawTier = asString(a.subEntity?.notes?.tier);
+  const purchased: SubscriptionTier | undefined =
+    rawTier === "premium" || rawTier === "family" ? rawTier : undefined;
 
   const decision = razorpayEventToTransition({
     eventType: a.eventType,

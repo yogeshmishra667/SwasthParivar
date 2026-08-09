@@ -96,76 +96,80 @@ export const processAppleWebhook = async (
       .update(input.signedPayload ?? "")
       .digest("hex")
       .slice(0, 32);
-  const fresh = await redis.set(
-    `payment:apple:event:${dedupId}`,
-    "1",
-    "EX",
-    DEDUP_TTL_SECONDS,
-    "NX",
-  );
+  const dedupKey = `payment:apple:event:${dedupId}`;
+  const fresh = await redis.set(dedupKey, "1", "EX", DEDUP_TTL_SECONDS, "NX");
   if (fresh !== "OK") {
     return { ok: true, idempotentReplay: true, action: "duplicate" };
   }
 
-  // The nested transaction info is a second JWS on the same Apple chain.
-  const tx = data.signedTransactionInfo
-    ? verifyAppleJws(data.signedTransactionInfo, rootPem, now)
-    : null;
-  if (data.signedTransactionInfo && !tx?.valid) {
-    captureUnhandled(new Error("apple webhook transaction-info JWS invalid"), {
-      tags: { surface: "payments", provider: "apple_iap" },
+  // Claim the dedup slot before processing; release it on failure so a
+  // provider retry re-processes rather than being deduped into a no-op.
+  try {
+    // The nested transaction info is a second JWS on the same Apple chain.
+    const tx = data.signedTransactionInfo
+      ? verifyAppleJws(data.signedTransactionInfo, rootPem, now)
+      : null;
+    if (data.signedTransactionInfo && !tx?.valid) {
+      captureUnhandled(new Error("apple webhook transaction-info JWS invalid"), {
+        tags: { surface: "payments", provider: "apple_iap" },
+      });
+      throw new DomainError("PAYMENT_WEBHOOK_INVALID_SIGNATURE", "invalid transaction signature");
+    }
+
+    const txInfo = tx?.payload ?? {};
+    const originalTransactionId = asString(txInfo.originalTransactionId);
+    const appAccountToken = asString(txInfo.appAccountToken);
+    const productId = asString(txInfo.productId);
+    const expiresDateMs = asNumber(txInfo.expiresDate);
+
+    const userId = await resolveUserId(originalTransactionId, appAccountToken);
+    if (!userId) {
+      // Verified but unattributable — store for audit, acknowledge (200).
+      await prisma.paymentEvent.create({
+        data: {
+          provider: "apple_iap",
+          eventType: subtype ? `${notificationType}.${subtype}` : notificationType,
+          rawPayload: payload as unknown as Prisma.InputJsonValue,
+          signatureValid: true,
+          errorMessage: "could not resolve user from notification",
+        },
+      });
+      return { ok: true, idempotentReplay: false, action: "unattributed" };
+    }
+
+    const currentTier = await currentTierOf(userId);
+    const purchasedTier = productIdToTier(productId);
+    const decision = appleNotificationToTransition({
+      notificationType,
+      ...(subtype ? { subtype } : {}),
+      currentTier,
+      ...(purchasedTier ? { purchasedTier } : {}),
     });
-    throw new DomainError("PAYMENT_WEBHOOK_INVALID_SIGNATURE", "invalid transaction signature");
-  }
 
-  const txInfo = tx?.payload ?? {};
-  const originalTransactionId = asString(txInfo.originalTransactionId);
-  const appAccountToken = asString(txInfo.appAccountToken);
-  const productId = asString(txInfo.productId);
-  const expiresDateMs = asNumber(txInfo.expiresDate);
+    const periodEnd = expiresDateMs
+      ? new Date(expiresDateMs)
+      : new Date(Date.now() + DEFAULT_PERIOD_MS);
 
-  const userId = await resolveUserId(originalTransactionId, appAccountToken);
-  if (!userId) {
-    // Verified but unattributable — store for audit, acknowledge (200).
-    await prisma.paymentEvent.create({
-      data: {
-        provider: "apple_iap",
+    const lockToken = await acquireSubscriptionLock(userId);
+    if (!lockToken) {
+      throw new DomainError("PAYMENT_PROVIDER_UNAVAILABLE", "subscription is busy, retry");
+    }
+    try {
+      return await applyAppleDecision({
+        userId,
+        currentTier,
+        decision,
+        providerSubscriptionId: originalTransactionId,
+        periodEnd,
         eventType: subtype ? `${notificationType}.${subtype}` : notificationType,
         rawPayload: payload as unknown as Prisma.InputJsonValue,
-        signatureValid: true,
-        errorMessage: "could not resolve user from notification",
-      },
-    });
-    return { ok: true, idempotentReplay: false, action: "unattributed" };
-  }
-
-  const currentTier = await currentTierOf(userId);
-  const purchasedTier = productIdToTier(productId);
-  const decision = appleNotificationToTransition({
-    notificationType,
-    ...(subtype ? { subtype } : {}),
-    currentTier,
-    ...(purchasedTier ? { purchasedTier } : {}),
-  });
-
-  const periodEnd = expiresDateMs
-    ? new Date(expiresDateMs)
-    : new Date(Date.now() + DEFAULT_PERIOD_MS);
-
-  const locked = await acquireSubscriptionLock(userId);
-  if (!locked) throw new DomainError("PAYMENT_PROVIDER_UNAVAILABLE", "subscription is busy, retry");
-  try {
-    return await applyAppleDecision({
-      userId,
-      currentTier,
-      decision,
-      providerSubscriptionId: originalTransactionId,
-      periodEnd,
-      eventType: subtype ? `${notificationType}.${subtype}` : notificationType,
-      rawPayload: payload as unknown as Prisma.InputJsonValue,
-    });
-  } finally {
-    await releaseSubscriptionLock(userId);
+      });
+    } finally {
+      await releaseSubscriptionLock(userId, lockToken);
+    }
+  } catch (err) {
+    await redis.del(dedupKey).catch(() => undefined);
+    throw err;
   }
 };
 
@@ -219,8 +223,10 @@ export const verifyAppleReceiptForUser = async (input: {
     ? new Date(receipt.info.expiresDateMs)
     : new Date(Date.now() + DEFAULT_PERIOD_MS);
 
-  const locked = await acquireSubscriptionLock(input.userId);
-  if (!locked) throw new DomainError("PAYMENT_PROVIDER_UNAVAILABLE", "subscription is busy, retry");
+  const lockToken = await acquireSubscriptionLock(input.userId);
+  if (!lockToken) {
+    throw new DomainError("PAYMENT_PROVIDER_UNAVAILABLE", "subscription is busy, retry");
+  }
   try {
     await applyAppleDecision({
       userId: input.userId,
@@ -232,7 +238,7 @@ export const verifyAppleReceiptForUser = async (input: {
       rawPayload: receipt as unknown as Prisma.InputJsonValue,
     });
   } finally {
-    await releaseSubscriptionLock(input.userId);
+    await releaseSubscriptionLock(input.userId, lockToken);
   }
 
   return {

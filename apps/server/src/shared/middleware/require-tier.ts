@@ -12,10 +12,12 @@ import type { NextFunction, Request, Response } from "express";
 import { DomainError } from "@swasth/shared-types";
 import { prisma } from "../database.js";
 
+// family outranks premium: a family plan satisfies a premium gate, but
+// a premium user must NOT pass a family-specific gate.
 const RANK: Record<"free" | "premium" | "family", number> = {
   free: 0,
   premium: 1,
-  family: 1, // family is premium-equivalent for gating
+  family: 2,
 };
 
 export const requireTier =
