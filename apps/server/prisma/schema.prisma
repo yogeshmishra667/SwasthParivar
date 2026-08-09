@@ -435,6 +435,13 @@ model User {
   reports                Report[]
   activityDaily          ActivityDaily[]
   sleepLogs              SleepLog[]
+  // Phase 4 Feature K — Monetization. A user holds at most one
+  // Subscription (the household primary holds the family plan). Payment
+  // events are an append-only audit log. Both are RETAINED (not
+  // cascade-deleted) on user erasure per the 7-year Indian-tax
+  // retention rule — see the models below (`onDelete: SetNull`).
+  subscription           Subscription?
+  paymentEvents          PaymentEvent[]
 
   @@index([householdId])
   // Admin "show deactivated users" filter — partial-like coverage via
@@ -1605,4 +1612,79 @@ model SleepLog {
   @@unique([userId, date])
   @@index([userId, date])
   @@map("sleep_logs")
+}
+
+// ── Phase 4 Feature K — Monetization (Razorpay + Apple IAP) ──────────
+
+enum SubscriptionProvider {
+  razorpay
+  apple_iap
+  // `manual` covers ops/super-admin tier overrides and comped accounts
+  // (no payment provider behind them) — see admin K.6.
+  manual
+}
+
+enum SubscriptionStatus {
+  active
+  // Charge failed but inside the provider's retry window — tier is NOT
+  // downgraded yet (CLAUDE.md "past_due → grace").
+  past_due
+  // Provider paused the mandate — grace period before downgrade.
+  grace
+  cancelled
+}
+
+// One row per paying user (the household primary on a family plan).
+// `userId` is UNIQUE so a user can hold at most one live subscription;
+// nullable because user erasure ANONYMISES rather than deletes this row
+// (7-year Indian-tax retention — see PaymentEvent comment). The K.1
+// snippet in phase4.md shows `onDelete: Cascade`, but the cross-cutting
+// retention invariant overrides it: financial rows are retained, never
+// cascade-deleted.
+model Subscription {
+  id                     String               @id @default(uuid()) @db.Uuid
+  userId                 String?              @unique @map("user_id") @db.Uuid
+  tier                   Tier
+  provider               SubscriptionProvider
+  // razorpay_subscription_id OR Apple original_transaction_id. Indexed
+  // so a webhook can resolve the local row from the provider's id.
+  providerSubscriptionId String?              @map("provider_subscription_id")
+  status                 SubscriptionStatus
+  currentPeriodEnd       DateTime             @map("current_period_end")
+  cancelAtPeriodEnd      Boolean              @default(false) @map("cancel_at_period_end")
+  cancelledAt            DateTime?            @map("cancelled_at")
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([providerSubscriptionId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+// Append-only audit log of every signature-verified webhook + receipt
+// validation. `rawPayload` stores the verbatim provider body (same
+// audit philosophy as Prescription.aiSuggestionHistory): if a billing
+// dispute lands months later, ops replay exactly what the provider
+// sent. RETAINED 7 years (Indian tax law) — `userId` is nullable and
+// `SetNull` on erasure so the financial record survives PII removal.
+model PaymentEvent {
+  id             String               @id @default(uuid()) @db.Uuid
+  userId         String?              @map("user_id") @db.Uuid
+  provider       SubscriptionProvider
+  // Razorpay event name (`subscription.activated`) OR Apple V2
+  // notificationType (`DID_RENEW`).
+  eventType      String               @map("event_type")
+  rawPayload     Json                 @map("raw_payload")
+  signatureValid Boolean              @map("signature_valid")
+  processedAt    DateTime?            @map("processed_at")
+  errorMessage   String?              @map("error_message")
+  createdAt      DateTime             @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([provider, eventType])
+  @@map("payment_events")
 }

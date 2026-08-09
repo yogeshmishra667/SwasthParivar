@@ -7,6 +7,7 @@ import { adminFlagsRouter } from "./flags/admin-flags.routes.js";
 import { adminOpsRouter } from "./ops/admin-ops.routes.js";
 import { adminAdminsRouter } from "./admins/admin-admins.routes.js";
 import { adminAuditRouter } from "./audit/admin-audit.routes.js";
+import { adminBillingRouter } from "./billing/admin-billing.routes.js";
 
 export const adminRouter = Router();
 
@@ -67,3 +68,8 @@ adminRouter.use("/admins", adminAdminsRouter);
 
 // Unified admin audit trail.
 adminRouter.use("/audit", adminAuditRouter);
+
+// Phase 4 §K.6 — billing console: subscription table, MRR/churn tiles,
+// and the audited refund-trigger (super_admin only, resolves the
+// provider deep-link; the server never refunds directly).
+adminRouter.use("/billing", adminBillingRouter);

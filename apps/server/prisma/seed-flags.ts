@@ -56,6 +56,14 @@ const DEFAULT_FLAGS = {
   // CLAUDE.md "Spend-Cap Parity"). When off, the PDF still renders —
   // just without the AI summary paragraph.
   report_generation_enabled: false,
+  // Phase 4 Feature K — Monetization. ALL default OFF ("monetization
+  // last"): the purchase flow + webhooks stay dark until launch. These
+  // gate the PURCHASE path, not data access — a tier downgrade never
+  // deletes patient health data regardless of these flags.
+  payments_razorpay_enabled: false,
+  payments_apple_iap_enabled: false,
+  tier_premium_enabled: false,
+  tier_family_enabled: false,
 };
 
 async function main() {
