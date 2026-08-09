@@ -168,6 +168,11 @@ export default defineConfig({
         // unverified sensor data drive trend/SG alerts. Locked at 100%.
         "src/wearable-trust/**": { 100: true },
 
+        // Payment webhook signature + tier transitions (Phase 4 §K).
+        // Signature verification is the security boundary; the gate
+        // mandates 100% branch coverage. Locked.
+        "src/subscription-state/**": { 100: true },
+
         // Ratchet floors at CURRENT measured values (2026-05-14 baseline).
         // Raise these as tests close the gap to CLAUDE.md targets.
         "src/detectors/spike.ts": { lines: 100, functions: 100, branches: 95, statements: 100 },

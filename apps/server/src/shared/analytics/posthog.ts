@@ -371,6 +371,22 @@ export interface EventPropsMap {
     tokens_sent: number;
     success_count: number;
   };
+  // Phase 4 Feature K — tier transition (CLAUDE.md "Payment" + phase4.md
+  // §K.4). Powers MRR / churn dashboards. `reason` distinguishes a paid
+  // upgrade from the various downgrade paths.
+  tier_changed: {
+    from: "free" | "premium" | "family";
+    to: "free" | "premium" | "family";
+    reason: "purchase" | "renewal" | "cancelled" | "refund" | "past_due" | "grace";
+    provider: "razorpay" | "apple_iap" | "manual";
+  };
+  // Emitted once per signature-verified webhook the worker acts on.
+  payment_webhook_processed: {
+    provider: "razorpay" | "apple_iap" | "manual";
+    event_type: string;
+    action: string;
+    idempotent_replay: boolean;
+  };
 }
 
 export type EventName = keyof EventPropsMap;

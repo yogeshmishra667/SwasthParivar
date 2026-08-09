@@ -15,6 +15,7 @@ const statusFor = (code: ErrorCode): number => {
     case "ADMIN_INVALID_CREDENTIALS":
     case "ADMIN_2FA_REQUIRED":
     case "ADMIN_2FA_INVALID":
+    case "PAYMENT_WEBHOOK_INVALID_SIGNATURE": // K — HMAC/JWS verify failed; no state change
       return 401;
     case "FAMILY_NO_ACCESS":
     case "ADMIN_FORBIDDEN":
@@ -23,6 +24,7 @@ const statusFor = (code: ErrorCode): number => {
     case "USER_DEACTIVATED":
     case "SOS_FORBIDDEN":
     case "APPROVAL_REQUIRES_GUARDIAN":
+    case "TIER_UPGRADE_REQUIRED": // K — premium-gated endpoint hit by free tier
       return 403;
     case "MED_SCHEDULE_NOT_FOUND":
     case "READING_NOT_FOUND":
@@ -40,9 +42,11 @@ const statusFor = (code: ErrorCode): number => {
     case "DOCTOR_NOT_FOUND":
     case "APPOINTMENT_NOT_FOUND":
     case "REPORT_NOT_FOUND":
+    case "SUBSCRIPTION_NOT_FOUND": // K — tier lookup with no subscription row
       return 404;
     case "FAMILY_INVITE_INVALID":
     case "SCHEDULE_INVALID":
+    case "PAYMENT_RECEIPT_INVALID": // K — Apple verifyReceipt rejected the receipt
       return 400;
     case "FAMILY_LINK_EXISTS":
     case "SOS_ALREADY_ACTIVE":
@@ -52,6 +56,7 @@ const statusFor = (code: ErrorCode): number => {
     case "PRESCRIPTION_LOCKED":
     case "PRESCRIPTION_CLARIFICATION_EXHAUSTED":
     case "REPORT_NOT_READY":
+    case "SUBSCRIPTION_ALREADY_CANCELLED": // K — duplicate cancel guard
       return 409;
     case "UPLOAD_TOO_LARGE":
       return 413;
@@ -67,6 +72,7 @@ const statusFor = (code: ErrorCode): number => {
     case "CHAT_CIRCUIT_OPEN":
     case "CHAT_SPEND_CAP_REACHED":
     case "MAINTENANCE_MODE": // CC.12.7 #1 — global maintenance window, retry later
+    case "PAYMENT_PROVIDER_UNAVAILABLE": // K — Razorpay/Apple endpoint timeout
     case "SOS_DISABLED": // sos_enabled=false — call emergency services directly
     case "CARDIAC_DISABLED": // cardiac_logging_enabled=false
     case "RESPIRATORY_DISABLED": // respiratory_logging_enabled=false
