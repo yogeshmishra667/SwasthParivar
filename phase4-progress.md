@@ -2,7 +2,7 @@
 
 > **Companion to `phase4.md`** (the original spec). This file tracks what's done, what's in flight, and what's next. Update on every merged PR. The spec stays canonical for HOW things should be built.
 >
-> Last updated: **2026-06-14** (Admin doctor-portal surface landed — closes the documented "Phase 4 entity = one admin registry entry" convention that was missed for F + G + E. **Server:** registry entries for `doctor_profiles`/`doctor_appointments`/`reports`/`prescriptions`/`cardiac_logs`/`respiratory_logs` (read-only 360° in the admin console), AND audited write-path `POST /admin/users/:id/{doctors,appointments}` (super_admin + ops only, every write demands a 3–280-char reason recorded verbatim in `AdminAuditLog`). **Admin SPA:** `AppointDoctorControl` on UserDetailPage — combined Book / Create-doctor dialog with role-gated entry, doctor list pulled from the new registry panel so it matches what the patient sees, and per-doctor optimistic invalidation on the user detail + audit query keys. Server 7/7 + admin 16/16 tests green, all typecheck/lint clean. Branch: `feat/admin-doctor-portal` (off main, not stacked). Earlier 2026-06-13: Feature G **complete (server + mobile)** — mobile UI landed on `feat/doctor-portal-mobile`: `app/appointments/` list+new+detail screens, `DoctorFormModal`, `doctor-portal` service + i18n, Settings → Health entry; tap-only date/time selection, report generate→poll→open via signed R2 URL; mobile typecheck/lint/tests green (10 suites/33). Earlier 06-13: server chunk 4 reports/GENERATE_PDF landed: Puppeteer PDF + pure `buildReportModel` (100%-pinned, PII-stripped) + Claude exec-summary through the chat-safety filter with its own spend cap + `/reports/*` module; 18 report-builder unit + 16 reports integration tests green. Only mobile UI remains (deferred). Earlier 06-13: chunk 3 `APPOINTMENT_REMINDER` cron + `dueReminderWindows` (100%-pinned), 16 unit + 8 integration. Chunk 2 — `doctors` + `appointments` CRUD modules: household-authorised, `doctor_portal_enabled` kill-switch, reschedule resets reminder flags, `appointment_created` event, 17-case suite green. 2026-06-12 — Feature G chunk 1 schema: `DoctorProfile` + `DoctorAppointment` + `Report` models + `AppointmentStatus`/`ReportStatus` enums, migration `20260704000000_doctors`, and the F.1-deferred `prescriptions.doctor_id` FK tightened to `ON DELETE SET NULL`. 2026-06-12 earlier — Feature F audit close-out. Two gaps fixed: (1) missing F.12 PostHog event `prescription_need_clarification_item` — now emitted from both the `PRESCRIPTION_OCR` and `PRESCRIPTION_OCR_DELTA` processors with unit coverage; (2) the frequency > 6×/day safety gate was missing on the `/approve` path — it only ran on manual-add — now enforced there too, routed through the existing `needs_doctor` branch, with a new integration test (suite now 27 cases). One partial-gap documented under "Risks / known unknowns": the dosage > 99th-percentile half of the safety validator stays deferred pending a max-dose reference dataset. Prior context: F.5 routes + clarification/cross-check workers (#141→#143), F.6 server close-out (#145), F.11 HTTP integration suite (#146), F.13 mobile upload + approver UI (#147) all merged to main.)
+> Last updated: **2026-06-18** (Feature H **merged** — Indian food DB: schema + 216 cited GI/GL rows + `/foods/search` + food-item meal-correlation mode; Week-19 gate proven incl. `/foods/search` p95 < 200ms (#158, #159). Feature I.1 server **merged** — `ActivityDaily` + `SleepLog` + pure `wearable-trust` gate + `/activity` + `/sleep` modules (source-mandatory, manual-wins dedup, 30-day trust window), flag-gated default OFF (#160). `activity_drop` Silent Guardian signal **wired** to real `ActivityDaily` behind `sg_activity_drop_enabled`, trust-ineligible device rows excluded (#161). Remaining Feature I work is native/device (I.1 mobile HealthKit/Google-Fit sync, I.2 Bluetooth) + ops flips — see "Feature H/I go-live" checklists below. Earlier 2026-06-14 — Admin doctor-portal surface landed — closes the documented "Phase 4 entity = one admin registry entry" convention that was missed for F + G + E. **Server:** registry entries for `doctor_profiles`/`doctor_appointments`/`reports`/`prescriptions`/`cardiac_logs`/`respiratory_logs` (read-only 360° in the admin console), AND audited write-path `POST /admin/users/:id/{doctors,appointments}` (super_admin + ops only, every write demands a 3–280-char reason recorded verbatim in `AdminAuditLog`). **Admin SPA:** `AppointDoctorControl` on UserDetailPage — combined Book / Create-doctor dialog with role-gated entry, doctor list pulled from the new registry panel so it matches what the patient sees, and per-doctor optimistic invalidation on the user detail + audit query keys. Server 7/7 + admin 16/16 tests green, all typecheck/lint clean. Branch: `feat/admin-doctor-portal` (off main, not stacked). Earlier 2026-06-13: Feature G **complete (server + mobile)** — mobile UI landed on `feat/doctor-portal-mobile`: `app/appointments/` list+new+detail screens, `DoctorFormModal`, `doctor-portal` service + i18n, Settings → Health entry; tap-only date/time selection, report generate→poll→open via signed R2 URL; mobile typecheck/lint/tests green (10 suites/33). Earlier 06-13: server chunk 4 reports/GENERATE_PDF landed: Puppeteer PDF + pure `buildReportModel` (100%-pinned, PII-stripped) + Claude exec-summary through the chat-safety filter with its own spend cap + `/reports/*` module; 18 report-builder unit + 16 reports integration tests green. Only mobile UI remains (deferred). Earlier 06-13: chunk 3 `APPOINTMENT_REMINDER` cron + `dueReminderWindows` (100%-pinned), 16 unit + 8 integration. Chunk 2 — `doctors` + `appointments` CRUD modules: household-authorised, `doctor_portal_enabled` kill-switch, reschedule resets reminder flags, `appointment_created` event, 17-case suite green. 2026-06-12 — Feature G chunk 1 schema: `DoctorProfile` + `DoctorAppointment` + `Report` models + `AppointmentStatus`/`ReportStatus` enums, migration `20260704000000_doctors`, and the F.1-deferred `prescriptions.doctor_id` FK tightened to `ON DELETE SET NULL`. 2026-06-12 earlier — Feature F audit close-out. Two gaps fixed: (1) missing F.12 PostHog event `prescription_need_clarification_item` — now emitted from both the `PRESCRIPTION_OCR` and `PRESCRIPTION_OCR_DELTA` processors with unit coverage; (2) the frequency > 6×/day safety gate was missing on the `/approve` path — it only ran on manual-add — now enforced there too, routed through the existing `needs_doctor` branch, with a new integration test (suite now 27 cases). One partial-gap documented under "Risks / known unknowns": the dosage > 99th-percentile half of the safety validator stays deferred pending a max-dose reference dataset. Prior context: F.5 routes + clarification/cross-check workers (#141→#143), F.6 server close-out (#145), F.11 HTTP integration suite (#146), F.13 mobile upload + approver UI (#147) all merged to main.)
 
 ---
 
@@ -406,6 +406,59 @@ client renders the disabled copy from `cardiac.disabled` /
 
 - [x] (2026-06-03 follow-up) Build Settings → Emergency Contacts mobile screen (CRUD against `/api/v1/emergency-contacts`). Reorder via tap-only ↑/↓ swap with neighbour (no drag, per CLAUDE.md "core flows: TAP ONLY"). 48dp targets, Hindi-first copy. Active-profile aware via `targetUserId` so the household primary can manage sub-profile contacts. Files: `apps/mobile/src/services/emergency-contacts.ts` (typed client), `apps/mobile/src/components/settings/EmergencyContactModal.tsx` (add/edit form with E.164 inline validation), `apps/mobile/app/settings/emergency-contacts.tsx` (list + reorder + delete confirm). Entry point added under a new "Safety" section on the Settings tab. ~50 new i18n keys (en + hi).
 - [x] (2026-06-03 follow-up) Wire guardian-assisted onboarding step to write an initial `EmergencyContact` row at priority 1 with `isGuardian: true` (CLAUDE.md line 171). Landed in `addHouseholdProfile` (household.service.ts) so creating a sub-profile seeds the new profile's priority-1 EC with the household primary's phone in the same transaction. Complementary hook landed in `respondToInvite("accept")` (family.service.ts) for the cross-household FamilyLink path.
+
+### Feature H go-live (Indian food DB)
+
+Code complete + Week-19 gate proven (#158, #159). The remaining item is
+purely operational — the seed data exists in test/CI but not yet in any
+real database.
+
+- [ ] Run the canonical food seed against **staging**, then **prod**:
+      `pnpm --filter @swasth/server db:seed:food-items` (idempotent
+      upsert by `name_en`; safe to re-run). Verify `216` rows via the
+      script's per-category summary.
+- [ ] Smoke `GET /api/v1/foods/search?q=aloo` against staging — expect
+      a populated `data` array (empty array is the documented fail-safe
+      when the table is unseeded, NOT an error).
+- No flag flip needed: `/foods/search` is advisory and the food-item
+  correlation mode rides the already-live `correlation_detector_enabled`.
+- `name_regional` stays empty until Feature J ramps each regional
+  language; search falls back to `name_en` + `name_hi` until then.
+
+### Feature I go-live (Wearables)
+
+I.1 server + the `activity_drop` SG wiring are code-complete (#160,
+#161). Everything left is either an ops flip or native/device client
+work that needs a real device + EAS dev-client build to validate.
+
+**Operational (server already shipped):**
+
+- [ ] Flip `activity_logging_enabled` / `sleep_logging_enabled` to a
+      small internal cohort once the mobile sync ships; verify
+      manual-wins dedup + the 30-day trust-window key
+      (`wearable_trust:${userId}:until`) behave on real installs.
+- [ ] Flip `sg_activity_drop_enabled` ONLY after a cohort has ≥ 30 days
+      of paired wearable data (trust window matured) — otherwise every
+      device row is correctly excluded and the signal stays silent by
+      design.
+
+**Code remaining — native/device, NOT buildable or testable in this
+environment (needs HealthKit/Health-Connect entitlements + a physical
+device or EAS dev-client):**
+
+- [ ] **I.1 mobile** — `apps/mobile/src/services/wearables/healthkit.ts`
+      + `googlefit.ts`: read-only daily background fetch of
+      steps/distance/active-minutes + sleep for the last 7 days, POST to
+      `/activity/daily` + `/sleep` with `source: "healthkit"|"googlefit"`.
+      Server dedup already enforces manual-wins. Behind the two logging
+      flags + a 30-day trust-window countdown started server-side on
+      first device row.
+- [ ] **I.2 Bluetooth** — `omron-bp.ts` + `accuchek-glucose.ts`
+      (`react-native-ble-plx`): scan → pair → store device UUID in
+      `User.pairedDevices` (JSONB, schema add) → auto-flow reads to
+      `/readings/{bp,glucose}` with `source: "device"`. Manual reading
+      within ±60s overrides the device reading (point-reading trust
+      rule — distinct from the daily-aggregate manual-wins above).
 
 ### Pending — next session pickup
 
