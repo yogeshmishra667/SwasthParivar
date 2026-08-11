@@ -18,10 +18,17 @@ import { logger } from "../logger.js";
 
 const RAZORPAY_SUBSCRIPTIONS_URL = "https://api.razorpay.com/v1/subscriptions";
 const REQUEST_TIMEOUT_MS = 10_000;
+// Razorpay caps `count` at 100 per page; the reconciliation cron pages
+// through with `skip` until fewer than a full page comes back.
+const LIST_PAGE_SIZE = 100;
+const LIST_MAX_PAGES = 50; // hard ceiling — 5000 subs/day is well past any realistic volume
 
 /** True when the two credentials needed to sign an API call are set. */
 export const razorpayApiConfigured = (): boolean =>
   Boolean(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET);
+
+const basicAuthHeader = (): string =>
+  `Basic ${Buffer.from(`${env.RAZORPAY_KEY_ID!}:${env.RAZORPAY_KEY_SECRET!}`).toString("base64")}`;
 
 export interface CreateSubscriptionParams {
   planId: string;
@@ -57,14 +64,10 @@ export const createRazorpaySubscription = async (
     throw new Error("Razorpay credentials missing (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET)");
   }
 
-  const auth = Buffer.from(`${env.RAZORPAY_KEY_ID!}:${env.RAZORPAY_KEY_SECRET!}`).toString(
-    "base64",
-  );
-
   const res = await fetch(RAZORPAY_SUBSCRIPTIONS_URL, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${auth}`,
+      Authorization: basicAuthHeader(),
       "Content-Type": "application/json",
       Accept: "application/json",
     },
@@ -98,4 +101,93 @@ export const createRazorpaySubscription = async (
     status: json.status ?? "created",
     shortUrl: typeof json.short_url === "string" ? json.short_url : null,
   };
+};
+
+// ── List subscriptions (Phase 4 §K — RAZORPAY_RECONCILIATION) ────────
+//
+// The reconciliation cron pulls the last 24h of subscription state to
+// close the missed-webhook gap (Razorpay outages). This is the ONLY
+// other outbound call besides create; it is READ-only. Kept here (not in
+// the worker) so the reconciliation integration test can stub
+// `globalThis.fetch` exactly like the create-subscription test does.
+//   GET https://api.razorpay.com/v1/subscriptions?from=&to=&count=&skip=
+
+/** The subset of the Razorpay subscription entity reconciliation reads. */
+export interface RazorpaySubscriptionState {
+  id: string;
+  status: string;
+  /** Unix seconds; absent on some statuses. */
+  currentEnd: number | null;
+  notes: Record<string, unknown>;
+}
+
+interface RawSubscriptionEntity {
+  id?: unknown;
+  status?: unknown;
+  current_end?: unknown;
+  notes?: unknown;
+}
+
+const toSubscriptionState = (raw: RawSubscriptionEntity): RazorpaySubscriptionState | null => {
+  if (typeof raw.id !== "string") return null;
+  return {
+    id: raw.id,
+    status: typeof raw.status === "string" ? raw.status : "unknown",
+    currentEnd: typeof raw.current_end === "number" ? raw.current_end : null,
+    notes:
+      typeof raw.notes === "object" && raw.notes !== null
+        ? (raw.notes as Record<string, unknown>)
+        : {},
+  };
+};
+
+/**
+ * List subscriptions whose activity falls in `[fromUnix, toUnix]` (unix
+ * seconds), paging through Razorpay's 100-per-page collection. Throws on
+ * missing credentials, network failure, non-2xx, or an unusable shape —
+ * the caller (reconciliation cron) logs + skips the run on any throw so
+ * a provider hiccup never corrupts local state.
+ */
+export const listRazorpaySubscriptions = async (params: {
+  fromUnix: number;
+  toUnix: number;
+}): Promise<RazorpaySubscriptionState[]> => {
+  if (!razorpayApiConfigured()) {
+    throw new Error("Razorpay credentials missing (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET)");
+  }
+
+  const out: RazorpaySubscriptionState[] = [];
+  for (let page = 0; page < LIST_MAX_PAGES; page += 1) {
+    const url = new URL(RAZORPAY_SUBSCRIPTIONS_URL);
+    url.searchParams.set("from", String(params.fromUnix));
+    url.searchParams.set("to", String(params.toUnix));
+    url.searchParams.set("count", String(LIST_PAGE_SIZE));
+    url.searchParams.set("skip", String(page * LIST_PAGE_SIZE));
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: basicAuthHeader(), Accept: "application/json" },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "<unreadable>");
+      logger.error(
+        { status: res.status, body: text.slice(0, 500) },
+        "razorpay list-subscriptions failed",
+      );
+      throw new Error(`Razorpay HTTP ${res.status}: ${text.slice(0, 200)}`);
+    }
+
+    const json: unknown = await res.json();
+    const items = (json as { items?: unknown }).items;
+    if (!Array.isArray(items)) {
+      throw new Error("Razorpay list-subscriptions response missing items[]");
+    }
+    for (const raw of items as RawSubscriptionEntity[]) {
+      const state = toSubscriptionState(raw);
+      if (state) out.push(state);
+    }
+    if (items.length < LIST_PAGE_SIZE) break; // last page
+  }
+  return out;
 };

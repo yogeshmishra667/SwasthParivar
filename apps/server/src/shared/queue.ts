@@ -107,6 +107,16 @@ export const QUEUE_NAMES = {
   // never re-fires. Idempotent across re-runs via those flags. Gated by
   // `doctor_portal_enabled` (default false).
   APPOINTMENT_REMINDER: "appointment-reminder",
+
+  // Phase 4 §K — daily reconciliation. Pulls the last 24h of Razorpay
+  // subscription state and corrects local `Subscription`/`User.tier`
+  // drift from a missed webhook (provider outage), then downgrades
+  // cancelled subscriptions whose paid period has lapsed. Reuses the
+  // webhook's atomic tier-transition path (never deletes health data)
+  // under the same `lock:subscription:${userId}` mutex. Idempotent — a
+  // second run over already-consistent state writes nothing. Gated by
+  // `payments_razorpay_enabled` (default false).
+  RAZORPAY_RECONCILIATION: "razorpay-reconciliation",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
