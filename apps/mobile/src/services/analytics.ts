@@ -3,8 +3,7 @@ import Constants from "expo-constants";
 import axios from "axios";
 
 const extra = Constants.expoConfig?.extra as
-  | { posthogKey?: string; posthogHost?: string }
-  | undefined;
+  { posthogKey?: string; posthogHost?: string } | undefined;
 
 const stringFromEnvOrExtra = (
   envName: string,

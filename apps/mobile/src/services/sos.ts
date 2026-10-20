@@ -25,9 +25,7 @@ export type SOSStage =
   | "cancelled";
 
 export type SOSTriggerSource =
-  | "patient_manual"
-  | "critical_bypass_escalation"
-  | "guardian_initiated";
+  "patient_manual" | "critical_bypass_escalation" | "guardian_initiated";
 
 export interface SOSEventDto {
   id: string;

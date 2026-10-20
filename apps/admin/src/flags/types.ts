@@ -29,12 +29,7 @@ export type RolloutConfig = CohortRollout | PercentageRollout | CohortOrPercenta
  * `"log"` for `auth.otp.provider`).
  */
 export type FlagValue =
-  | boolean
-  | string
-  | number
-  | unknown[]
-  | RolloutConfig
-  | Record<string, unknown>;
+  boolean | string | number | unknown[] | RolloutConfig | Record<string, unknown>;
 
 /** The editor variant rendered by `<FlagEditor>` for a given value. */
 export type FlagEditorKind = "boolean" | RolloutKind | "raw";

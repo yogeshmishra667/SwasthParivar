@@ -7,11 +7,7 @@ import { logError } from "@/services/analytics";
 
 export type InsightSeverity = "info" | "warn" | "critical";
 export type InsightPatternType =
-  | "spike"
-  | "trend"
-  | "meal_correlation"
-  | "anomaly"
-  | "cross_condition";
+  "spike" | "trend" | "meal_correlation" | "anomaly" | "cross_condition";
 
 export interface InsightEventDto {
   id: string;

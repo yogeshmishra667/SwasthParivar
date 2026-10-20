@@ -15,9 +15,7 @@ export interface HbA1cEstimate {
 }
 
 export type HbA1cResult =
-  | { kind: "ok"; estimate: HbA1cEstimate }
-  | { kind: "insufficient" }
-  | { kind: "error" };
+  { kind: "ok"; estimate: HbA1cEstimate } | { kind: "insufficient" } | { kind: "error" };
 
 /**
  * GET /api/v1/hba1c/estimate.

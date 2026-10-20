@@ -5,11 +5,7 @@
 // `packages/domain-logic/src/detectors/`. Add new entries when adding
 // new detectors; never reuse a string.
 export type InsightPatternType =
-  | "spike"
-  | "trend"
-  | "meal_correlation"
-  | "anomaly"
-  | "cross_condition";
+  "spike" | "trend" | "meal_correlation" | "anomaly" | "cross_condition";
 
 // Three-band severity used uniformly across detectors. Stays small on
 // purpose — UI maps these to colors / haptics / sort order without

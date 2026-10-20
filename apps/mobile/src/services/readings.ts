@@ -162,8 +162,7 @@ export const saveGlucoseReading = async (input: SaveReadingInput): Promise<SaveR
       const axiosErr = isAxiosError(err) ? err : null;
       const status = axiosErr?.response?.status ?? 0;
       const data = axiosErr?.response?.data as
-        | { error?: { code?: string; message?: string } }
-        | undefined;
+        { error?: { code?: string; message?: string } } | undefined;
       track("reading_logged", {
         type: input.readingType,
         source: input.source,

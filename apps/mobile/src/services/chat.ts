@@ -63,8 +63,7 @@ export type ChatSendErrorCode =
   | "UNKNOWN";
 
 export type ChatSendOutcome =
-  | { ok: true; result: SendMessageResultDto }
-  | { ok: false; code: ChatSendErrorCode };
+  { ok: true; result: SendMessageResultDto } | { ok: false; code: ChatSendErrorCode };
 
 const KNOWN_CODES: readonly ChatSendErrorCode[] = [
   "CHAT_DISABLED",

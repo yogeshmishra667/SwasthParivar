@@ -103,10 +103,7 @@ export interface AnalyzeRespiratoryJob {
 }
 
 export type AnalyzeReadingJob =
-  | AnalyzeGlucoseJob
-  | AnalyzeBPJob
-  | AnalyzeCardiacJob
-  | AnalyzeRespiratoryJob;
+  AnalyzeGlucoseJob | AnalyzeBPJob | AnalyzeCardiacJob | AnalyzeRespiratoryJob;
 
 // ─────────────────────────────────────────────────────────────
 // Row → pure-typed shape mappers

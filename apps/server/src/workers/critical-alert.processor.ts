@@ -22,8 +22,7 @@ import { notif } from "../shared/i18n/notifications.js";
  * roll in.
  */
 export type CriticalAlertJob =
-  | (CriticalAlertGlucoseJob & { category?: "glucose" })
-  | CriticalAlertMultiCategoryJob;
+  (CriticalAlertGlucoseJob & { category?: "glucose" }) | CriticalAlertMultiCategoryJob;
 
 export interface CriticalAlertGlucoseJob {
   readingId: string;

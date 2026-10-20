@@ -57,8 +57,7 @@ const doRefresh = async (): Promise<boolean> => {
 client.interceptors.response.use(undefined, async (error: AxiosError) => {
   if (error.response?.status === 503) {
     const data = error.response.data as
-      | { success?: boolean; error?: { code?: string; message?: string } }
-      | undefined;
+      { success?: boolean; error?: { code?: string; message?: string } } | undefined;
     if (data?.error?.code === "MAINTENANCE_MODE") {
       onMaintenanceMode?.(true);
       throw error;
@@ -66,8 +65,7 @@ client.interceptors.response.use(undefined, async (error: AxiosError) => {
   }
 
   const original = error.config as
-    | (InternalAxiosRequestConfig & { _retried?: boolean })
-    | undefined;
+    (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
   if (
     error.response?.status !== 401 ||
     !original ||

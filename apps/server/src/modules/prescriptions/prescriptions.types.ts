@@ -79,9 +79,7 @@ export interface PrescriptionView {
     readonly id: string;
     readonly photoUrl: string;
     readonly uploadedAt:
-      | "initial_upload"
-      | "mid_approval_clarification"
-      | "post_schedule_routine_check";
+      "initial_upload" | "mid_approval_clarification" | "post_schedule_routine_check";
     readonly aiReadName: string | null;
     readonly matchStatus: "match" | "mismatch" | "unclear" | "not_attempted";
     readonly matchConfidence: number;

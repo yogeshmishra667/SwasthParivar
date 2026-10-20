@@ -31,21 +31,13 @@ export type MedicineMatchStatus = "match" | "mismatch" | "unclear" | "not_attemp
  * MedicationSchedule.
  */
 export type PrescriptionItemStatus =
-  | "pending"
-  | "need_clarification"
-  | "approved"
-  | "rejected"
-  | "needs_doctor";
+  "pending" | "need_clarification" | "approved" | "rejected" | "needs_doctor";
 
 /**
  * Lifecycle of a Prescription row.
  */
 export type PrescriptionStatus =
-  | "pending_ocr"
-  | "pending_approval"
-  | "partial"
-  | "approved"
-  | "rejected";
+  "pending_ocr" | "pending_approval" | "partial" | "approved" | "rejected";
 
 /**
  * Friction level applied to the Approve button.

@@ -8,11 +8,7 @@ import type { PrescriptionItemColor, PrescriptionItemStatus } from "@swasth/shar
 import { api } from "@/services/api";
 
 export type PrescriptionStatus =
-  | "pending_ocr"
-  | "pending_approval"
-  | "partial"
-  | "approved"
-  | "rejected";
+  "pending_ocr" | "pending_approval" | "partial" | "approved" | "rejected";
 
 export interface PrescriptionItemView {
   id: string;

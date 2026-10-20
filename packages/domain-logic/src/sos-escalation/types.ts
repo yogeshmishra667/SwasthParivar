@@ -18,9 +18,7 @@ export type SOSStage =
 /** Trigger source. Phase 4 ships `patient_manual` only; the other two
  * routes are flagged off until §D'.2 lands. */
 export type SOSTriggerSource =
-  | "patient_manual"
-  | "critical_bypass_escalation"
-  | "guardian_initiated";
+  "patient_manual" | "critical_bypass_escalation" | "guardian_initiated";
 
 /** Per-stage timing constants (seconds since trigger). The cron tick
  * interval is finer than these thresholds, so a slightly-late tick

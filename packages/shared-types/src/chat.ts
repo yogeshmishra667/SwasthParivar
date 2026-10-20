@@ -20,11 +20,7 @@ export type ChatLanguage = "hi" | "en" | "hi-en";
 // Intent buckets feed both the cost router and the template lookup.
 // Stable strings; PostHog dashboards index on them.
 export type ChatIntent =
-  | "reading_summary"
-  | "medication_question"
-  | "lifestyle"
-  | "data_explainer"
-  | "open_ended";
+  "reading_summary" | "medication_question" | "lifestyle" | "data_explainer" | "open_ended";
 
 // Coarsened condition for chat templates — the patient's full
 // condition list (`Condition[]` on User) collapses to one of these
