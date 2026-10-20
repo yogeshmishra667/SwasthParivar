@@ -120,6 +120,27 @@ describe("razorpayEventToTransition", () => {
     expect(d).toMatchObject({ action: "downgrade", targetTier: "free", changesTier: false });
   });
 
+  it("subscription.completed → downgrade to free (paid term done)", () => {
+    const d = razorpayEventToTransition({
+      eventType: "subscription.completed",
+      currentTier: "premium",
+    });
+    expect(d).toMatchObject({ action: "downgrade", targetTier: "free", changesTier: true });
+  });
+
+  it("subscription.expired → downgrade to free", () => {
+    const d = razorpayEventToTransition({
+      eventType: "subscription.expired",
+      currentTier: "family",
+    });
+    expect(d).toMatchObject({ action: "downgrade", targetTier: "free", changesTier: true });
+  });
+
+  it("subscription.expired on an already-free user does not flag a tier change", () => {
+    const d = razorpayEventToTransition({ eventType: "subscription.expired", currentTier: "free" });
+    expect(d).toMatchObject({ action: "downgrade", targetTier: "free", changesTier: false });
+  });
+
   it("unknown event → ignore, tier untouched", () => {
     const d = razorpayEventToTransition({ eventType: "subscription.weird", currentTier: "family" });
     expect(d).toMatchObject({ action: "ignore", targetTier: "family", changesTier: false });

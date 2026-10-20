@@ -26,3 +26,5 @@ export * from "./appointment-reminders/index.js";
 export * from "./report-builder/index.js";
 export * from "./wearable-trust/index.js";
 export * from "./subscription-state/index.js";
+export * from "./activity-aggregator/index.js";
+export * from "./sleep-quality-classifier/index.js";
