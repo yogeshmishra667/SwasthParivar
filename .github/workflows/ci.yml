@@ -230,7 +230,8 @@ jobs:
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    # pnpm audit alone takes ~2 min on this lockfile, plus the install.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
@@ -240,7 +241,13 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      # pnpm 9's audit builds the whole workspace dependency tree in memory
+      # and peaks at ~5 GB here (Expo/React Native graph). At Node's default
+      # ~2 GB heap it dies with "JavaScript heap out of memory" before
+      # reporting anything, which hid real HIGH/CRITICAL findings.
       - name: Audit production deps (high+critical)
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm audit --prod --audit-level=high
 
   # ──────────────────────────────────────────────────────────
@@ -433,10 +440,14 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      # `pnpm exec` runs the lockfile-pinned devDependency installed above.
+      # Never `pnpm dlx danger`: that fetches the latest release on every
+      # run (danger@14.0.7 shipped without its `undici` dependency and broke
+      # this job on every PR).
       - name: Run Danger
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm dlx danger ci --dangerfile dangerfile.ts
+        run: pnpm exec danger ci --dangerfile dangerfile.ts
 
   # ──────────────────────────────────────────────────────────
   # Server image build + Trivy CVE scan + /health smoke. Builds the

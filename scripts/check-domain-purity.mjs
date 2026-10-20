@@ -9,6 +9,10 @@
  *      must be passed as a parameter to keep functions deterministic.
  *   3. Call `Math.random()` — randomness must be passed in for
  *      reproducible tests.
+ *   4. Reach ANY `node:` builtin from the root barrel (`src/index.ts`).
+ *      The mobile app bundles that barrel, and React Native has no Node
+ *      standard library. Server-only modules that need e.g. node:crypto
+ *      live behind a package.json subpath export instead.
  *
  * The tsconfig `paths` block already redirects forbidden modules to
  * `src/_blocked.d.ts` (an empty stub), so any forbidden import fails
@@ -23,7 +27,7 @@
  * Exit code: 0 on success, 1 on violation.
  */
 import { readFile, readdir, stat } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -90,13 +94,52 @@ for (const file of files) {
   });
 }
 
+// Rule 4: walk relative imports from the root barrel; anything reachable
+// ships in the React Native bundle and must not touch a `node:` builtin.
+const IMPORT_SPEC_RE = /(?:from|import)\s+['"]([^'"]+)['"]/g;
+const resolveSource = async (fromFile, spec) => {
+  const base = resolve(dirname(fromFile), spec);
+  const candidates = [base.replace(/\.js$/, ".ts"), `${base}.ts`, join(base, "index.ts")];
+  for (const c of candidates) {
+    const s = await stat(c).catch(() => null);
+    if (s?.isFile()) return c;
+  }
+  return null;
+};
+const reachable = new Set();
+const queue = [join(TARGET, "index.ts")];
+while (queue.length > 0) {
+  const file = queue.pop();
+  if (reachable.has(file)) continue;
+  reachable.add(file);
+  const lines = stripComments(await readFile(file, "utf8")).split("\n");
+  for (const [i, line] of lines.entries()) {
+    for (const [, spec] of line.matchAll(IMPORT_SPEC_RE)) {
+      if (spec.startsWith("node:")) {
+        violations.push({
+          kind: "barrel-node",
+          file: relative(REPO_ROOT, file),
+          line: i + 1,
+          snippet: line.trim(),
+        });
+      } else if (spec.startsWith(".")) {
+        const next = await resolveSource(file, spec);
+        if (next) queue.push(next);
+      }
+    }
+  }
+}
+
 if (violations.length > 0) {
   console.error("❌ Domain-logic purity violation(s):\n");
+  const LABELS = {
+    import: "forbidden import",
+    call: "time/randomness at call site (pass as parameter instead)",
+    "barrel-node":
+      "node: builtin reachable from src/index.ts (breaks the mobile bundle — move behind a subpath export)",
+  };
   for (const v of violations) {
-    const label =
-      v.kind === "import"
-        ? "forbidden import"
-        : "time/randomness at call site (pass as parameter instead)";
+    const label = LABELS[v.kind];
     console.error(`  ${v.file}:${v.line} — ${label}`);
     console.error(`    ${v.snippet}\n`);
   }
