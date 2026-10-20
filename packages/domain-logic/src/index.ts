@@ -25,4 +25,6 @@ export * from "./prescription-delta-reconciliation/index.js";
 export * from "./appointment-reminders/index.js";
 export * from "./report-builder/index.js";
 export * from "./wearable-trust/index.js";
-export * from "./subscription-state/index.js";
+// subscription-state is NOT re-exported here: it imports node:crypto, and
+// this barrel is bundled into the React Native app. Server code imports
+// it from the "@swasth/domain-logic/subscription-state" subpath instead.
