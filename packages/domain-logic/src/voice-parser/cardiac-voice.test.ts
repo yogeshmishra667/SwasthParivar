@@ -17,6 +17,14 @@ describe("parseCardiacVoiceTranscript — happy path", () => {
     if (r.kind === "ok") expect(r.value).toBe(expected);
   });
 
+  it("a past-tense marker inside another word is not past tense ('tha' in 'thakaan')", () => {
+    // "thakaan" (tiredness) starts with the past indicator "tha"; only a
+    // standalone "tha" means past tense, so this present reading stands.
+    const r = parseCardiacVoiceTranscript({ ...base, transcript: "thakaan hai, dhadkan 95" });
+    expect(r.kind).toBe("ok");
+    if (r.kind === "ok") expect(r.value).toBe(95);
+  });
+
   it("Hindi colloquial 'ek sau bees' resolves to 120", () => {
     const r = parseCardiacVoiceTranscript({
       ...base,
