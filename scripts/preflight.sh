@@ -83,8 +83,9 @@ bash scripts/check-migration-parity.sh || fail "migration parity"
 banner "8/11 migration lint (squawk) on new migrations"
 bash scripts/lint-migrations.sh || fail "squawk"
 
-banner "9/11 domain-logic purity"
+banner "9/11 domain-logic purity + mobile i18n parity"
 node scripts/check-domain-purity.mjs >/dev/null || fail "purity"
+node scripts/check-i18n-parity.mjs >/dev/null || fail "i18n parity"
 
 banner "10/11 domain-logic test:coverage (per-file ratchets)"
 pnpm --filter @swasth/domain-logic test:coverage >/dev/null || fail "domain-logic tests"
