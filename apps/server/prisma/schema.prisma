@@ -1539,12 +1539,14 @@ model IndianFoodItem {
 
   // Btree indexes back the prefix (ILIKE 'q%') search on the two
   // always-present names. The GIN index on name_regional
-  // (jsonb_path_ops) is added in the migration SQL — Prisma cannot
-  // express the operator class — and only earns its keep once a
-  // regional seed lands.
+  // (jsonb_path_ops) supports cross-language containment search once a
+  // regional seed lands. It was created in the 20260711 migration SQL and
+  // MUST stay declared here — an undeclared index is drift, and the next
+  // `prisma migrate dev` would generate a migration that drops it.
   @@index([nameEn])
   @@index([nameHi])
   @@index([category])
+  @@index([nameRegional(ops: JsonbPathOps)], type: Gin)
   @@map("indian_food_items")
 }
 
