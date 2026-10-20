@@ -10,3 +10,9 @@ export type {
   TransitionInput,
   AppleTransitionInput,
 } from "./transitions.js";
+export { reconcileRazorpaySubscription } from "./reconciliation.js";
+export type {
+  ReconcileInput,
+  ReconcileDecision,
+  LocalSubscriptionSnapshot,
+} from "./reconciliation.js";

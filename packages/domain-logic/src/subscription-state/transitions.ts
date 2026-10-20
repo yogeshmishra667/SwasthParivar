@@ -107,6 +107,19 @@ export const razorpayEventToTransition = (input: TransitionInput): TransitionDec
         changesTier: keepTier !== "free",
         cancelAtPeriodEnd: false,
       };
+    case "subscription.completed":
+    case "subscription.expired":
+      // The paid term is over (all cycles billed, or the mandate
+      // lapsed) — access ends, revert to free now. Same retention
+      // guarantee as a refund: only the tier flips, no data purge.
+      // These also cover the reconciliation "period lapsed" path.
+      return {
+        action: "downgrade",
+        targetTier: "free",
+        status: "cancelled",
+        changesTier: keepTier !== "free",
+        cancelAtPeriodEnd: false,
+      };
     default:
       return {
         action: "ignore",

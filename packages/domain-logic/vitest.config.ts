@@ -168,6 +168,11 @@ export default defineConfig({
         // unverified sensor data drive trend/SG alerts. Locked at 100%.
         "src/wearable-trust/**": { 100: true },
 
+        // Feature E.2 pure helpers (activity dedup + sleep category).
+        // Small, deterministic, dashboard/SG-facing. Locked at 100%.
+        "src/activity-aggregator/**": { 100: true },
+        "src/sleep-quality-classifier/**": { 100: true },
+
         // Payment webhook signature + tier transitions (Phase 4 §K).
         // Signature verification is the security boundary; the gate
         // mandates 100% branch coverage. Locked.

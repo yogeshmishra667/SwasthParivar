@@ -99,7 +99,7 @@ const asString = (v: unknown): string | undefined => (typeof v === "string" ? v 
  * Subscription row keyed by the Razorpay subscription id, else fall back
  * to `notes.user_id`/`notes.userId` set at create-subscription time.
  */
-const resolveUser = async (
+export const resolveUser = async (
   providerSubscriptionId: string | undefined,
   notes: Record<string, unknown> | undefined,
 ): Promise<{ userId: string; existing: Subscription | null } | null> => {
@@ -196,14 +196,26 @@ export const processRazorpayWebhook = async (
 
 interface ApplyInput {
   userId: string;
+  /** The webhook event vocabulary that drives the pure transition. */
   eventType: string;
   body: RazorpayBody;
   subEntity: RazorpaySubscriptionEntity | undefined;
   existing: Subscription | null;
   provider: SubscriptionProvider;
+  /**
+   * Label recorded verbatim in `PaymentEvent.eventType` when it should
+   * differ from `eventType` — the reconciliation cron replays webhook
+   * events but tags the audit row `reconcile:<status>` so ops can tell a
+   * correction from a real webhook. Defaults to `eventType`.
+   */
+  auditEventType?: string;
 }
 
-const applyRazorpayEvent = async (a: ApplyInput): Promise<RazorpayWebhookResult> => {
+// Exported so the reconciliation cron (Phase 4 §K) drives tier
+// transitions through the EXACT same atomic path as the webhook — one
+// upsert + optional tier write + PaymentEvent audit, in one transaction,
+// never deleting any patient-health row.
+export const applyRazorpayEvent = async (a: ApplyInput): Promise<RazorpayWebhookResult> => {
   const user = await prisma.user.findUnique({ where: { id: a.userId }, select: { tier: true } });
   const currentTier: SubscriptionTier = user?.tier ?? "free";
   // Validate rather than blind-cast: an unexpected `notes.tier` must not
@@ -264,7 +276,7 @@ const applyRazorpayEvent = async (a: ApplyInput): Promise<RazorpayWebhookResult>
       data: {
         userId: a.userId,
         provider: a.provider,
-        eventType: a.eventType,
+        eventType: a.auditEventType ?? a.eventType,
         rawPayload: a.body as unknown as Prisma.InputJsonValue,
         signatureValid: true,
         processedAt: new Date(),
@@ -276,8 +288,12 @@ const applyRazorpayEvent = async (a: ApplyInput): Promise<RazorpayWebhookResult>
     const reason =
       decision.action === "activate"
         ? "purchase"
-        : decision.action === "downgrade"
-          ? "refund"
+        : // A refund event downgrades for a refund; a
+          // completed/expired/lapsed downgrade is not a refund.
+          decision.action === "downgrade"
+          ? a.eventType.startsWith("refund")
+            ? "refund"
+            : "expired"
           : "cancelled";
     capture("tier_changed", a.userId, {
       from: currentTier,

@@ -38,6 +38,11 @@ import {
   bootstrapAppointmentReminderCron,
 } from "./appointment-reminder.worker.js";
 
+import {
+  razorpayReconciliationWorker,
+  bootstrapRazorpayReconciliationCron,
+} from "./razorpay-reconciliation.worker.js";
+
 import { generateReportWorker } from "./generate-report.worker.js";
 
 import { prescriptionOcrWorker } from "./prescription-ocr.worker.js";
@@ -69,6 +74,8 @@ const workers = [
   appointmentReminderWorker,
   generateReportWorker,
 
+  razorpayReconciliationWorker,
+
   prescriptionOcrWorker,
   prescriptionOcrDeltaWorker,
   prescriptionClarificationOcrWorker,
@@ -96,6 +103,8 @@ export const workerNames = [
 
   "appointment-reminder",
   "generate-pdf",
+
+  "razorpay-reconciliation",
 
   "prescription-ocr",
   "prescription-ocr-delta",
@@ -127,6 +136,9 @@ export const startWorkers = (): void => {
   );
   bootstrapAppointmentReminderCron().catch((err) =>
     logger.error({ err }, "failed to bootstrap appointment-reminder cron"),
+  );
+  bootstrapRazorpayReconciliationCron().catch((err) =>
+    logger.error({ err }, "failed to bootstrap razorpay-reconciliation cron"),
   );
   logger.info({ count: workers.length }, "workers started");
 };
