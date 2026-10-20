@@ -433,10 +433,14 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      # `pnpm exec` runs the lockfile-pinned devDependency installed above.
+      # Never `pnpm dlx danger`: that fetches the latest release on every
+      # run (danger@14.0.7 shipped without its `undici` dependency and broke
+      # this job on every PR).
       - name: Run Danger
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm dlx danger ci --dangerfile dangerfile.ts
+        run: pnpm exec danger ci --dangerfile dangerfile.ts
 
   # ──────────────────────────────────────────────────────────
   # Server image build + Trivy CVE scan + /health smoke. Builds the
