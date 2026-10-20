@@ -377,7 +377,9 @@ export interface EventPropsMap {
   tier_changed: {
     from: "free" | "premium" | "family";
     to: "free" | "premium" | "family";
-    reason: "purchase" | "renewal" | "cancelled" | "refund" | "past_due" | "grace";
+    // `expired` = the paid period lapsed (completed/expired, or the
+    // RAZORPAY_RECONCILIATION lapsed-cancellation downgrade).
+    reason: "purchase" | "renewal" | "cancelled" | "refund" | "past_due" | "grace" | "expired";
     provider: "razorpay" | "apple_iap" | "manual";
   };
   // Emitted once per signature-verified webhook the worker acts on.
@@ -386,6 +388,15 @@ export interface EventPropsMap {
     event_type: string;
     action: string;
     idempotent_replay: boolean;
+  };
+  // Phase 4 §K — one summary per RAZORPAY_RECONCILIATION run.
+  payment_reconciliation_completed: {
+    ran_api_pass: boolean;
+    scanned: number;
+    corrected: number;
+    lapsed_downgraded: number;
+    unresolved: number;
+    errors: number;
   };
 }
 
