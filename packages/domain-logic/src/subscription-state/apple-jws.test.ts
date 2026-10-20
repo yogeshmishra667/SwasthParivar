@@ -76,6 +76,7 @@ const makeChain = (dir: string, cn: string): Chain => {
 let dir: string;
 let chain: Chain;
 let otherRoot: Chain;
+let now: Date;
 
 const signJws = (payload: unknown, opts: { x5c?: string[]; alg?: string } = {}): string => {
   const header = { alg: opts.alg ?? "ES256", x5c: opts.x5c ?? chain.x5c };
@@ -92,11 +93,16 @@ beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), "apple-jws-"));
   chain = makeChain(dir, "apple");
   otherRoot = makeChain(dir, "evil");
+  // Capture `now` only AFTER both chains exist. openssl truncates
+  // notBefore to the second, so a `now` taken at file-load time can land
+  // before the "evil" certs' validity window when their generation
+  // crosses a second boundary — the broken-chain case then fails the
+  // validity check instead of the chain-link check, and the 100%
+  // subscription-state coverage ratchet flakes.
+  now = new Date();
 });
 
 describe("verifyAppleJws", () => {
-  const now = new Date();
-
   it("accepts a well-formed JWS signed by the trusted chain", () => {
     const jws = signJws({ notificationType: "SUBSCRIBED", hello: "world" });
     const res = verifyAppleJws(jws, chain.rootPem, now);
