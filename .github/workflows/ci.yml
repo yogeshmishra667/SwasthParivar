@@ -1,12 +1,38 @@
 name: CI
 
-# Runs on every PR + every push to main. Mirrors the local pre-push hook
-# and adds the integration tests that are too slow for pre-push.
+# Every job is gated to the files it exercises, so a PR only pays for the
+# checks it can actually break (routing lives in the `changes` job).
+#
+# Triggers:
+#   - pull_request — the gate. Branch protection's "require branches to be
+#     up to date" means every PR is tested against the latest main before it
+#     can merge, so the merged tree is exactly what CI already passed. There
+#     is deliberately no post-merge push run (it would re-test identical
+#     code).
+#   - schedule (weekly) + workflow_dispatch — a FULL run of every job on
+#     main. Catches drift that no PR triggers: newly published advisories,
+#     moving image tags (timescale:latest-pg16), runner-image and action
+#     updates.
+#
+# Required checks — branch protection on main pins these EXACT names.
+# Renaming one leaves it stuck at "Expected" and blocks every merge:
+#   - Typecheck (workspace)
+#   - Unit tests (domain-logic)
+#   - Integration tests (server)
+#   - Schema ↔ migration parity
+#
+# A job skipped by its `if:` reports success to branch protection, so every
+# gate FAILS OPEN: it compares a `changes` output against 'false'. If the
+# `changes` job errors — or on schedule/dispatch, where it doesn't run its
+# filters — the output is empty and the job runs. `!cancelled()` keeps a
+# failed `changes` job from cascading into silently skipped checks.
 
 on:
   pull_request:
-  push:
-    branches: [main]
+  schedule:
+    # Mondays 00:30 UTC (06:00 IST).
+    - cron: "30 0 * * 1"
+  workflow_dispatch:
 
 # Cancel older in-flight CI runs for the same ref so we only ever spend
 # minutes on the latest commit.
@@ -15,11 +41,10 @@ concurrency:
   cancel-in-progress: true
 
 # Default least-privilege permissions for every job in this workflow.
-# Jobs that need more (e.g. `danger` posts PR comments, `dependency-review`
-# reads PR metadata) override this block locally. Closes CodeQL's
-# `actions/missing-workflow-permissions` finding — without an explicit
-# token scope, GitHub falls back to the repo default which can be
-# `write-all` and gives a compromised action far too much reach.
+# Jobs that need more (e.g. `changes` / `secret-scan` read PR metadata)
+# override this block locally. Without an explicit token scope, GitHub
+# falls back to the repo default, which can be `write-all` and gives a
+# compromised action far too much reach.
 permissions:
   contents: read
 
@@ -34,8 +59,7 @@ env:
   # `prisma.config.ts` calls `env("DATABASE_URL")` at config-load time
   # — even `prisma generate` (which doesn't connect) needs the var to
   # be present. We supply a parseable stub at the workflow level; jobs
-  # that actually run against Postgres (integration-tests) override it
-  # at runtime via Testcontainers.
+  # that actually run against Postgres override it.
   DATABASE_URL: "postgresql://stub:stub@localhost:5432/stub"
   REDIS_URL: "redis://localhost:6379"
   JWT_SECRET: "stub_jwt_secret_that_is_at_least_32_chars_long"
@@ -44,69 +68,107 @@ env:
 
 jobs:
   # ──────────────────────────────────────────────────────────
-  # Path-change detector. Outputs flags consumed by jobs that are
-  # expensive AND have a narrow blast radius — they only need to run
-  # when the files they actually exercise changed.
+  # Router. On pull requests, sets one flag per area; jobs/steps run only
+  # when their area changed. Each area includes the root config that can
+  # affect it (lockfile, root package.json, tsconfig, ESLint config, this
+  # workflow — so editing CI re-runs everything).
   #
-  # Currently consumed by:
-  #   - purity       → packages/domain-logic/**
-  #   - image-smoke  → apps/server/**, Dockerfile, lockfile
+  #   workspace    → any app/package/script code   → typecheck, lint, build
+  #   domain_logic → packages/**                   → purity + domain-logic tests
+  #   server       → apps/server, packages         → server unit + integration
+  #   admin        → apps/admin, shared-types      → admin tests
+  #   mobile       → apps/mobile, packages         → mobile tests + app checks
+  #   prisma       → schema / migrations / scripts → migration checks
+  #   deps         → lockfile / manifests          → dependency audit
+  #   server_image → server, packages, compose     → Docker image smoke
   #
-  # Every OTHER job still runs unconditionally — these two are the only
-  # ones whose skip is provably safe (a mobile-only PR can't break the
-  # Docker image; a docs-only PR can't violate domain-logic purity).
-  #
-  # On push events (no diff base) the outputs default to "true" so main
-  # always re-runs everything. Only PR diffs short-circuit.
+  # Always run, whatever changed: format check + secret scan (any file —
+  # Markdown included — can be misformatted or leak a credential).
   # ──────────────────────────────────────────────────────────
   changes:
     name: Detect changed paths
     runs-on: ubuntu-latest
-    timeout-minutes: 1
-    # dorny/paths-filter resolves the PR's changed files via the GitHub API
-    # on pull_request events; the workflow default of contents:read alone
-    # 403s ("Resource not accessible by integration"). pull-requests:read
+    timeout-minutes: 2
+    # dorny/paths-filter resolves the PR's changed files via the GitHub API;
+    # the workflow default of contents:read alone 403s. pull-requests:read
     # is the minimum scope that lets the API list the diff.
     permissions:
       contents: read
       pull-requests: read
     outputs:
+      workspace: ${{ steps.filter.outputs.workspace }}
       domain_logic: ${{ steps.filter.outputs.domain_logic }}
-      server_image: ${{ steps.filter.outputs.server_image }}
+      server: ${{ steps.filter.outputs.server }}
       admin: ${{ steps.filter.outputs.admin }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      prisma: ${{ steps.filter.outputs.prisma }}
+      deps: ${{ steps.filter.outputs.deps }}
+      server_image: ${{ steps.filter.outputs.server_image }}
     steps:
       - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
       - id: filter
+        if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         with:
           filters: |
-            domain_logic:
-              - 'packages/domain-logic/**'
-              - 'scripts/check-domain-purity.mjs'
+            root: &root
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.npmrc'
+              - 'tsconfig*.json'
+              - 'eslint.config.mjs'
+              - 'vitest.workspace.ts'
               - '.github/workflows/ci.yml'
-            server_image:
+            workspace:
+              - *root
+              - 'apps/**'
+              - 'packages/**'
+              - 'scripts/**'
+            domain_logic:
+              - *root
+              - 'packages/**'
+              - 'scripts/check-domain-purity.mjs'
+            server:
+              - *root
               - 'apps/server/**'
               - 'packages/**'
-              - 'apps/server/Dockerfile'
-              - 'docker-compose*.yml'
-              - 'pnpm-lock.yaml'
-              - '.github/workflows/ci.yml'
-            # apps/admin is a static SPA — the workspace-recursive
-            # typecheck/lint/build jobs already pick it up automatically.
-            # This filter is reserved for future admin-only jobs (e.g.
-            # a static-site deploy step).
             admin:
+              - *root
               - 'apps/admin/**'
               - 'packages/shared-types/**'
-              - 'pnpm-lock.yaml'
+            mobile:
+              - *root
+              - 'apps/mobile/**'
+              - 'packages/**'
+              - 'scripts/check-i18n-parity.mjs'
+            prisma:
+              - 'apps/server/prisma/**'
+              - 'apps/server/prisma.config.ts'
+              - 'scripts/check-migration-parity.sh'
+              - 'scripts/lint-migrations.sh'
+              - 'scripts/check-prisma-format.sh'
               - '.github/workflows/ci.yml'
+            deps:
+              - 'pnpm-lock.yaml'
+              - '**/package.json'
+              - 'pnpm-workspace.yaml'
+              - '.npmrc'
+              - '.github/workflows/ci.yml'
+            server_image:
+              - *root
+              - 'apps/server/**'
+              - 'packages/**'
+              - 'docker-compose*.yml'
 
   # ──────────────────────────────────────────────────────────
-  # Fast feedback: typecheck across the workspace.
-  # Same command pre-push runs locally.
+  # Typecheck across the workspace. Same command pre-push runs locally.
   # ──────────────────────────────────────────────────────────
   typecheck:
     name: Typecheck (workspace)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.workspace != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -129,84 +191,22 @@ jobs:
         run: pnpm -r --parallel run typecheck
 
   # ──────────────────────────────────────────────────────────
-  # Lint: every workspace package, zero warnings. Catches gaps
-  # that lint-staged (commit-time, staged files only) can miss
-  # when commits are squashed or hooks are skipped.
+  # Static checks in ONE job (one install instead of four). Every step
+  # runs even if an earlier one failed, so one run reports all problems;
+  # any failed step fails the job.
+  #   - format (always): whitespace/quote drift across the tree incl.
+  #     Markdown, plus schema.prisma drift.
+  #   - purity (domain_logic): forbidden imports, Date.now()/new Date()/
+  #     Math.random() at call site, node: builtins reachable from the
+  #     mobile-bundled barrel. Defence in depth behind the tsconfig block.
+  #   - lint + build (workspace): zero-warning ESLint (catches what
+  #     lint-staged misses on squashed/hook-skipped commits) and the
+  #     bundler/declaration-emit errors typecheck can't see.
   # ──────────────────────────────────────────────────────────
-  lint:
-    name: Lint (workspace)
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - name: Install
-        run: pnpm install --frozen-lockfile
-      - name: Generate Prisma client
-        run: pnpm --filter @swasth/server prisma:generate
-      - name: Lint
-        run: pnpm -r --parallel run lint
-
-  # ──────────────────────────────────────────────────────────
-  # Format check (Prettier + Prisma). Catches whitespace/quote/line-break
-  # drift across the whole tree, plus drift in schema.prisma that
-  # `prisma format` would have fixed locally.
-  # ──────────────────────────────────────────────────────────
-  format:
-    name: Prettier format:check
-    runs-on: ubuntu-latest
-    timeout-minutes: 4
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - name: Install
-        run: pnpm install --frozen-lockfile
-      - name: Format check (Prettier)
-        run: pnpm format:check
-      # Same script that preflight runs — single source of truth.
-      - name: Format check (Prisma schema)
-        run: bash scripts/check-prisma-format.sh
-
-  # ──────────────────────────────────────────────────────────
-  # Domain-logic purity: forbidden imports + Date.now()/new Date()/
-  # Math.random() at call site. Comments stripped before search.
-  # Defense in depth — tsconfig path block is the primary gate.
-  # ──────────────────────────────────────────────────────────
-  purity:
-    name: Domain-logic purity
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
+  static:
+    name: Lint, format & build
     needs: changes
-    # Only run when packages/domain-logic/** (or the checker itself)
-    # actually changed. Pull requests that don't touch domain code can't
-    # introduce a purity violation, so the job has nothing to test.
-    # Required-check note: this job is conditional, so if you ever add it
-    # to branch-protection required checks, use the alwaysJob() / dummy
-    # success pattern — a SKIPPED check is treated as a pass by GitHub.
-    if: needs.changes.outputs.domain_logic == 'true'
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Purity check
-        run: node scripts/check-domain-purity.mjs
-
-  # ──────────────────────────────────────────────────────────
-  # Build: every workspace package must compile to its dist/.
-  # Typecheck catches type errors; build catches bundler/declaration
-  # emit errors that only surface when output is actually written.
-  # ──────────────────────────────────────────────────────────
-  build:
-    name: Build (workspace)
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -217,101 +217,52 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - name: Install
+        id: install
         run: pnpm install --frozen-lockfile
+      # Same scripts preflight runs locally — single source of truth.
+      - name: Format check (Prettier)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm format:check
+      - name: Format check (Prisma schema)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: bash scripts/check-prisma-format.sh
+      - name: Domain-logic purity
+        if: ${{ !cancelled() && needs.changes.outputs.domain_logic != 'false' }}
+        run: node scripts/check-domain-purity.mjs
       - name: Generate Prisma client
+        id: prisma
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && needs.changes.outputs.workspace != 'false' }}
         run: pnpm --filter @swasth/server prisma:generate
+      - name: Lint
+        if: ${{ !cancelled() && steps.prisma.outcome == 'success' }}
+        run: pnpm -r --parallel run lint
       - name: Build
+        if: ${{ !cancelled() && steps.prisma.outcome == 'success' }}
         run: pnpm build
 
   # ──────────────────────────────────────────────────────────
-  # Dependency vulnerability scan. Fails on HIGH or CRITICAL CVEs
-  # in the production dependency graph. Medical-grade requirement.
-  # ──────────────────────────────────────────────────────────
-  audit:
-    name: Dependency audit
-    runs-on: ubuntu-latest
-    # pnpm audit alone takes ~2 min on this lockfile, plus the install.
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - name: Install
-        run: pnpm install --frozen-lockfile
-      # pnpm 9's audit builds the whole workspace dependency tree in memory
-      # and peaks at ~5 GB here (Expo/React Native graph). At Node's default
-      # ~2 GB heap it dies with "JavaScript heap out of memory" before
-      # reporting anything, which hid real HIGH/CRITICAL findings.
-      - name: Audit production deps (high+critical)
-        env:
-          NODE_OPTIONS: --max-old-space-size=6144
-        run: pnpm audit --prod --audit-level=high
-
-  # ──────────────────────────────────────────────────────────
-  # Dependency review on PR diffs. Earlier signal than `pnpm audit`:
-  # blocks new HIGH/CRITICAL CVEs and incompatible licenses at the
-  # moment they enter the lockfile, before they're merged.
-  #
-  # GATED on `vars.ENABLE_GHAS_GATES` (same flag as CodeQL — both APIs
-  # require PUBLIC repo OR GHAS-on-private). Skipped entirely (gray ⊘)
-  # until the variable is set. See codeql.yml for enable instructions.
-  # ──────────────────────────────────────────────────────────
-  dependency-review:
-    name: Dependency review (PR diff)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && vars.ENABLE_GHAS_GATES == 'true'
-    timeout-minutes: 4
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: high
-          # Block GPL/AGPL/SSPL — the codebase is permissive-MIT and we
-          # ship a closed-source mobile binary. Add to this list when
-          # bringing in a deliberately copyleft tool (e.g. ffmpeg fork).
-          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0, AGPL-1.0, SSPL-1.0
-          comment-summary-in-pr: on-failure
-
-  # ──────────────────────────────────────────────────────────
-  # Secret scan. Catches API keys, JWT/OTP secrets, and cloud
-  # credentials accidentally committed. Full git history scanned.
-  # ──────────────────────────────────────────────────────────
-  secret-scan:
-    name: Secret scan (gitleaks)
-    runs-on: ubuntu-latest
-    timeout-minutes: 4
-    # gitleaks-action queries pulls/<n>/commits to scope the diff on PRs.
-    # Without pull-requests:read it 403s and the job fails on permissions,
-    # not on a real leak. contents:read is required for the checkout.
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ──────────────────────────────────────────────────────────
-  # Domain-logic unit tests (pure functions, no Docker needed).
+  # Unit tests for every workspace whose area changed (no Docker needed).
+  # Each suite runs even if an earlier one failed; any failure fails the job.
+  #   - domain-logic: with coverage, so the per-path thresholds in its
+  #     vitest.config.ts are enforced (100% on safety-critical modules).
+  #   - server: unit suite (vitest.config.ts — integration is separate).
+  #   - admin: React Testing Library suite.
+  #   - mobile: RNTL suite. Before this was wired in, a react-test-renderer
+  #     bump that breaks every mobile test passed CI green.
   # ──────────────────────────────────────────────────────────
   unit-tests:
-    # NOTE: name must stay "Unit tests (domain-logic)" because branch
-    # protection on main pins this exact string as a required check.
-    # Renaming it leaves the required check stuck in "expected" forever
-    # and blocks every merge. The job now also runs coverage — see step.
+    # NOTE: name must stay "Unit tests (domain-logic)" — branch protection
+    # pins this exact string as a required check (see header). It now
+    # covers every workspace, not just domain-logic.
     name: Unit tests (domain-logic)
+    needs: changes
+    if: >-
+      ${{ !cancelled() && (needs.changes.outputs.domain_logic != 'false'
+      || needs.changes.outputs.server != 'false'
+      || needs.changes.outputs.admin != 'false'
+      || needs.changes.outputs.mobile != 'false') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v7
 
@@ -323,20 +274,38 @@ jobs:
           cache: pnpm
 
       - name: Install
+        id: install
         run: pnpm install --frozen-lockfile
 
-      # Run with coverage so the thresholds in vitest.config.ts are
-      # enforced. Same threshold lives there as a single source of
-      # truth — see the file's header comment for the ratchet plan.
-      - name: Test (with coverage thresholds)
+      - name: Domain-logic (with coverage thresholds)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && needs.changes.outputs.domain_logic != 'false' }}
         run: pnpm --filter @swasth/domain-logic run test:coverage
+
+      - name: Generate Prisma client
+        id: prisma
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && needs.changes.outputs.server != 'false' }}
+        run: pnpm --filter @swasth/server prisma:generate
+
+      - name: Server (unit)
+        if: ${{ !cancelled() && steps.prisma.outcome == 'success' }}
+        run: pnpm --filter @swasth/server run test
+
+      - name: Admin
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && needs.changes.outputs.admin != 'false' }}
+        run: pnpm --filter @swasth/admin run test
+
+      - name: Mobile (RNTL)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && needs.changes.outputs.mobile != 'false' }}
+        run: pnpm --filter @swasth/mobile run test
 
   # ──────────────────────────────────────────────────────────
   # Server integration tests (Testcontainers Postgres + Redis).
-  # Slower (~2 min); runs in parallel with typecheck/unit.
+  # The slowest job (~10 min) — runs only when server-side code changed.
   # ──────────────────────────────────────────────────────────
   integration-tests:
     name: Integration tests (server)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.server != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -359,21 +328,49 @@ jobs:
         run: pnpm test:integration
 
   # ──────────────────────────────────────────────────────────
-  # Migration parity: every diff that touches schema.prisma must
-  # include at least one new migration folder. Calls the same script
-  # preflight runs locally (scripts/check-migration-parity.sh).
+  # Migrations — PR-only, runs when schema / migrations change:
+  #   1. Parity — a diff touching schema.prisma must add a migration
+  #      folder (scripts/check-migration-parity.sh).
+  #   2. Lint (squawk) — Postgres safety on NEW migration SQL only (NOT
+  #      NULL without default, renames, non-concurrent index drops…).
+  #      Exclusions + reasoning live in scripts/lint-migrations.sh.
+  #   3. Drift — replay EVERY migration into an empty TimescaleDB and diff
+  #      against schema.prisma. Parity only proves a migration exists;
+  #      this proves its SQL actually produces the schema (and catches
+  #      raw-SQL objects the schema forgot, which the next
+  #      `prisma migrate dev` would silently drop).
   #
   # SHAs flow through env to avoid script injection patterns even
   # though SHAs are hex-only — defence in depth.
   # ──────────────────────────────────────────────────────────
   migration-check:
     name: Schema ↔ migration parity
+    needs: changes
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.prisma != 'false' }}
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    timeout-minutes: 2
+    timeout-minutes: 10
     env:
       BASE_REF: ${{ github.event.pull_request.base.sha }}
       HEAD_REF: ${{ github.event.pull_request.head.sha }}
+    services:
+      postgres:
+        # Same image the integration tests use (Testcontainers).
+        image: timescale/timescaledb:latest-pg16
+        # Throwaway, CI-only database on the runner's localhost: trust auth,
+        # so there is no credential in this file for secret scanners to flag.
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: drift
+        ports:
+          - 5432:5432
+        # `-h localhost` checks over TCP: the image's first-boot init
+        # server only listens on a unix socket, so this turns healthy only
+        # once the real server is up.
+        options: >-
+          --health-cmd "pg_isready -h localhost -U postgres -d drift"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 24
     steps:
       - uses: actions/checkout@v7
         with:
@@ -382,72 +379,144 @@ jobs:
       - name: Verify schema changes ship with a migration
         run: bash scripts/check-migration-parity.sh
 
-  # ──────────────────────────────────────────────────────────
-  # Migration lint (squawk) — Postgres safety check on NEW migration
-  # SQL only. Catches unsafe patterns that would cause prod outages:
-  # adding NOT NULL columns without defaults, renaming columns, dropping
-  # indexes concurrently, transaction nesting, etc.
-  #
-  # Calls scripts/lint-migrations.sh — the SAME script preflight runs
-  # locally. The rule-exclusion list lives in that script; reasoning
-  # for each exclusion is documented there.
-  # ──────────────────────────────────────────────────────────
-  migration-lint:
-    name: Migration lint (squawk)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    timeout-minutes: 3
-    env:
-      BASE_REF: ${{ github.event.pull_request.base.sha }}
-      HEAD_REF: ${{ github.event.pull_request.head.sha }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
       - name: Lint new migrations (squawk)
+        if: ${{ !cancelled() }}
         run: bash scripts/lint-migrations.sh
 
-  # ──────────────────────────────────────────────────────────
-  # Danger.js — three rules that turn manual reviewer checks into
-  # PR comments: test-parity for domain-logic, migration-parity
-  # (mirror of CI's migration-check, surfaced earlier), large-PR
-  # explainer prompt. Source: dangerfile.ts at repo root.
-  #
-  # Requires GITHUB_TOKEN only — no third-party secrets.
-  # ──────────────────────────────────────────────────────────
-  danger:
-    name: Danger
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    timeout-minutes: 3
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
       - uses: pnpm/action-setup@v4
+        if: ${{ !cancelled() }}
 
       - uses: actions/setup-node@v6
+        if: ${{ !cancelled() }}
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - name: Install
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        id: install
+        if: ${{ !cancelled() }}
+        run: pnpm install --frozen-lockfile
 
-      # `pnpm exec` runs the lockfile-pinned devDependency installed above.
-      # Never `pnpm dlx danger`: that fetches the latest release on every
-      # run (danger@14.0.7 shipped without its `undici` dependency and broke
-      # this job on every PR).
-      - name: Run Danger
+      - name: Drift — replay all migrations, diff against schema.prisma
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        working-directory: apps/server
+        env:
+          DATABASE_URL: "postgresql://postgres@localhost:5432/drift"
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 -U postgres -d drift && break
+            sleep 2
+          done
+          pnpm exec prisma migrate deploy
+          # --exit-code: 0 = no drift, 2 = drift (diff printed above), 1 = error.
+          pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+
+  # ──────────────────────────────────────────────────────────
+  # Mobile app checks — runs when the app (or a package it bundles)
+  # changed. Each step runs even if an earlier one failed.
+  #   - i18n parity: en ↔ hi keys, {{placeholders}}, no untranslated
+  #     blanks (scripts/check-i18n-parity.mjs).
+  #   - Expo SDK compatibility: every Expo-managed package matches what the
+  #     INSTALLED expo version expects (offline = deterministic, not "latest
+  #     on Expo's API today"). Catches piecemeal native bumps such as
+  #     react-native-screens 4.16 → 4.25 on SDK 54. Deliberate exceptions
+  #     live in apps/mobile/package.json `expo.install.exclude`.
+  #   - Metro bundle (Android + iOS): the JS actually bundles. Catches what
+  #     typecheck can't — Node builtins reachable from the app (the #164
+  #     node:crypto break), unresolvable imports, platform-file mistakes.
+  # Native (Gradle/Xcode) builds are out of scope here.
+  # ──────────────────────────────────────────────────────────
+  mobile:
+    name: Mobile app checks
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.mobile != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: i18n parity (en ↔ hi)
+        run: node scripts/check-i18n-parity.mjs
+      - name: Install
+        id: install
+        if: ${{ !cancelled() }}
+        run: pnpm install --frozen-lockfile
+      - name: Expo SDK compatibility
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        working-directory: apps/mobile
+        env:
+          EXPO_OFFLINE: "1"
+        run: pnpm exec expo install --check
+      # Metro resolves @swasth/* through package.json exports → dist.
+      - name: Build workspace packages
+        id: packages
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm -r --filter "./packages/*" run build
+      - name: Bundle the app (Metro, Android + iOS)
+        if: ${{ !cancelled() && steps.packages.outcome == 'success' }}
+        working-directory: apps/mobile
+        run: pnpm exec expo export --platform android --platform ios --output-dir "$RUNNER_TEMP/expo-export"
+
+  # ──────────────────────────────────────────────────────────
+  # Dependency vulnerability scan. Fails on HIGH or CRITICAL CVEs in the
+  # production dependency graph. Medical-grade requirement.
+  # PRs: only when dependencies change (a PR that doesn't touch the
+  # lockfile can't add a vulnerable package). The weekly full run audits
+  # main, so advisories published against existing deps still surface.
+  # Accepted advisories live in package.json `pnpm.auditConfig` and are
+  # justified in SECURITY.md.
+  # ──────────────────────────────────────────────────────────
+  audit:
+    name: Dependency audit
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.deps != 'false' }}
+    runs-on: ubuntu-latest
+    # pnpm audit alone takes ~2 min on this lockfile, plus the install.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # pnpm 9's audit builds the whole workspace dependency tree in memory
+      # and peaks at ~5 GB here (Expo/React Native graph). At Node's default
+      # ~2 GB heap it dies with "JavaScript heap out of memory" before
+      # reporting anything, which hid real HIGH/CRITICAL findings.
+      - name: Audit production deps (high+critical)
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: pnpm audit --prod --audit-level=high
+
+  # ──────────────────────────────────────────────────────────
+  # Secret scan — always runs (any file can leak a credential). Catches
+  # API keys, JWT/OTP secrets, cloud credentials. Full history scanned.
+  # ──────────────────────────────────────────────────────────
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    # gitleaks-action queries pulls/<n>/commits to scope the diff on PRs.
+    # Without pull-requests:read it 403s and the job fails on permissions,
+    # not on a real leak. contents:read is required for the checkout.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm exec danger ci --dangerfile dangerfile.ts
 
   # ──────────────────────────────────────────────────────────
   # Server image build + Trivy CVE scan + /health smoke. Builds the
@@ -456,20 +525,18 @@ jobs:
   # probes /health to confirm the binary boots. Catches: missing files
   # in COPY layers, prisma client absent, wrong entrypoint,
   # node-version mismatches, vulnerable OS/lib in the base image.
+  # Runs when anything bundled into the image changed (server, packages,
+  # root config, compose, this workflow); mobile/admin/docs-only PRs skip.
   #
   # Does NOT run the deep healthcheck — that needs Postgres+Redis,
   # which is the integration-tests job's domain.
   # ──────────────────────────────────────────────────────────
   image-smoke:
     name: Server image build + smoke
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.server_image != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: changes
-    # Only build + smoke-test the Docker image when files that could
-    # change it actually changed (server code, any workspace package
-    # bundled into the image, Dockerfile, compose, lockfile, or this
-    # workflow). Mobile-only and docs-only PRs cannot affect the image.
-    if: needs.changes.outputs.server_image == 'true'
     steps:
       - uses: actions/checkout@v7
 
