@@ -246,23 +246,29 @@ const METRICS: readonly AdminMetric[] = [
     key: "critical_bypass_sms_success_rate",
     label: "Critical-bypass SMS success rate",
     description:
-      "URGENT ops metric — share of critical-low/high alerts whose SMS fallback was delivered.",
+      "URGENT ops metric — of the critical alerts that needed an SMS, the share whose SMS was delivered.",
     source: "posthog",
-    note: `${POSTHOG_NOTE} Event: critical_bypass_triggered{sms_success}.`,
+    note: `${POSTHOG_NOTE} Event: critical_bypass_triggered{sms_triggered, sms_success}.`,
     compute: async () => {
+      // Denominator = alerts where an SMS was actually attempted. Alerts
+      // fully reached by push, or inside the cooldown, send no SMS — counting
+      // them made a healthy system read as failing and diluted real SMS
+      // outages (audit D1).
       const q = `
         SELECT
-          count() as total,
-          countIf(properties.sms_success = 'true') as success
+          countIf(properties.sms_triggered = 'true') as attempted,
+          countIf(properties.sms_triggered = 'true' AND properties.sms_success = 'true') as success,
+          count() as alerts
         FROM events
         WHERE event = 'critical_bypass_triggered'
         AND timestamp >= toStartOfDay(now() - INTERVAL 30 DAY)
       `;
-      const res = await executeHogQL<[number, number]>(q);
+      const res = await executeHogQL<[number, number, number]>(q);
       if (!res) return null; // Unwired
       const total = res.results[0]?.[0] ?? 0;
       const success = res.results[0]?.[1] ?? 0;
-      return { total, success, rate: total > 0 ? success / total : 0 };
+      const alerts = res.results[0]?.[2] ?? 0;
+      return { total, success, alerts, rate: total > 0 ? success / total : null };
     },
   },
   {

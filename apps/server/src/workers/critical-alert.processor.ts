@@ -4,6 +4,7 @@ import type { Job, Queue } from "bullmq";
 import type { Language } from "@prisma/client";
 import { isTest } from "../config/env.js";
 import { createQueue, QUEUE_NAMES } from "../shared/queue.js";
+import { withTimeout } from "../shared/with-timeout.js";
 import { logger } from "../shared/logger.js";
 import { prisma } from "../shared/database.js";
 import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
@@ -354,20 +355,32 @@ const pageIfUndelivered = (
  * parallel branch that reuses the push/SMS helpers but speaks the
  * category-specific copy bundle.
  */
-export const processCriticalAlert = async (job: Job<CriticalAlertJob>): Promise<void> => {
+/**
+ * The processor reads only `id` and `data`, so the in-process fallback
+ * (`critical-alert.enqueue.ts`) can call it without a real BullMQ Job.
+ */
+export type CriticalAlertJobRef<T extends CriticalAlertJob = CriticalAlertJob> = Pick<
+  Job<T>,
+  "id" | "data"
+>;
+
+export const processCriticalAlert = async (job: CriticalAlertJobRef): Promise<void> => {
   const data = job.data;
   if (data.category === "cardiac" || data.category === "respiratory") {
-    await processMultiCategoryCriticalAlert(job as Job<CriticalAlertMultiCategoryJob>, data);
+    await processMultiCategoryCriticalAlert(
+      job as CriticalAlertJobRef<CriticalAlertMultiCategoryJob>,
+      data,
+    );
     return;
   }
   await processGlucoseCriticalAlert(
-    job as Job<CriticalAlertGlucoseJob>,
+    job as CriticalAlertJobRef<CriticalAlertGlucoseJob>,
     data as CriticalAlertGlucoseJob,
   );
 };
 
 const processGlucoseCriticalAlert = async (
-  job: Job<CriticalAlertGlucoseJob>,
+  job: CriticalAlertJobRef<CriticalAlertGlucoseJob>,
   data: CriticalAlertGlucoseJob,
 ): Promise<void> => {
   const { decision, userId, readingId, requestId } = data;
@@ -533,7 +546,7 @@ const buildMultiCategoryCopy = (
 };
 
 const processMultiCategoryCriticalAlert = async (
-  job: Job<CriticalAlertMultiCategoryJob>,
+  job: CriticalAlertJobRef<CriticalAlertMultiCategoryJob>,
   data: CriticalAlertMultiCategoryJob,
 ): Promise<void> => {
   const { dispatch, userId, readingId, copyParams, category, requestId } = data;
@@ -649,13 +662,37 @@ export interface CriticalBypassAutoEscalateJob {
   readonly requestId?: string;
 }
 
+const ESCALATION_SCHEDULE_TIMEOUT_MS = 2_000;
+
+/**
+ * Runs AFTER push + SMS went out, so it must never fail the dispatch: a
+ * throw here would make BullMQ (or the in-process fallback) retry the
+ * whole job and re-alert the family (P5 review N1). A lost escalation is
+ * paged instead.
+ */
 const scheduleCriticalBypassAutoEscalation = async (
   job: CriticalBypassAutoEscalateJob,
 ): Promise<void> => {
-  await autoEscalateQueue().add(QUEUE_NAMES.CRITICAL_BYPASS_AUTO_ESCALATE, job, {
-    delay: FIVE_MINUTES_MS,
-    // Idempotent: per-reading single job in flight. A duplicate
-    // critical-bypass dispatch (retries) collapses.
-    jobId: `critbypass-escalate-${job.readingId}`,
-  });
+  try {
+    await withTimeout(
+      autoEscalateQueue().add(QUEUE_NAMES.CRITICAL_BYPASS_AUTO_ESCALATE, job, {
+        delay: FIVE_MINUTES_MS,
+        // Idempotent: per-reading single job in flight. A duplicate
+        // critical-bypass dispatch (retries) collapses.
+        jobId: `critbypass-escalate-${job.readingId}`,
+      }),
+      ESCALATION_SCHEDULE_TIMEOUT_MS,
+      "escalation schedule",
+    );
+  } catch (err) {
+    logger.error(
+      { err, userId: job.userId, readingId: job.readingId },
+      "critical-alert: SOS auto-escalation not scheduled",
+    );
+    captureUnhandled(err, {
+      userId: job.userId,
+      readingId: job.readingId,
+      stage: "critical_alert_escalation_schedule",
+    });
+  }
 };
