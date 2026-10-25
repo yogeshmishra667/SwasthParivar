@@ -13,6 +13,7 @@ export interface SmsResult {
 }
 
 const MSG91_ENDPOINT = "https://api.msg91.com/api/v5/flow/";
+const REQUEST_TIMEOUT_MS = 10_000;
 
 export const sendSms = async (msg: SmsMessage): Promise<SmsResult> => {
   if (!env.MSG91_API_KEY || !env.MSG91_SENDER_ID) {
@@ -35,6 +36,7 @@ export const sendSms = async (msg: SmsMessage): Promise<SmsResult> => {
         country: "91",
         sms: [{ message: msg.message, to: [phone] }],
       }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     if (!res.ok) {

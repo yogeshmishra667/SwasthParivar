@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { BypassDecision, MultiCategoryBypassDispatch } from "@swasth/domain-logic";
 import type { Job, Queue } from "bullmq";
 import type { Language } from "@prisma/client";
+import { isTest } from "../config/env.js";
 import { createQueue, QUEUE_NAMES } from "../shared/queue.js";
 import { logger } from "../shared/logger.js";
 import { prisma } from "../shared/database.js";
@@ -87,52 +88,259 @@ const smsCopy = (
   return `SwasthParivar ALERT: ${patientName} ka sugar BAHUT ${label} hai (${valueMgDl} mg/dL). Turant call karein.`;
 };
 
-const resolveGuardianPushTokens = async (
-  userId: string,
-  guardianContactIds: string[],
-): Promise<string[]> => {
-  // The patient's OWN device must always receive the fullscreen-alert
-  // push — that's how CriticalAlert.tsx triggers in the foreground/
-  // background. Guardian contacts ADD to this set; their absence does
-  // NOT skip the patient's own device. Previously this whole function
-  // short-circuited to `[]` when there were no guardian contacts, which
-  // meant a solo patient (no family link) never got the alert push and
-  // had to notice the reading visually.
-  const patientHouseholdIds = await householdUserIds(userId);
+interface PushRecipients {
+  /** Every token to push — patient household + guardian contacts, de-duplicated. */
+  readonly tokens: string[];
+  /**
+   * Guardian contactId → tokens owned by the user whose phone IS that
+   * contact's phone. Only these tokens prove the contact was reached —
+   * the patient's own device never does (P1).
+   */
+  readonly tokensByContact: ReadonlyMap<string, ReadonlySet<string>>;
+}
 
-  // Guardian-contact resolution is conditional — only runs when contacts
-  // were actually passed in.
-  let guardianUserIds: string[] = [];
+const resolvePushRecipients = async (
+  userId: string,
+  guardianContactIds: readonly string[],
+): Promise<PushRecipients> => {
+  // The patient's OWN device always receives the alert push, so the
+  // alert shows on the patient's phone. Guardian contacts ADD to this set;
+  // their absence does NOT skip the patient's own device (a solo patient
+  // with no family link still gets the push).
+  const patientHouseholdIds = await householdUserIds(userId);
+  // A contact whose phone belongs to the patient's own household (a
+  // sub-profile's auto-seeded primary contact, or a patient who saved
+  // their own number) shares the patient's device, so a push there never
+  // proves that person was reached — they are texted instead.
+  const ownHousehold = new Set(patientHouseholdIds);
+
+  // contactId → userIds whose phone matches the contact's phone.
+  const contactUserIds = new Map<string, string[]>();
   if (guardianContactIds.length > 0) {
     const contacts = await prisma.emergencyContact.findMany({
-      where: { id: { in: guardianContactIds } },
-      select: { phone: true },
+      where: { id: { in: [...guardianContactIds] } },
+      select: { id: true, phone: true },
     });
-    const phones = contacts.map((c) => c.phone);
-    if (phones.length > 0) {
-      const guardianUsers = await prisma.user.findMany({
-        where: { phone: { in: phones } },
-        select: { id: true },
-      });
-      guardianUserIds = guardianUsers.map((u) => u.id);
+    const users =
+      contacts.length > 0
+        ? await prisma.user.findMany({
+            where: { phone: { in: contacts.map((c) => c.phone) } },
+            select: { id: true, phone: true },
+          })
+        : [];
+    for (const contact of contacts) {
+      contactUserIds.set(
+        contact.id,
+        users.filter((u) => u.phone === contact.phone && !ownHousehold.has(u.id)).map((u) => u.id),
+      );
     }
   }
 
-  const tokens = await prisma.pushToken.findMany({
-    where: { userId: { in: [...guardianUserIds, ...patientHouseholdIds] } },
-    select: { token: true },
+  const allUserIds = [...new Set([...patientHouseholdIds, ...[...contactUserIds.values()].flat()])];
+  const tokenRows = await prisma.pushToken.findMany({
+    where: { userId: { in: allUserIds } },
+    select: { token: true, userId: true },
   });
 
-  return [...new Set(tokens.map((t) => t.token))];
+  const tokensByContact = new Map<string, ReadonlySet<string>>();
+  for (const [contactId, ids] of contactUserIds) {
+    tokensByContact.set(
+      contactId,
+      new Set(tokenRows.filter((t) => ids.includes(t.userId)).map((t) => t.token)),
+    );
+  }
+  return { tokens: [...new Set(tokenRows.map((t) => t.token))], tokensByContact };
 };
 
-const resolveSmsTargets = async (smsContactIds: string[]): Promise<SmsMessage["phone"][]> => {
-  if (smsContactIds.length === 0) return [];
-  const contacts = await prisma.emergencyContact.findMany({
-    where: { id: { in: smsContactIds } },
-    select: { phone: true },
-  });
-  return contacts.map((c) => c.phone);
+interface FanOutInput {
+  readonly userId: string;
+  readonly triggerPush: boolean;
+  readonly triggerSmsFallback: boolean;
+  /** Guardian contactIds (push-capable) — from the bypass decision. */
+  readonly pushTargets: readonly string[];
+  /** Every emergency contactId in priority order — from the bypass decision. */
+  readonly smsTargets: readonly string[];
+  readonly buildPushMessage: (token: string) => ExpoPushMessage;
+  readonly smsText: string;
+  readonly log: typeof logger;
+  /** Extra props for the push_zero_recipients analytics event. */
+  readonly analytics: { readonly category?: "cardiac" | "respiratory" };
+}
+
+interface FanOutResult {
+  readonly pushSuccessCount: number;
+  /** Contacts whose OWN device received the push. */
+  readonly contactsReachedByPush: number;
+  /** Contacts not reached by push, so texted instead. */
+  readonly smsContacts: number;
+  /** An SMS was actually attempted (some texted contact still exists). */
+  readonly smsTriggered: boolean;
+  readonly smsSuccessCount: number;
+  /** Contacts whose SMS still failed after every retry. */
+  readonly smsFailedCount: number;
+}
+
+// CLAUDE.md "Fallback Mechanisms": SMS fails → retry 3x. One backoff per
+// retry; only the contacts whose SMS failed are re-sent.
+const SMS_RETRY_BACKOFF_MS = [1_000, 2_000, 4_000] as const;
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** Sends one SMS per contact, retrying failures. Returns the contactIds delivered. */
+const sendSmsWithRetry = async (
+  contacts: readonly { id: string; phone: string }[],
+  text: string,
+): Promise<ReadonlySet<string>> => {
+  const delivered = new Set<string>();
+  let pending = contacts;
+  for (const backoffMs of [0, ...SMS_RETRY_BACKOFF_MS]) {
+    if (backoffMs > 0) await sleep(isTest ? 0 : backoffMs);
+    // sendSmsBatch returns one result per message, in message order.
+    const results = await sendSmsBatch(pending.map((c) => ({ phone: c.phone, message: text })));
+    pending = pending.filter((c, i) => {
+      const r = results[i];
+      if (r?.success === true) {
+        delivered.add(c.id);
+        return false;
+      }
+      // Retrying cannot fix a missing MSG91 configuration.
+      return r?.errorCode !== "NOT_CONFIGURED";
+    });
+    if (pending.length === 0) break;
+  }
+  return delivered;
+};
+
+/**
+ * Push + SMS fan-out shared by every critical-bypass category.
+ *
+ * CLAUDE.md edge case #3: push to every guardian contact who has the app;
+ * SMS to every contact the push did NOT reach. A contact counts as reached
+ * only when a push succeeded to a device owned by the user whose phone is
+ * that contact's phone. The patient's own device always gets the push but
+ * never counts as reaching a contact —
+ * previously one successful push to the patient's phone suppressed SMS to
+ * every emergency contact, including those without the app (P1).
+ */
+const fanOutCriticalAlert = async (input: FanOutInput): Promise<FanOutResult> => {
+  const { userId, log } = input;
+  const reachedContactIds = new Set<string>();
+  let pushSuccessCount = 0;
+
+  if (input.triggerPush) {
+    try {
+      const { tokens, tokensByContact } = await resolvePushRecipients(userId, input.pushTargets);
+      if (tokens.length > 0) {
+        // sendExpoPush returns one result per message, in message order.
+        const results = await sendExpoPush(tokens.map(input.buildPushMessage));
+        const delivered = new Set(tokens.filter((_, i) => results[i]?.success === true));
+        pushSuccessCount = delivered.size;
+        for (const [contactId, contactTokens] of tokensByContact) {
+          if ([...contactTokens].some((t) => delivered.has(t))) reachedContactIds.add(contactId);
+        }
+      } else {
+        // Distinguish "no recipients at all" (patient + guardians both have
+        // zero tokens — usually the device never registered) from "guardian
+        // contacts unreachable". Both fall through to SMS.
+        const reason =
+          input.pushTargets.length === 0
+            ? "no_tokens_in_household"
+            : "no_tokens_for_resolved_recipients";
+        log.warn(
+          { userId, guardianContacts: input.pushTargets.length, reason },
+          "critical-alert: zero push tokens — falling through to SMS",
+        );
+        const householdSize = (await householdUserIds(userId)).length;
+        captureAnalyticsEvent("push_zero_recipients", userId, {
+          surface: "critical_alert",
+          ...input.analytics,
+          reason,
+          household_size: householdSize,
+        });
+      }
+    } catch (err) {
+      // A push-stage failure (token lookup, Expo client) must never cost
+      // the SMS fallback: every contact counts as unreached and is texted.
+      log.error({ err, userId }, "critical-alert: push stage failed — falling through to SMS");
+      captureUnhandled(err, { userId, stage: "critical_alert_push" });
+      reachedContactIds.clear();
+    }
+  }
+
+  // Priority order is preserved from the decision's smsTargets.
+  const smsContactIds = input.smsTargets.filter((id) => !reachedContactIds.has(id));
+
+  let smsTriggered = false;
+  let smsSuccessCount = 0;
+  let smsFailedCount = 0;
+  if (input.triggerSmsFallback && smsContactIds.length > 0) {
+    const rows = await prisma.emergencyContact.findMany({
+      where: { id: { in: smsContactIds } },
+      select: { id: true, phone: true },
+    });
+    const contacts = smsContactIds
+      .map((id) => rows.find((r) => r.id === id))
+      .filter((c): c is { id: string; phone: SmsMessage["phone"] } => c !== undefined);
+    if (contacts.length > 0) {
+      smsTriggered = true;
+      const delivered = await sendSmsWithRetry(contacts, input.smsText);
+      for (const c of contacts) {
+        if (delivered.has(c.id)) smsSuccessCount++;
+        else smsFailedCount++;
+        captureAnalyticsEvent("critical_sms_per_contact", userId, {
+          contact_id: c.id,
+          delivered: delivered.has(c.id),
+        });
+      }
+    }
+  }
+
+  return {
+    pushSuccessCount,
+    contactsReachedByPush: reachedContactIds.size,
+    smsContacts: smsContactIds.length,
+    smsTriggered,
+    smsSuccessCount,
+    smsFailedCount,
+  };
+};
+
+/**
+ * On-call must be paged when a critical alert reached nobody who can help.
+ * With emergency contacts: none of them was reached by their own push or by
+ * SMS (the patient's own device doesn't count). Without contacts: nothing
+ * was delivered at all. Never pages when push was not meant to fire (within
+ * the cooldown window — CLAUDE.md edge case #1).
+ */
+const reachedNoOne = (
+  triggerPush: boolean,
+  contactCount: number,
+  result: FanOutResult,
+): boolean => {
+  if (!triggerPush) return false;
+  if (contactCount > 0) return result.contactsReachedByPush + result.smsSuccessCount === 0;
+  return result.pushSuccessCount === 0;
+};
+
+/**
+ * Pages on-call when nobody who can help was reached, or when some
+ * contacts' SMS still failed after every retry (CLAUDE.md: "SMS fails →
+ * retry 3x" then page). One page per dispatch at most.
+ */
+const pageIfUndelivered = (
+  triggerPush: boolean,
+  contactCount: number,
+  result: FanOutResult,
+  context: Record<string, unknown>,
+): void => {
+  if (reachedNoOne(triggerPush, contactCount, result)) {
+    captureUnhandled(new Error("critical bypass dispatch reached no remote recipient"), context);
+  } else if (result.smsFailedCount > 0) {
+    captureUnhandled(new Error("critical bypass SMS failed after retries"), {
+      ...context,
+      smsFailed: result.smsFailedCount,
+    });
+  }
 };
 
 /**
@@ -184,118 +392,80 @@ const processGlucoseCriticalAlert = async (
   const value = reading?.valueMgDl ?? 0;
 
   const copy = copyForSeverity(decision.severity, value, patientName, language);
+  const severity = decision.severity;
+  const notificationId = randomUUID();
 
-  let pushSuccessCount = 0;
-  const pushFailures: string[] = [];
-
-  // The push branch fires whenever the bypass says to, REGARDLESS of
-  // whether guardian contacts exist — the patient's own device is the
-  // primary target (fullscreen alert trigger). Guardian-contact tokens
-  // are additive. Gating on `pushTargets.length > 0` previously skipped
-  // the entire branch for a solo patient with no family link.
-  if (decision.triggerPush) {
-    const tokens = await resolveGuardianPushTokens(userId, decision.pushTargets);
-    if (tokens.length > 0) {
-      const notificationId = randomUUID();
-      const messages: ExpoPushMessage[] = tokens.map((t) => ({
-        to: t,
-        title: copy.title,
-        body: copy.body,
-        sound: "default",
-        priority: "high",
-        channelId: "critical",
-        data: {
-          notificationId,
-          type: "critical_alert",
-          readingId,
-          userId,
-          // Profile this alert is about — lets a tapped notification
-          // switch the shared device to the right household profile.
-          targetUserId: userId,
-          severity: decision.severity,
-        },
-      }));
-      const results = await sendExpoPush(messages);
-      results.forEach((r) => {
-        if (r.success) pushSuccessCount++;
-        else pushFailures.push(r.token);
-      });
-    } else {
-      // Distinguish "no recipients at all" (patient + guardians both
-      // have zero tokens — usually means the device never registered)
-      // from "guardian contacts unreachable" (the original branch).
-      // Both fall through to SMS, but the cause is different.
-      const reason =
-        decision.pushTargets.length === 0
-          ? "no_tokens_in_household"
-          : "no_tokens_for_resolved_recipients";
-      log.warn(
-        { userId, guardianContacts: decision.pushTargets.length, reason },
-        "critical-alert: zero push tokens — falling through to SMS",
-      );
-      const householdSize = (await householdUserIds(userId)).length;
-      captureAnalyticsEvent("push_zero_recipients", userId, {
-        surface: "critical_alert",
-        reason,
-        household_size: householdSize,
-      });
-    }
-  }
-
-  const smsTriggered =
-    decision.triggerSmsFallback && (pushSuccessCount === 0 || pushFailures.length > 0);
-
-  let smsSuccessCount = 0;
-  if (smsTriggered) {
-    const phones = await resolveSmsTargets(decision.smsTargets);
-    if (phones.length > 0) {
-      const smsText = smsCopy(decision.severity, value, patientName, language);
-      const results = await sendSmsBatch(phones.map((phone) => ({ phone, message: smsText })));
-      smsSuccessCount = results.filter((r) => r.success).length;
-    }
-  }
+  // Push fires whenever the bypass says to, REGARDLESS of whether guardian
+  // contacts exist — the patient's own device is always a target
+  // (fullscreen alert trigger); guardian-contact tokens are additive.
+  const result = await fanOutCriticalAlert({
+    userId,
+    triggerPush: decision.triggerPush,
+    triggerSmsFallback: decision.triggerSmsFallback,
+    pushTargets: decision.pushTargets,
+    smsTargets: decision.smsTargets,
+    buildPushMessage: (to) => ({
+      to,
+      title: copy.title,
+      body: copy.body,
+      sound: "default",
+      priority: "high",
+      channelId: "critical",
+      data: {
+        notificationId,
+        type: "critical_alert",
+        readingId,
+        userId,
+        // Profile this alert is about — lets a tapped notification
+        // switch the shared device to the right household profile.
+        targetUserId: userId,
+        severity,
+      },
+    }),
+    smsText: smsCopy(severity, value, patientName, language),
+    log,
+    analytics: {},
+  });
 
   log.warn(
     {
       userId,
       readingId,
-      severity: decision.severity,
+      severity,
       value,
       pushTargets: decision.pushTargets.length,
-      pushSuccess: pushSuccessCount,
+      pushSuccess: result.pushSuccessCount,
+      contactsReachedByPush: result.contactsReachedByPush,
       smsTargets: decision.smsTargets.length,
-      smsSuccess: smsSuccessCount,
+      smsContacts: result.smsContacts,
+      smsSuccess: result.smsSuccessCount,
     },
     "critical bypass dispatched",
   );
 
-  // A critical reading whose dispatch reached NO remote recipient — push
-  // delivered to zero devices AND the SMS fallback delivered to zero — is
-  // invisible to every guardian. The in-app fullscreen alert still fires
-  // client-side, but on-call must be paged: this is either a provider
-  // outage or a patient with no reachable emergency contact. Suppressed
-  // when push was never meant to fire (e.g. within the cooldown window —
-  // CLAUDE.md edge case #1 — where zero remote delivery is intended).
-  if (decision.triggerPush && pushSuccessCount === 0 && smsSuccessCount === 0) {
-    captureUnhandled(new Error("critical bypass dispatch reached no remote recipient"), {
-      userId,
-      readingId,
-      severity: decision.severity,
-      value,
-      pushTargets: decision.pushTargets.length,
-      smsTargets: decision.smsTargets.length,
-      smsTriggered,
-    });
-  }
+  // The in-app fullscreen alert still fires client-side, but if no one who
+  // can help was reached (provider outage, or no reachable emergency
+  // contact), on-call must be paged.
+  pageIfUndelivered(decision.triggerPush, decision.smsTargets.length, result, {
+    userId,
+    readingId,
+    severity,
+    value,
+    pushTargets: decision.pushTargets.length,
+    smsTargets: decision.smsTargets.length,
+    smsTriggered: result.smsTriggered,
+  });
 
   captureAnalyticsEvent("critical_bypass_triggered", userId, {
     value_mg_dl: value,
-    severity: decision.severity,
+    severity,
     push_targets: decision.pushTargets.length,
-    push_success: pushSuccessCount > 0,
+    push_success: result.pushSuccessCount > 0,
+    contacts_reached_by_push: result.contactsReachedByPush,
     sms_targets: decision.smsTargets.length,
-    sms_triggered: smsTriggered,
-    sms_success: smsSuccessCount > 0,
+    sms_contacts: result.smsContacts,
+    sms_triggered: result.smsTriggered,
+    sms_success: result.smsSuccessCount > 0,
     within_cooldown: decision.withinCooldown,
   });
 
@@ -317,7 +487,7 @@ const processGlucoseCriticalAlert = async (
 // CLAUDE.md "Phase 4 Invariants — Multi-condition Critical-Bypass
 // Dispatch": the chain (push + SMS + fullscreen + call, all four in
 // parallel) is **reused, not re-implemented**. This branch shares the
-// `resolveGuardianPushTokens` + `resolveSmsTargets` helpers above and
+// `fanOutCriticalAlert` push/SMS helper above and
 // the SOS auto-escalation scheduler below — only the copy bundle and
 // the queue payload shape differ.
 // ─────────────────────────────────────────────────────────────
@@ -382,70 +552,37 @@ const processMultiCategoryCriticalAlert = async (
   const language = patient?.preferredLanguage ?? "hi";
 
   const copy = buildMultiCategoryCopy(dispatch.copyKey, copyParams, patientName, language);
+  const notificationId = randomUUID();
 
-  let pushSuccessCount = 0;
-  const pushFailures: string[] = [];
-
-  if (dispatch.triggerPush) {
-    const tokens = await resolveGuardianPushTokens(userId, [...dispatch.pushTargets]);
-    if (tokens.length > 0) {
-      const notificationId = randomUUID();
-      const messages: ExpoPushMessage[] = tokens.map((t) => ({
-        to: t,
-        title: copy.title,
-        body: copy.body,
-        sound: "default",
-        priority: "high",
-        channelId: "critical",
-        data: {
-          notificationId,
-          type: "critical_alert",
-          category,
-          readingId,
-          userId,
-          targetUserId: userId,
-          copyKey: dispatch.copyKey,
-        },
-      }));
-      const results = await sendExpoPush(messages);
-      results.forEach((r) => {
-        if (r.success) pushSuccessCount++;
-        else pushFailures.push(r.token);
-      });
-    } else {
-      const reason =
-        dispatch.pushTargets.length === 0
-          ? "no_tokens_in_household"
-          : "no_tokens_for_resolved_recipients";
-      log.warn(
-        { userId, guardianContacts: dispatch.pushTargets.length, reason },
-        "critical-alert: zero push tokens — falling through to SMS",
-      );
-      const householdSize = (await householdUserIds(userId)).length;
-      captureAnalyticsEvent("push_zero_recipients", userId, {
-        surface: "critical_alert",
+  const result = await fanOutCriticalAlert({
+    userId,
+    triggerPush: dispatch.triggerPush,
+    triggerSmsFallback: dispatch.triggerSmsFallback,
+    pushTargets: dispatch.pushTargets,
+    smsTargets: dispatch.smsTargets,
+    buildPushMessage: (to) => ({
+      to,
+      title: copy.title,
+      body: copy.body,
+      sound: "default",
+      priority: "high",
+      channelId: "critical",
+      data: {
+        notificationId,
+        type: "critical_alert",
         category,
-        reason,
-        household_size: householdSize,
-      });
-    }
-  }
-
-  const smsTriggered =
-    dispatch.triggerSmsFallback && (pushSuccessCount === 0 || pushFailures.length > 0);
-
-  let smsSuccessCount = 0;
-  if (smsTriggered) {
-    const phones = await resolveSmsTargets([...dispatch.smsTargets]);
-    if (phones.length > 0) {
-      // SMS body uses the localised push body — same bundle, same
-      // numeric value. Guardian SMS conversation reads identically to
-      // the push title/body the household device received.
-      const smsText = `SwasthParivar ALERT: ${copy.title} — ${copy.body}`;
-      const results = await sendSmsBatch(phones.map((phone) => ({ phone, message: smsText })));
-      smsSuccessCount = results.filter((r) => r.success).length;
-    }
-  }
+        readingId,
+        userId,
+        targetUserId: userId,
+        copyKey: dispatch.copyKey,
+      },
+    }),
+    // SMS body uses the localised push body — same bundle, same numeric
+    // value — so the guardian's SMS reads identically to the push.
+    smsText: `SwasthParivar ALERT: ${copy.title} — ${copy.body}`,
+    log,
+    analytics: { category },
+  });
 
   log.warn(
     {
@@ -454,33 +591,35 @@ const processMultiCategoryCriticalAlert = async (
       category,
       copyKey: dispatch.copyKey,
       pushTargets: dispatch.pushTargets.length,
-      pushSuccess: pushSuccessCount,
+      pushSuccess: result.pushSuccessCount,
+      contactsReachedByPush: result.contactsReachedByPush,
       smsTargets: dispatch.smsTargets.length,
-      smsSuccess: smsSuccessCount,
+      smsContacts: result.smsContacts,
+      smsSuccess: result.smsSuccessCount,
     },
     "critical bypass dispatched",
   );
 
-  if (dispatch.triggerPush && pushSuccessCount === 0 && smsSuccessCount === 0) {
-    captureUnhandled(new Error("critical bypass dispatch reached no remote recipient"), {
-      userId,
-      readingId,
-      category,
-      copyKey: dispatch.copyKey,
-      pushTargets: dispatch.pushTargets.length,
-      smsTargets: dispatch.smsTargets.length,
-      smsTriggered,
-    });
-  }
+  pageIfUndelivered(dispatch.triggerPush, dispatch.smsTargets.length, result, {
+    userId,
+    readingId,
+    category,
+    copyKey: dispatch.copyKey,
+    pushTargets: dispatch.pushTargets.length,
+    smsTargets: dispatch.smsTargets.length,
+    smsTriggered: result.smsTriggered,
+  });
 
   captureAnalyticsEvent("critical_bypass_triggered", userId, {
     category,
     copy_key: dispatch.copyKey,
     push_targets: dispatch.pushTargets.length,
-    push_success: pushSuccessCount > 0,
+    push_success: result.pushSuccessCount > 0,
+    contacts_reached_by_push: result.contactsReachedByPush,
     sms_targets: dispatch.smsTargets.length,
-    sms_triggered: smsTriggered,
-    sms_success: smsSuccessCount > 0,
+    sms_contacts: result.smsContacts,
+    sms_triggered: result.smsTriggered,
+    sms_success: result.smsSuccessCount > 0,
     within_cooldown: dispatch.withinCooldown,
   });
 
