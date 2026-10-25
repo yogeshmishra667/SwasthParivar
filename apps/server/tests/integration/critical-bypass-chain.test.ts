@@ -128,12 +128,16 @@ const seedPatientWithGuardian = async (): Promise<TestFixture> => {
       onboardingComplete: true,
     },
   });
+  // The guardian has their own account, so their own household. A
+  // guardian inside the patient's household shares the patient's device
+  // and is texted regardless of push (see the hardening suite below).
+  const guardianHousehold = await prisma.household.create({ data: {} });
   const guardian = await prisma.user.create({
     data: {
       phone: `+9197${Math.floor(10_000_000 + Math.random() * 89_999_999)}`,
       name: "Priya Test",
       age: 35,
-      householdId: household.id,
+      householdId: guardianHousehold.id,
       onboardingComplete: true,
     },
   });
@@ -276,7 +280,7 @@ describe("Critical-bypass full chain (HTTP → service → queue → worker → 
     sendExpoPushMock.mockResolvedValueOnce([
       { token: "stub", success: false, errorCode: "DeviceNotRegistered" },
     ]);
-    sendSmsBatchMock.mockResolvedValueOnce([{ phone: "+91XXXX", success: false }]);
+    sendSmsBatchMock.mockResolvedValue([{ phone: "+91XXXX", success: false }]);
 
     const res = await request(app)
       .post("/api/v1/readings/glucose")
@@ -298,7 +302,8 @@ describe("Critical-bypass full chain (HTTP → service → queue → worker → 
     await processCriticalAlert({ data: job.data, id: String(job.id) });
 
     expect(sendExpoPushMock).toHaveBeenCalledTimes(1);
-    expect(sendSmsBatchMock).toHaveBeenCalledTimes(1);
+    // First attempt + 3 retries (CLAUDE.md "SMS fails → retry 3x").
+    expect(sendSmsBatchMock).toHaveBeenCalledTimes(4);
     // Both channels delivered to zero recipients — on-call must be paged.
     expect(captureUnhandledMock).toHaveBeenCalledTimes(1);
     const [err, ctx] = captureUnhandledMock.mock.calls[0]!;
@@ -444,5 +449,468 @@ describe("Critical-bypass full chain (HTTP → service → queue → worker → 
       });
     expect(at64.body.data.critical.isCritical).toBe(true);
     expect(at64.body.data.critical.severity).toBe("low");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// Per-contact SMS — CLAUDE.md edge case #3 / audit P1.
+// "Push to ALL guardian contacts (who have app). SMS only to contacts
+// where push failed." A contact is reached only by a push to a device
+// owned by the user whose phone IS that contact's phone — a successful
+// push to the patient's own device must never suppress SMS to contacts.
+// ─────────────────────────────────────────────────────────────
+
+const randomPhone = (prefix: string): string =>
+  `+91${prefix}${Math.floor(10_000_000 + Math.random() * 89_999_999)}`;
+
+interface ContactSpec {
+  /** "app": a guardian with their own account + device; "no_app": phone matches no user. */
+  readonly kind: "app" | "no_app";
+  readonly isGuardian: boolean;
+  readonly priority: number;
+}
+
+interface SeededContact {
+  readonly id: string;
+  readonly phone: string;
+  /** Push token of the contact's own device (only for kind "app"). */
+  readonly token: string | null;
+}
+
+const seedPatientWithContacts = async (
+  contacts: readonly ContactSpec[],
+): Promise<{
+  patientId: string;
+  patientToken: string;
+  patientDeviceToken: string;
+  contacts: SeededContact[];
+}> => {
+  const household = await prisma.household.create({ data: {} });
+  const patient = await prisma.user.create({
+    data: {
+      phone: randomPhone("95"),
+      name: "Kamla Test",
+      age: 68,
+      householdId: household.id,
+      onboardingComplete: true,
+    },
+  });
+  // The patient's own phone has the app registered.
+  const patientDeviceToken = `ExponentPushToken[${randomUUID()}]`;
+  await prisma.pushToken.create({
+    data: { userId: patient.id, token: patientDeviceToken, platform: "android" },
+  });
+
+  const seeded: SeededContact[] = [];
+  for (const spec of contacts) {
+    const phone = randomPhone("94");
+    let token: string | null = null;
+    if (spec.kind === "app") {
+      // A family member with their own account in their OWN household.
+      const ownHousehold = await prisma.household.create({ data: {} });
+      const user = await prisma.user.create({
+        data: {
+          phone,
+          name: "Guardian Test",
+          age: 38,
+          householdId: ownHousehold.id,
+          onboardingComplete: true,
+        },
+      });
+      token = `ExponentPushToken[${randomUUID()}]`;
+      await prisma.pushToken.create({ data: { userId: user.id, token, platform: "android" } });
+    }
+    const row = await prisma.emergencyContact.create({
+      data: {
+        userId: patient.id,
+        name: `Contact ${spec.priority}`,
+        phone,
+        relationship: "son",
+        priority: spec.priority,
+        isGuardian: spec.isGuardian,
+      },
+    });
+    seeded.push({ id: row.id, phone, token });
+  }
+
+  const patientToken = jwt.sign(
+    { sub: patient.id, householdId: household.id },
+    process.env.JWT_SECRET!,
+    { expiresIn: "1h" },
+  );
+  return { patientId: patient.id, patientToken, patientDeviceToken, contacts: seeded };
+};
+
+/** Push mock: every message succeeds unless its token is in `failing`. */
+const pushResults =
+  (failing: readonly string[] = []) =>
+  (messages: { to: string }[]) =>
+    Promise.resolve(messages.map((m) => ({ token: m.to, success: !failing.includes(m.to) })));
+
+/** SMS mock: every message succeeds unless its phone is in `failing`. */
+const smsResults =
+  (failing: readonly string[] = []) =>
+  (messages: { phone: string }[]) =>
+    Promise.resolve(messages.map((m) => ({ phone: m.phone, success: !failing.includes(m.phone) })));
+
+const postCriticalGlucose = async (patientToken: string, valueMgDl: number): Promise<any> => {
+  const res = await request(app)
+    .post("/api/v1/readings/glucose")
+    .set("Authorization", `Bearer ${patientToken}`)
+    .send({
+      clientUuid: randomUUID(),
+      valueMgDl,
+      readingType: "fasting",
+      context: "normal",
+      source: "manual",
+      measuredAt: new Date().toISOString(),
+      version: 1,
+    });
+  expect(res.status).toBe(201);
+  expect(res.body.data.critical.isCritical).toBe(true);
+  const job = await fetchEnqueuedJob(res.body.data.reading.id);
+  expect(job).not.toBeNull();
+  return job;
+};
+
+const smsPhones = (): string[] =>
+  sendSmsBatchMock.mock.calls.flatMap((call) =>
+    (call[0] as { phone: string }[]).map((m) => m.phone),
+  );
+
+describe("Critical-bypass per-contact SMS (edge case #3 / audit P1)", () => {
+  it("patient's own push succeeds → contacts WITHOUT the app are still texted", async () => {
+    const seed = await seedPatientWithContacts([
+      { kind: "no_app", isGuardian: true, priority: 1 },
+      { kind: "no_app", isGuardian: false, priority: 2 },
+    ]);
+    sendExpoPushMock.mockImplementation(pushResults());
+    sendSmsBatchMock.mockImplementation(smsResults());
+
+    const job = await postCriticalGlucose(seed.patientToken, 45);
+    await processCriticalAlert({ data: job.data, id: String(job.id) });
+
+    // The patient's own device got the push…
+    const pushed = (sendExpoPushMock.mock.calls[0]![0] as { to: string }[]).map((m) => m.to);
+    expect(pushed).toContain(seed.patientDeviceToken);
+    // …and BOTH contacts were texted, in priority order.
+    expect(smsPhones()).toEqual([seed.contacts[0]!.phone, seed.contacts[1]!.phone]);
+    expect(captureUnhandledMock).not.toHaveBeenCalled();
+  });
+
+  it("guardian reached on their own device is not texted; contact without the app is", async () => {
+    const seed = await seedPatientWithContacts([
+      { kind: "app", isGuardian: true, priority: 1 },
+      { kind: "no_app", isGuardian: false, priority: 2 },
+    ]);
+    sendExpoPushMock.mockImplementation(pushResults());
+    sendSmsBatchMock.mockImplementation(smsResults());
+
+    const job = await postCriticalGlucose(seed.patientToken, 340);
+    await processCriticalAlert({ data: job.data, id: String(job.id) });
+
+    const pushed = (sendExpoPushMock.mock.calls[0]![0] as { to: string }[]).map((m) => m.to);
+    expect(pushed).toEqual(
+      expect.arrayContaining([seed.patientDeviceToken, seed.contacts[0]!.token]),
+    );
+    expect(smsPhones()).toEqual([seed.contacts[1]!.phone]);
+    expect(captureUnhandledMock).not.toHaveBeenCalled();
+  });
+
+  it("only the guardian whose push FAILED is texted", async () => {
+    const seed = await seedPatientWithContacts([
+      { kind: "app", isGuardian: true, priority: 1 },
+      { kind: "app", isGuardian: true, priority: 2 },
+    ]);
+    sendExpoPushMock.mockImplementation(pushResults([seed.contacts[1]!.token!]));
+    sendSmsBatchMock.mockImplementation(smsResults());
+
+    const job = await postCriticalGlucose(seed.patientToken, 50);
+    await processCriticalAlert({ data: job.data, id: String(job.id) });
+
+    expect(smsPhones()).toEqual([seed.contacts[1]!.phone]);
+    expect(captureUnhandledMock).not.toHaveBeenCalled();
+  });
+
+  it("every contact reached by their own push → no SMS", async () => {
+    const seed = await seedPatientWithContacts([
+      { kind: "app", isGuardian: true, priority: 1 },
+      { kind: "app", isGuardian: true, priority: 2 },
+    ]);
+    sendExpoPushMock.mockImplementation(pushResults());
+
+    const job = await postCriticalGlucose(seed.patientToken, 330);
+    await processCriticalAlert({ data: job.data, id: String(job.id) });
+
+    expect(sendSmsBatchMock).not.toHaveBeenCalled();
+    expect(captureUnhandledMock).not.toHaveBeenCalled();
+  });
+
+  it("contacts exist but only the patient's own device was reached → on-call is paged", async () => {
+    const seed = await seedPatientWithContacts([
+      { kind: "no_app", isGuardian: false, priority: 1 },
+    ]);
+    sendExpoPushMock.mockImplementation(pushResults());
+    // SMS provider down: the contact is unreachable.
+    sendSmsBatchMock.mockImplementation(smsResults([seed.contacts[0]!.phone]));
+
+    const job = await postCriticalGlucose(seed.patientToken, 40);
+    await processCriticalAlert({ data: job.data, id: String(job.id) });
+
+    // First attempt + 3 retries, all to the one contact.
+    expect(smsPhones()).toEqual(Array(4).fill(seed.contacts[0]!.phone));
+    // A successful push to the patient's own phone must not mask that no
+    // emergency contact was reached.
+    expect(captureUnhandledMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("within the cooldown window → no push and no SMS (fullscreen only)", async () => {
+    const seed = await seedPatientWithContacts([
+      { kind: "no_app", isGuardian: false, priority: 1 },
+    ]);
+    sendExpoPushMock.mockImplementation(pushResults());
+    sendSmsBatchMock.mockImplementation(smsResults());
+
+    const first = await postCriticalGlucose(seed.patientToken, 45);
+    await processCriticalAlert({ data: first.data, id: String(first.id) });
+    sendExpoPushMock.mockClear();
+    sendSmsBatchMock.mockClear();
+
+    // Second critical reading moments later — inside the 30-min cooldown:
+    // the app still shows the fullscreen alert, but no dispatch is queued.
+    const res = await request(app)
+      .post("/api/v1/readings/glucose")
+      .set("Authorization", `Bearer ${seed.patientToken}`)
+      .send({
+        clientUuid: randomUUID(),
+        valueMgDl: 44,
+        readingType: "fasting",
+        context: "normal",
+        source: "manual",
+        measuredAt: new Date().toISOString(),
+        version: 1,
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.data.critical.withinCooldown).toBe(true);
+    expect(res.body.data.critical.showFullscreenAlert).toBe(true);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(await fetchEnqueuedJob(res.body.data.reading.id)).toBeNull();
+
+    // Defence in depth: the processor itself sends nothing for a
+    // cooldown decision, even with contacts that lack the app.
+    await processCriticalAlert({
+      id: randomUUID(),
+      data: {
+        readingId: res.body.data.reading.id,
+        userId: seed.patientId,
+        decision: res.body.data.critical,
+      },
+    });
+    expect(sendExpoPushMock).not.toHaveBeenCalled();
+    expect(sendSmsBatchMock).not.toHaveBeenCalled();
+    expect(captureUnhandledMock).not.toHaveBeenCalled();
+  });
+
+  it("cardiac dispatch uses the same rule: contact without the app is texted", async () => {
+    const seed = await seedPatientWithContacts([
+      { kind: "app", isGuardian: true, priority: 1 },
+      { kind: "no_app", isGuardian: false, priority: 2 },
+    ]);
+    sendExpoPushMock.mockImplementation(pushResults());
+    sendSmsBatchMock.mockImplementation(smsResults());
+
+    await processCriticalAlert({
+      id: randomUUID(),
+      data: {
+        category: "cardiac",
+        readingId: randomUUID(),
+        userId: seed.patientId,
+        dispatch: {
+          category: "cardiac",
+          withinCooldown: false,
+          showFullscreenAlert: true,
+          showCallButton: true,
+          triggerPush: true,
+          triggerSmsFallback: true,
+          pushTargets: [seed.contacts[0]!.id],
+          smsTargets: [seed.contacts[0]!.id, seed.contacts[1]!.id],
+          copyKey: "critical.cardiac.hr_high",
+        },
+        copyParams: { heartRateBpm: 172 },
+      },
+    });
+
+    expect(smsPhones()).toEqual([seed.contacts[1]!.phone]);
+    const sms = sendSmsBatchMock.mock.calls[0]![0] as { message: string }[];
+    expect(sms[0]!.message).toContain("172");
+    expect(captureUnhandledMock).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// Delivery hardening — the remaining ways a contact could miss the SMS
+// (P1 safety review): a contact sharing the patient's device, a push stage
+// that throws, and transient SMS failures.
+// ─────────────────────────────────────────────────────────────
+
+/** Glucose bypass decision outside the cooldown, every contact a target. */
+const criticalLowDecision = (guardianIds: readonly string[], contactIds: readonly string[]) => ({
+  isCritical: true,
+  severity: "low" as const,
+  withinCooldown: false,
+  showFullscreenAlert: true,
+  triggerPush: true,
+  triggerSmsFallback: true,
+  showCallButton: true,
+  pushTargets: [...guardianIds],
+  smsTargets: [...contactIds],
+  copyKey: "critical.low" as const,
+});
+
+describe("Critical-bypass delivery hardening", () => {
+  it("sub-profile: the seeded primary contact on the SHARED device is still texted", async () => {
+    // Shared phone: the household primary owns the device's only push
+    // token; the sub-profile's priority-1 contact is that same primary
+    // (auto-seeded by POST /household/profiles).
+    const household = await prisma.household.create({ data: {} });
+    const primary = await prisma.user.create({
+      data: {
+        phone: randomPhone("93"),
+        name: "Suresh Test",
+        age: 42,
+        householdId: household.id,
+        onboardingComplete: true,
+      },
+    });
+    await prisma.household.update({
+      where: { id: household.id },
+      data: { primaryUserId: primary.id },
+    });
+    const subProfile = await prisma.user.create({
+      data: {
+        phone: randomPhone("92"),
+        name: "Maa Test",
+        age: 70,
+        householdId: household.id,
+        onboardingComplete: true,
+      },
+    });
+    const sharedDeviceToken = `ExponentPushToken[${randomUUID()}]`;
+    await prisma.pushToken.create({
+      data: { userId: primary.id, token: sharedDeviceToken, platform: "android" },
+    });
+    const contact = await prisma.emergencyContact.create({
+      data: {
+        userId: subProfile.id,
+        name: primary.name,
+        phone: primary.phone,
+        relationship: "guardian",
+        priority: 1,
+        isGuardian: true,
+      },
+    });
+    sendExpoPushMock.mockImplementation(pushResults());
+    sendSmsBatchMock.mockImplementation(smsResults());
+
+    await processCriticalAlert({
+      id: randomUUID(),
+      data: {
+        readingId: randomUUID(),
+        userId: subProfile.id,
+        decision: criticalLowDecision([contact.id], [contact.id]),
+      },
+    });
+
+    // The shared device shows the alert…
+    const pushed = (sendExpoPushMock.mock.calls[0]![0] as { to: string }[]).map((m) => m.to);
+    expect(pushed).toEqual([sharedDeviceToken]);
+    // …but that push lands on the patient's own phone, so it proves
+    // nothing about the primary — they are texted too.
+    expect(smsPhones()).toEqual([primary.phone]);
+    expect(captureUnhandledMock).not.toHaveBeenCalled();
+  });
+
+  it("push stage throws → every contact is texted and on-call is paged", async () => {
+    const seed = await seedPatientWithContacts([
+      { kind: "app", isGuardian: true, priority: 1 },
+      { kind: "no_app", isGuardian: false, priority: 2 },
+    ]);
+    sendExpoPushMock.mockRejectedValue(new Error("expo client exploded"));
+    sendSmsBatchMock.mockImplementation(smsResults());
+
+    const job = await postCriticalGlucose(seed.patientToken, 42);
+    await processCriticalAlert({ data: job.data, id: String(job.id) });
+
+    expect(smsPhones()).toEqual([seed.contacts[0]!.phone, seed.contacts[1]!.phone]);
+    expect(captureUnhandledMock).toHaveBeenCalledTimes(1);
+    const [, ctx] = captureUnhandledMock.mock.calls[0]!;
+    expect((ctx as { stage: string }).stage).toBe("critical_alert_push");
+  });
+
+  it("transient SMS failure is retried for that contact only, then delivered", async () => {
+    const seed = await seedPatientWithContacts([
+      { kind: "no_app", isGuardian: true, priority: 1 },
+      { kind: "no_app", isGuardian: false, priority: 2 },
+    ]);
+    sendExpoPushMock.mockImplementation(pushResults());
+    const flaky = seed.contacts[0]!.phone;
+    let flakyAttempts = 0;
+    sendSmsBatchMock.mockImplementation((messages: { phone: string }[]) =>
+      Promise.resolve(
+        messages.map((m) => {
+          if (m.phone !== flaky) return { phone: m.phone, success: true };
+          flakyAttempts++;
+          return { phone: m.phone, success: flakyAttempts > 2 };
+        }),
+      ),
+    );
+
+    const job = await postCriticalGlucose(seed.patientToken, 330);
+    await processCriticalAlert({ data: job.data, id: String(job.id) });
+
+    expect(sendSmsBatchMock.mock.calls.map((call) => call[0].map((m: any) => m.phone))).toEqual([
+      [flaky, seed.contacts[1]!.phone],
+      [flaky],
+      [flaky],
+    ]);
+    expect(captureUnhandledMock).not.toHaveBeenCalled();
+  });
+
+  it("a contact's SMS still failing after every retry pages on-call", async () => {
+    const seed = await seedPatientWithContacts([
+      { kind: "app", isGuardian: true, priority: 1 },
+      { kind: "no_app", isGuardian: false, priority: 2 },
+    ]);
+    sendExpoPushMock.mockImplementation(pushResults());
+    sendSmsBatchMock.mockImplementation(smsResults([seed.contacts[1]!.phone]));
+
+    const job = await postCriticalGlucose(seed.patientToken, 330);
+    await processCriticalAlert({ data: job.data, id: String(job.id) });
+
+    expect(smsPhones()).toEqual(Array(4).fill(seed.contacts[1]!.phone));
+    // The guardian was reached, so this is not "reached no one" — but a
+    // contact without the app was never told, so on-call still hears.
+    expect(captureUnhandledMock).toHaveBeenCalledTimes(1);
+    const [err, ctx] = captureUnhandledMock.mock.calls[0]!;
+    expect((err as Error).message).toBe("critical bypass SMS failed after retries");
+    expect((ctx as { smsFailed: number }).smsFailed).toBe(1);
+  });
+
+  it("SMS provider not configured → no pointless retries, on-call paged", async () => {
+    const seed = await seedPatientWithContacts([
+      { kind: "no_app", isGuardian: false, priority: 1 },
+    ]);
+    sendExpoPushMock.mockImplementation(pushResults());
+    sendSmsBatchMock.mockImplementation((messages: { phone: string }[]) =>
+      Promise.resolve(
+        messages.map((m) => ({ phone: m.phone, success: false, errorCode: "NOT_CONFIGURED" })),
+      ),
+    );
+
+    const job = await postCriticalGlucose(seed.patientToken, 45);
+    await processCriticalAlert({ data: job.data, id: String(job.id) });
+
+    expect(sendSmsBatchMock).toHaveBeenCalledTimes(1);
+    expect(captureUnhandledMock).toHaveBeenCalledTimes(1);
   });
 });
