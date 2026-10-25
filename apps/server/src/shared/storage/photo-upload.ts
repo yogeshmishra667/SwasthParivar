@@ -21,7 +21,7 @@
 import { randomUUID } from "node:crypto";
 import type { Buffer } from "node:buffer";
 
-import sharp from "sharp";
+import sharp, { type OutputInfo } from "sharp";
 import { DomainError } from "@swasth/shared-types";
 
 import { logger } from "../logger.js";
@@ -91,7 +91,7 @@ export const processPhoto = async (input: ProcessPhotoInput): Promise<ProcessedP
   let outBuffer: Buffer;
   let outMime: string;
   let outExt: string;
-  let metadata: sharp.Metadata;
+  let info: OutputInfo;
 
   try {
     const pipeline = sharp(input.buffer, { failOn: "truncated" }).rotate();
@@ -100,13 +100,13 @@ export const processPhoto = async (input: ProcessPhotoInput): Promise<ProcessedP
       outBuffer = out.data;
       outMime = "image/png";
       outExt = "png";
-      metadata = out.info as unknown as sharp.Metadata;
+      info = out.info;
     } else if (input.mimeType === "image/webp") {
       const out = await pipeline.webp({ quality: 88 }).toBuffer({ resolveWithObject: true });
       outBuffer = out.data;
       outMime = "image/webp";
       outExt = "webp";
-      metadata = out.info as unknown as sharp.Metadata;
+      info = out.info;
     } else {
       const out = await pipeline
         .jpeg({ quality: 88, mozjpeg: true })
@@ -114,7 +114,7 @@ export const processPhoto = async (input: ProcessPhotoInput): Promise<ProcessedP
       outBuffer = out.data;
       outMime = "image/jpeg";
       outExt = "jpg";
-      metadata = out.info as unknown as sharp.Metadata;
+      info = out.info;
     }
   } catch (err) {
     logger.warn({ err, kind: input.kind }, "sharp re-encode failed — rejecting upload");
@@ -135,8 +135,8 @@ export const processPhoto = async (input: ProcessPhotoInput): Promise<ProcessedP
     url: uploaded.url,
     bytes: uploaded.bytes,
     contentType: uploaded.contentType,
-    width: metadata.width ?? 0,
-    height: metadata.height ?? 0,
+    width: info.width,
+    height: info.height,
   };
 };
 

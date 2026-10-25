@@ -14,7 +14,7 @@ import {
   appleNotificationToTransition,
   type SubscriptionTier,
   type TransitionDecision,
-} from "@swasth/domain-logic";
+} from "@swasth/domain-logic/subscription-state";
 import type { Prisma } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { prisma } from "../../shared/database.js";

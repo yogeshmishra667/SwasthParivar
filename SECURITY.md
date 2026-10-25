@@ -47,6 +47,24 @@ The project is pre-1.0 and is currently rolling-release on `main`. Only
 the latest commit on `main` is supported for security fixes. Once a `v1.0.0`
 tag is cut, this section will be updated with a version-support matrix.
 
+## Dependency audit exceptions
+
+CI fails on any HIGH/CRITICAL advisory in the production dependency graph
+(`pnpm audit --prod --audit-level=high`). Fixable advisories are fixed
+through `pnpm.overrides` in the root `package.json`. The advisories below
+are listed in `pnpm.auditConfig.ignoreGhsas` because no safe fix exists
+**and** the vulnerable code never runs in the shipped server or mobile app.
+Re-check each one on every Expo SDK / Prisma upgrade and remove it as soon
+as a compatible patched version ships.
+
+| Advisory                                 | Package                           | Why it is accepted                                                                                                                                                                                                                                                                             |
+| ---------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GHSA-vfj7-8cjw-p6xm                      | `braces` ≤ 3.0.3                  | No patched version published. Only reached through glob matching in build tooling (Metro, Danger); never processes user input.                                                                                                                                                                 |
+| GHSA-86w9-cpqp-85rv                      | `node-forge` ≤ 1.4.0              | No patched version published. Only used by the Expo CLI dev server; not bundled into the app or the server.                                                                                                                                                                                    |
+| GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr | `image-size` 1.x                  | Fixed only in 2.x (breaking API). Used by Metro to read dimensions of the repo's own image assets at build time; the server uses `sharp` for uploads.                                                                                                                                          |
+| GHSA-ggr8-5vv4-36mx                      | `deepmerge-ts` 7.x                | Prisma 7 pins 7.1.5 exactly (`@prisma/config`). Merges Prisma's own config at CLI time, never request data.                                                                                                                                                                                    |
+| GHSA-mrhx-c7xc-m3w5                      | `zod` 3.x (mobile app, puppeteer) | No 3.x fix exists (fixed only in 4.6.6+; moving the app to zod 4 is an API migration). On the phone zod only validates the patient's own form input; puppeteer uses it for its own config. The **server and admin are on zod ≥ 4.6.7**, which is where untrusted request bodies are validated. |
+
 ## Acknowledgements
 
 We will credit reporters in release notes (with permission) unless

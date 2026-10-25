@@ -15,8 +15,8 @@
 // correction is needed (and which webhook event to replay) is the pure
 // `reconcileRazorpaySubscription` from @swasth/domain-logic.
 
-import { reconcileRazorpaySubscription } from "@swasth/domain-logic";
-import type { SubscriptionTier, SubStatus } from "@swasth/domain-logic";
+import { reconcileRazorpaySubscription } from "@swasth/domain-logic/subscription-state";
+import type { SubscriptionTier, SubStatus } from "@swasth/domain-logic/subscription-state";
 import { prisma } from "../../shared/database.js";
 import { getFlag } from "../../shared/flags/flags.js";
 import { logger } from "../../shared/logger.js";
