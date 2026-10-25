@@ -78,7 +78,7 @@ beforeAll(async () => {
 
   app = appModule.buildApp();
   prisma = dbModule.prisma;
-  processCriticalAlert = processorModule.processCriticalAlert as typeof processCriticalAlert;
+  processCriticalAlert = processorModule.processCriticalAlert;
 }, 120_000);
 
 afterAll(async () => {

@@ -1,5 +1,6 @@
 import { DomainError } from "@swasth/shared-types";
 import {
+  CRITICAL_COOLDOWN_MINUTES,
   computeFeedback,
   computeStreak,
   decideCriticalBypass,
@@ -9,17 +10,15 @@ import { Prisma, type GlucoseReading } from "@prisma/client";
 import { prisma } from "../../shared/database.js";
 import { redis } from "../../shared/redis.js";
 import { logger } from "../../shared/logger.js";
-import { createQueue, QUEUE_NAMES } from "../../shared/queue.js";
+import { withTimeout } from "../../shared/with-timeout.js";
+import { createQueue, enqueueBestEffort, QUEUE_NAMES } from "../../shared/queue.js";
 import { capture as captureAnalyticsEvent } from "../../shared/analytics/posthog.js";
 import { checkIdempotent } from "../../shared/idempotency.js";
 import { getReadingsDailyLimit } from "../../shared/middleware/rate-limit.js";
-
-const criticalQueue = createQueue<{
-  readingId: string;
-  userId: string;
-  decision: BypassDecision;
-  requestId?: string;
-}>(QUEUE_NAMES.CRITICAL_ALERT);
+import {
+  enqueueCriticalAlert,
+  isFreshForReplayDispatch,
+} from "../../workers/critical-alert.enqueue.js";
 
 const analyzeQueue = createQueue<{
   readingId: string;
@@ -47,11 +46,27 @@ const GLUCOSE_CRITICAL_HIGH = 315;
 // Daily reading counter — per user, per UTC calendar day. Mirrors
 // `incrementDailyRateCounter` in chat.service.ts for symmetry. TTL is 36h
 // so the key self-expires across the day boundary without a cron sweep.
+//
+// Fails OPEN, bounded: during a Redis outage `incr` would hang (the client
+// runs `maxRetriesPerRequest: null`) and stall `/sync/push`, which saves
+// items in order — a critical reading queued behind a normal one would
+// wait on Redis (P5 review N5). A rate limit must never block logging.
+const RATE_COUNTER_TIMEOUT_MS = 500;
 const incrementDailyReadingsCounter = async (userId: string): Promise<number> => {
   const key = `readings:rate:${userId}:${new Date().toISOString().slice(0, 10)}`;
-  const count = await redis.incr(key);
-  if (count === 1) await redis.expire(key, 60 * 60 * 36);
-  return count;
+  try {
+    const count = await withTimeout(redis.incr(key), RATE_COUNTER_TIMEOUT_MS, "readings counter");
+    if (count === 1)
+      await withTimeout(
+        redis.expire(key, 60 * 60 * 36),
+        RATE_COUNTER_TIMEOUT_MS,
+        "readings counter",
+      );
+    return count;
+  } catch (err) {
+    logger.warn({ err, userId }, "daily readings counter unavailable — not rate limiting");
+    return 0;
+  }
 };
 
 interface CreateReadingInput {
@@ -82,11 +97,20 @@ const ist = (): number => 330;
 // Idempotent replay response — fired when a client retries a POST with the
 // same {clientUuid, version} we already persisted. Returns the existing
 // reading and current downstream state without re-running streak/feedback
-// side effects or re-enqueuing the critical alert.
+// side effects. The critical alert is re-ensured, not re-sent: the
+// original request may have died between saving the row and handing off
+// its alert (audit P5), and the per-version jobId makes this a no-op when
+// the job already exists.
 const buildReplayResult = async (
   reading: GlucoseReading,
   userId: string,
+  requestId?: string,
 ): Promise<CreateReadingResult> => {
+  // Re-derive the decision the original request made: as of the moment
+  // this version was saved, against critical alerts shown BEFORE it. This
+  // version's own critical_warn is written after the save, so `lt`
+  // excludes it — otherwise every replay would read as "within cooldown".
+  const savedAt = reading.updatedAt;
   const [streakState, feedbackEvent, contacts, lastBypassEvent] = await Promise.all([
     prisma.userStreak.findUnique({ where: { userId } }),
     prisma.feedbackEvent.findFirst({
@@ -98,7 +122,10 @@ const buildReplayResult = async (
       where: {
         userId,
         feedbackType: "critical_warn",
-        shownAt: { gte: new Date(Date.now() - 30 * 60_000) },
+        shownAt: {
+          gte: new Date(savedAt.getTime() - CRITICAL_COOLDOWN_MINUTES * 60_000),
+          lt: savedAt,
+        },
       },
       orderBy: { shownAt: "desc" },
     }),
@@ -106,7 +133,7 @@ const buildReplayResult = async (
 
   const critical = decideCriticalBypass({
     glucoseValueMgDl: reading.valueMgDl,
-    nowIso: reading.measuredAt.toISOString(),
+    nowIso: savedAt.toISOString(),
     lastBypassTriggeredAtIso: lastBypassEvent?.shownAt.toISOString() ?? null,
     emergencyContacts: contacts.map((c) => ({
       contactId: c.id,
@@ -114,6 +141,18 @@ const buildReplayResult = async (
       isGuardian: c.isGuardian,
     })),
   });
+
+  if (critical.isCritical && !critical.withinCooldown && isFreshForReplayDispatch(savedAt)) {
+    await enqueueCriticalAlert(
+      {
+        readingId: reading.id,
+        userId,
+        decision: critical,
+        ...(requestId ? { requestId } : {}),
+      },
+      reading.version,
+    );
+  }
 
   return {
     reading,
@@ -145,7 +184,7 @@ export const createGlucoseReading = async (
   if (idem.kind === "replay") {
     // Idempotent replay — same {clientUuid, version} we already stored.
     // Return the prior result without re-running side effects.
-    return await buildReplayResult(idem.existing, input.userId);
+    return await buildReplayResult(idem.existing, input.userId, input.requestId);
   }
   // `update` carries the existing row; `insert` leaves it null.
   const existing = idem.kind === "update" ? idem.existing : null;
@@ -332,11 +371,26 @@ export const createGlucoseReading = async (
             { clientUuid: input.clientUuid, userId: input.userId },
             "concurrent create resolved as idempotent replay",
           );
-          return await buildReplayResult(winner, input.userId);
+          return await buildReplayResult(winner, input.userId, input.requestId);
         }
       }
       throw err;
     }
+  }
+
+  // Hand off the critical alert FIRST — before the streak and feedback
+  // writes — so no later failure can leave a saved critical reading whose
+  // alert never went out (audit P5). Bounded, and never throws.
+  if (critical.isCritical && !critical.withinCooldown) {
+    await enqueueCriticalAlert(
+      {
+        readingId: reading.id,
+        userId: input.userId,
+        decision: critical,
+        ...(input.requestId ? { requestId: input.requestId } : {}),
+      },
+      reading.version,
+    );
   }
 
   await prisma.userStreak.update({
@@ -367,24 +421,17 @@ export const createGlucoseReading = async (
     },
   });
 
-  if (critical.isCritical && !critical.withinCooldown) {
-    await criticalQueue.add("dispatch", {
-      readingId: reading.id,
-      userId: input.userId,
-      decision: critical,
-      ...(input.requestId ? { requestId: input.requestId } : {}),
-    });
-  }
-
   // Phase 2 step 3c — fire ANALYZE_READING for every glucose insert.
   // The processor runs spike / trend / meal-correlation / anomaly in
   // parallel; below-floor confidence rows persist but are suppressed
   // from the feed. 3 retries + exp backoff come from queue defaults.
-  await analyzeQueue.add("analyze", {
-    readingId: reading.id,
-    userId: input.userId,
-    readingType: reading.readingType,
-  });
+  await enqueueBestEffort(QUEUE_NAMES.ANALYZE_READING, () =>
+    analyzeQueue.add("analyze", {
+      readingId: reading.id,
+      userId: input.userId,
+      readingType: reading.readingType,
+    }),
+  );
 
   if (streakResult.antiCheatFlags.length > 0) {
     logger.warn(
