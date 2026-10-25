@@ -1,8 +1,8 @@
 # Audit Progress
 
 > Source plan: `~/.claude/plans/flickering-wiggling-sundae.md`
-> Last updated: 2026-05-16 (CI hardening PR #39 in review; Phase 2 step 7 merged via PR #38)
-> Current session focus: Original audit roadmap complete except deferred items. Now running follow-on CI hardening to close the local-vs-CI gap (#39) and Phase 2 product steps (#38 = step 7; steps 4–6 already merged via #33–#35).
+> Last updated: 2026-10-25 (phase-audit fix wave: P1, P6, D1 merged; P5 #202 and P10 #203 queued; P4 on branch `feat/bp-critical-bypass`)
+> Current session focus: Working through `phase-audit.md` in its §7 order, safety items first. Each fix gets its own PR, a `safety-reviewer` pass and a sabotage-checked test. **Resume at "Phase-audit fix wave" below.**
 
 ## Status Legend
 
@@ -52,6 +52,40 @@
 
 (Flag _keys_ — detector toggles, AI chat kill switch, SOS test mode — are added to the flag service from item 13 whenever the need is real, not on a phase schedule.)
 
+## Phase-audit fix wave (from `phase-audit.md`, started 2026-10-20)
+
+Each item gets its own PR based on `main`, a `safety-reviewer` pass (re-run until PASS), and tests that fail with the fix removed.
+
+- [x] **P1** per-contact SMS — #198 (`9bbf95c`)
+- [x] **P6** prescription approval authority frozen — #200
+- [x] **D1** SMS success-rate denominator — #201 (`010a96b`)
+- [x] Pin third-party GitHub Actions to SHAs — #199. This unblocked #85 and #86; Dependabot should auto-close them.
+- [~] **P5** durable critical-alert hand-off — #202. Safety review PASS. In the merge queue.
+- [~] **P10** Android notification channels — #203. In the merge queue. Confirm on a device afterwards.
+- [~] **P4** BP critical bypass — branch `feat/bp-critical-bypass`, built on #202's branch. **Do not open its PR until #202 is in main**: rebase onto main first. All code and tests are done (local gate + safety review were running at hand-off). That covers shared-types thresholds, the domain-logic classifier, planner copy keys, `bp.service` (checkIdempotent, plan before save, hand-off, replay), processor routing, hi/en copy and the app's fullscreen alert.
+- [ ] **P2** the critical alert's Call button dials 112, not the priority-1 contact, and there's no 60-second auto-dial. App side; the decision is in `phase-audit.md` §8.6.1 (recommended: priority-1 contact, with 112 as the second button).
+- [ ] **P3** no fullscreen alert for a critical first reading (onboarding), for cardiac/respiratory, or on push receipt. App side.
+- [ ] **D3** cohort flags read as booleans: switch per-user features to `isFeatureEnabled(key, userId)`. SOS parts are safety-critical.
+- [ ] **D8** exempt SOS routes and signed provider webhooks from maintenance mode, and add warning text to the toggle. Safety-critical.
+- [ ] **P11** anti-fatigue counters never update and there is no daily cap. Urgent once P10 ships, because reminders will start arriving.
+- [ ] **P22** redact the top-level `phone` in `msg91-sms.ts` logs.
+- [ ] Remaining items in the `phase-audit.md` §7 order.
+- [ ] Safety-review follow-ups listed in `phase-audit.md` §0.
+
+Open repo housekeeping:
+
+- Dependabot PRs:
+  - #194 (prod-patches) and #196 (vite) touch the lockfile. Use `@dependabot rebase`; never `update-branch`.
+  - #195 (dev-minors) needs three fixes re-applied right before merge: pin the prisma CLI to `7.8.0`, run `pnpm format` (Prettier 3.9), and add the cardiac-voice coverage test ("thakaan hai, dhadkan 95").
+  - #48 (express-rate-limit) is DIRTY.
+- Decisions waiting on the owner:
+  - Orphaned PR #97 (household tier, 24 files): rescue or drop.
+  - DigitalOcean runbook plus `docker-compose.prod.yml` (`a10f2a9`): rescue or drop.
+  - Dismiss the accepted Dependabot alerts (node-forge, image-size ×2)?
+  - `IF NOT EXISTS` in `20261020000000_reconcile_schema_drift`?
+  - Chrome in the server image (PDFs need puppeteer).
+- The repo was made **public** on 2026-10-25 after Actions billing blocked CI. The exposure check was clean: only `.env.example` placeholders, no `pull_request_target` workflows, only `GITHUB_TOKEN`, and gitleaks found 0 issues across full history.
+
 ## Resume Protocol
 
 1. Read this file first; do not re-explore.
@@ -84,3 +118,29 @@
   - Docs updated: `docs/SETUP.md` PostHog walkthrough (6 steps from sign-up to event verification + dashboard tile template), `docs/HOWTO.md` triage recipes for CodeQL / Trivy / `eslint-plugin-security` failures + local-dev PostHog setup, `docs/ARCHITECTURE.md` gate table now reflects all CI jobs and adds a "fourth observability layer" section for code-security tooling. PR commit `aa92fb2`.
 
 - 2026-05-16: Supply-chain transparency tier added to PR #39 — SBOM (`.github/workflows/sbom.yml`, Syft generates CycloneDX + SPDX from BOTH the pnpm lockfile AND the built Docker image, attached to releases on `v*` tag) + OpenSSF Scorecard (`.github/workflows/scorecard.yml`, weekly cron + push to main, SARIF to Security tab, public score badge). Neither workflow fails the build — they're audit, not gate. Stryker / Codecov / commit-signing deliberately deferred (overengineering for one-engineer team; revisit at team ≥3 OR under SOC2 audit). `docs/ARCHITECTURE.md` gate table + new "Supply-chain transparency" section. `CONTRIBUTING.md` gate map row added.
+
+- 2026-10-20 → 2026-10-24: CI redesign plus a dependency sweep.
+  - #188: paths-filter gating, weekly full run, migration-drift and mobile checks.
+  - #179 / #181: Danger removed, audit OOM fixed.
+  - #184 / #189 / #190 / #197: HIGH/CRITICAL advisories cleared and a gitleaks allowlist for CI stub secrets. Dependabot alerts went from 190 to 53.
+  - #185: schema/migration drift reconciled.
+  - #176 / #177 / #178 / #180: flaky coverage, mobile bundle, phase audit, Expo-pinned packages.
+  - Lockfile lesson: GitHub's update-branch text-merges `pnpm-lock.yaml` and can corrupt it. Lockfile PRs must be regenerated, not branch-updated.
+- 2026-10-25: phase-audit fix wave.
+  - **P1** (#198):
+    - A push to the patient's own phone no longer suppresses SMS to emergency contacts.
+    - Household-member contacts are always texted. The safety review caught that a sub-profile's seeded contact shares the patient's device.
+    - The push stage can't block SMS. Expo/MSG91 requests time out at 10 s, SMS retries 3×, and on-call is paged on any undelivered SMS.
+  - **P6** (#200): approval never falls back to the patient after a guardian revoke. All five write routes are gated, and the app shows "no family member linked".
+  - **D1** (#201).
+  - **#199**: actions pinned to SHAs.
+  - **P5** (#202): reviewer verdict FAIL, then PASS, then all warnings fixed. Changes:
+    - the hand-off is bounded, with an in-process fallback;
+    - replays re-ensure and revive;
+    - cardiac/respiratory plan before the save;
+    - the escalation schedule can't re-send;
+    - Redis calls on the alert path are bounded.
+  - **P10** (#203): Android channels.
+  - **P4**: BP critical bypass on a branch, stacked on #202.
+  - Actions billing blocked CI mid-session; the owner made the repo public to restore free minutes.
+  - Local gate: `scratchpad/gate.sh <worktree>`. CI-equivalent stub env: `DATABASE_URL=postgresql://stub:stub@localhost:5432/stub`. A fresh worktree needs `pnpm install` plus `pnpm --filter @swasth/server prisma:generate` (with `DATABASE_URL` set) before the pre-push preflight passes.
