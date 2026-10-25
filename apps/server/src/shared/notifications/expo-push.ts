@@ -24,6 +24,7 @@ export interface ExpoPushResult {
 }
 
 const EXPO_PUSH_ENDPOINT = "https://exp.host/--/api/v2/push/send";
+const REQUEST_TIMEOUT_MS = 10_000;
 
 // Per-token Expo errors that mean "this token row is structurally broken
 // and will never deliver again — delete it so the next mobile-app launch
@@ -73,6 +74,9 @@ export const sendExpoPush = async (messages: ExpoPushMessage[]): Promise<ExpoPus
       method: "POST",
       headers,
       body: JSON.stringify(messages),
+      // A hung Expo connection must not hold back callers' fallbacks (the
+      // critical-alert SMS runs after push) for Node's ~300s default.
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     if (!res.ok) {

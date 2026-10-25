@@ -56,10 +56,20 @@ export interface EventPropsMap {
     copy_key?: string;
     push_targets: number;
     push_success: boolean;
+    // Contacts whose OWN device received the push (the patient's device
+    // never counts) and contacts texted because push didn't reach them.
+    contacts_reached_by_push: number;
+    sms_contacts: number;
     sms_targets: number;
     sms_triggered: boolean;
     sms_success: boolean;
     within_cooldown: boolean;
+  };
+  // CLAUDE.md edge case #22 — one event per emergency contact texted by a
+  // critical-bypass dispatch, so SMS delivery can be tracked per contact.
+  critical_sms_per_contact: {
+    contact_id: string;
+    delivered: boolean;
   };
   streak_milestone: {
     milestone_days: number;
