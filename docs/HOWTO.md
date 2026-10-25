@@ -276,7 +276,7 @@ Preflight runs 11 gates in order (mirrors CI):
 10. Domain-logic `test:coverage` with per-file ratchets
 11. (Optional with `--full`) integration tests + Docker `/health` smoke
 
-If preflight passes locally and CI fails, the gap is a CI-specific thing (env, secrets, third-party services like Trivy DB or CodeQL servers). Open the failing job's log on GitHub.
+If preflight passes locally and CI fails, the gap is a CI-specific thing (env, secrets, third-party services like the Trivy DB or the Expo CLI). Open the failing job's log on GitHub.
 
 CI-only gates (don't run locally — see CONTRIBUTING.md gate map for why):
 
@@ -290,6 +290,8 @@ CI-only gates (don't run locally — see CONTRIBUTING.md gate map for why):
 ---
 
 ## Triage a CodeQL alert
+
+> **Dormant (2026-10-20):** CodeQL is not currently run — it needs GitHub Advanced Security on a private repo (see `docs/SETUP.md` → "Enabling code-security features"). Kept for when it is restored.
 
 CodeQL findings appear under **Security → Code scanning** on GitHub. PR
 checks fail only on `ERROR`-severity rules; `WARNING` and `NOTE` show

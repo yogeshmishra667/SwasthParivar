@@ -102,7 +102,8 @@ Husky runs three hooks for you (auto-installed via `pnpm install` postinstall):
 5. `prisma format` check on `schema.prisma`
 6. Schema ↔ migration parity (`scripts/check-migration-parity.sh`)
 7. Squawk migration SQL safety on new migrations only (`scripts/lint-migrations.sh`)
-8. Domain-logic purity (`scripts/check-domain-purity.mjs`)
+8. Domain-logic purity (`scripts/check-domain-purity.mjs`) + mobile i18n
+   parity (`scripts/check-i18n-parity.mjs`)
 9. Domain-logic `test:coverage` with per-file ratchets
 
 Optional opt-ins: `PREFLIGHT_FULL=1 git push` adds Testcontainers integration
@@ -113,26 +114,34 @@ tests + Docker image build + `/health` smoke (~5min total).
 Everything that runs in CI also runs locally **except** the ones below.
 The gap is intentional (cost vs. value), not drift.
 
-| Gate                           | pre-commit |   pre-push (preflight)    |                      CI                      |
-| ------------------------------ | :--------: | :-----------------------: | :------------------------------------------: |
-| ESLint                         | ✅ staged  |       ✅ workspace        |                      ✅                      |
-| Prettier (`.ts/.json/.md/...`) | ✅ staged  |            ✅             |                      ✅                      |
-| Prisma schema format           | ✅ staged  |            ✅             |                      ✅                      |
-| Typecheck                      |     —      |            ✅             |                      ✅                      |
-| Domain-logic purity            |     —      |            ✅             |                      ✅                      |
-| Unit tests + coverage          |     —      |            ✅             |                      ✅                      |
-| Schema ↔ migration parity      |     —      |            ✅             |                  ✅ PR-only                  |
-| Migration lint (squawk)        |     —      |            ✅             |                  ✅ PR-only                  |
-| Build (workspace)              |     —      |   (typecheck covers it)   |                      ✅                      |
-| Integration tests              |     —      | opt-in `PREFLIGHT_FULL=1` |                      ✅                      |
-| Docker image smoke + Trivy     |     —      |  opt-in `--with-docker`   |                      ✅                      |
-| `pnpm audit` (HIGH/CRITICAL)   |     —      |             —             |                      ✅                      |
-| CodeQL SAST                    |     —      |             —             |                      ✅                      |
-| Dependency review (PR diff)    |     —      |             —             |                  ✅ PR-only                  |
-| Secret scan (gitleaks)         |     —      |             —             |                      ✅                      |
-| Danger (PR rules)              |     —      |             —             |                  ✅ PR-only                  |
-| SBOM (CycloneDX + SPDX)        |     —      |             —             |    ✅ informational, attached to releases    |
-| OpenSSF Scorecard              |     —      |             —             | ✅ informational, weekly cron + push to main |
+CI (`.github/workflows/ci.yml`) runs on pull requests, plus a weekly full
+run on `main` (Mondays 06:00 IST) and on manual dispatch. On a PR, each job
+runs **only when its area changed** — the `Detect changed paths` job routes
+them, and every gate fails open (if routing errors, the job runs). There is
+no post-merge run: branch protection requires PRs to be up to date with
+`main`, so the merged tree is exactly what CI passed.
+
+| Gate (CI job → step)                                    | pre-commit |   pre-push (preflight)    | CI — runs on a PR when…                             |
+| ------------------------------------------------------- | :--------: | :-----------------------: | --------------------------------------------------- |
+| **Typecheck (workspace)** ★                             |     —      |            ✅             | any app / package / script / root config changed    |
+| Lint, format & build → Prettier + Prisma format         | ✅ staged  |            ✅             | always                                              |
+| Lint, format & build → domain-logic purity              |     —      |            ✅             | `packages/**` changed                               |
+| Lint, format & build → ESLint + workspace build         | ✅ staged  |       ✅ workspace        | any app / package / script / root config changed    |
+| **Unit tests (domain-logic)** ★ → domain-logic + cov.   |     —      |            ✅             | `packages/**` changed                               |
+| … → server unit / admin / mobile (RNTL) suites          |     —      |             —             | that app (or a package it uses) changed             |
+| **Integration tests (server)** ★                        |     —      | opt-in `PREFLIGHT_FULL=1` | server or `packages/**` changed                     |
+| **Schema ↔ migration parity** ★ → parity + squawk       |     —      |            ✅             | schema / migrations / migration scripts changed     |
+| … → drift (replay migrations, diff vs `schema.prisma`)  |     —      |             —             | same as above                                       |
+| Mobile app checks → i18n parity (en ↔ hi)               |     —      |            ✅             | mobile or `packages/**` changed                     |
+| … → Expo SDK compatibility + Metro bundle (Android/iOS) |     —      |             —             | same as above                                       |
+| Dependency audit (`pnpm audit`, HIGH/CRITICAL)          |     —      |             —             | lockfile / manifests changed (+ weekly on `main`)   |
+| Secret scan (gitleaks)                                  |     —      |             —             | always                                              |
+| Server image build + `/health` smoke (+ Trivy, info)    |     —      |  opt-in `--with-docker`   | server, `packages/**`, root config, compose changed |
+| SBOM (CycloneDX + SPDX) — `sbom.yml`                    |     —      |             —             | release tags only (informational)                   |
+
+★ = required by branch protection on `main` (exact job names — don't rename).
+Any change to `ci.yml` or root config (lockfile, root `package.json`,
+`tsconfig*.json`, `eslint.config.mjs`) re-runs everything.
 
 Skipping a hook in an emergency: `git commit --no-verify` / `git push --no-verify`.
 Use sparingly — CI runs the same checks and will reject the PR. If you find

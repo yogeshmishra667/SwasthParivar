@@ -43,6 +43,29 @@ updates:
       # Majors require human design review (Express 5 → 6, Prisma 7 → 8 etc.)
       - dependency-name: "*"
         update-types: [version-update:semver-major]
+      # The Expo SDK owns these versions: they move only with an SDK upgrade
+      # (`npx expo install --fix`), never piecemeal. CI does not build the
+      # native app or run the mobile Jest suite, so a bad bump here passes
+      # CI and breaks the device build (react-native-screens 4.16 → 4.25,
+      # #47) or every RNTL test (react-test-renderer 19.2 vs react 19.1, #173).
+      # React must match react-native's renderer exactly — no updates at all.
+      - dependency-name: "react"
+        update-types: [version-update:semver-minor, version-update:semver-patch]
+      - dependency-name: "react-dom"
+        update-types: [version-update:semver-minor, version-update:semver-patch]
+      - dependency-name: "react-test-renderer"
+        update-types: [version-update:semver-minor, version-update:semver-patch]
+      - dependency-name: "react-native"
+        update-types: [version-update:semver-minor, version-update:semver-patch]
+      # Native modules: patch updates are fine, minors need an SDK-aligned build.
+      - dependency-name: "react-native-*"
+        update-types: [version-update:semver-minor]
+      - dependency-name: "@react-native-*/*"
+        update-types: [version-update:semver-minor]
+      - dependency-name: "@shopify/react-native-skia"
+        update-types: [version-update:semver-minor]
+      - dependency-name: "@shopify/flash-list"
+        update-types: [version-update:semver-minor]
 
   - package-ecosystem: github-actions
     directory: /
