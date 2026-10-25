@@ -3,7 +3,7 @@ import {
   razorpayEventToTransition,
   verifyRazorpaySignature,
   type SubscriptionTier,
-} from "@swasth/domain-logic";
+} from "@swasth/domain-logic/subscription-state";
 import type { Prisma, Subscription, SubscriptionProvider } from "@prisma/client";
 import { prisma } from "../../shared/database.js";
 import { redis } from "../../shared/redis.js";

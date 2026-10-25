@@ -54,6 +54,10 @@ jobs:
       - name: Run pnpm audit (moderate threshold)
         if: env.SKIP != 'true'
         id: audit
+        # Same heap as ci.yml's audit job — at Node's default ~2 GB pnpm
+        # audit runs out of memory and this report is just a crash trace.
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: |
           set +e
           pnpm audit --prod --audit-level=moderate > audit-out.txt 2>&1
