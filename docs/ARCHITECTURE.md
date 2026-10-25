@@ -21,29 +21,29 @@
 
 ### What runs in CI (`.github/workflows/ci.yml`)
 
-| Job               | Command                                                                                                                            | Fails on                                                                                                                                                                                  |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Typecheck         | `pnpm typecheck`                                                                                                                   | any TS error in any of the 5 projects                                                                                                                                                     |
-| Lint              | `pnpm lint` (includes `eslint-plugin-security`: eval, ReDoS, timing-attack, weak RNG, child_process injection, bidi/Trojan Source) | any ESLint warning or error                                                                                                                                                               |
-| Format            | `pnpm format:check`                                                                                                                | any Prettier drift                                                                                                                                                                        |
-| Prisma format     | `bash scripts/check-prisma-format.sh`                                                                                              | `schema.prisma` is not `prisma format`-clean (catches attribute-order drift, whitespace)                                                                                                  |
-| Domain purity     | `node scripts/check-domain-purity.mjs`                                                                                             | forbidden imports or `Date.now`/`Math.random`/`new Date()` in `packages/domain-logic/src/`                                                                                                |
-| Build             | `pnpm build`                                                                                                                       | any package or app build failure                                                                                                                                                          |
-| Audit             | `pnpm audit --prod --audit-level=high`                                                                                             | a HIGH or CRITICAL CVE in the prod dep graph                                                                                                                                              |
-| Dependency review | `actions/dependency-review-action`                                                                                                 | a HIGH/CRITICAL CVE OR GPL/AGPL/SSPL license entering the lockfile via the PR diff (earlier signal than `pnpm audit`)                                                                     |
-| Secret scan       | gitleaks                                                                                                                           | secret pattern in git history                                                                                                                                                             |
-| SAST              | CodeQL `security-and-quality` query pack                                                                                           | injection, weak crypto, hardcoded secrets, prototype pollution, ReDoS — JS/TS only. Findings in Security → Code scanning.                                                                 |
-| Unit tests        | `pnpm --filter @swasth/domain-logic test:coverage`                                                                                 | per-file or aggregate coverage thresholds (see `packages/domain-logic/vitest.config.ts`)                                                                                                  |
-| Integration       | `pnpm test:integration`                                                                                                            | any of the server integration tests; uses Testcontainers Postgres + Redis                                                                                                                 |
-| Migration parity  | `bash scripts/check-migration-parity.sh` (semantic via `prisma migrate diff`)                                                      | datamodel changed without a new migration file (pure-format / comment / reorder edits do NOT trigger)                                                                                     |
-| Migration lint    | `bash scripts/lint-migrations.sh` (squawk)                                                                                         | unsafe SQL in a NEW migration (NOT NULL without default, renames, type changes)                                                                                                           |
-| Image smoke       | `docker build` + curl `/health`                                                                                                    | Dockerfile doesn't produce a bootable image                                                                                                                                               |
-| Image CVE scan    | Trivy (HIGH+CRITICAL, fixable only, OS + library)                                                                                  | vulnerable Node base or system package — `ignore-unfixed: true` so unfixed CVEs surface as tracked issues, not PR blockers                                                                |
-| Danger            | `pnpm dlx danger ci`                                                                                                               | (1) domain-logic source changed without a test, (2) schema.prisma changed without migration, (3) PR > 500 LoC without "## Why this is large"                                              |
-| SBOM              | Syft (CycloneDX + SPDX) — source-tree + Docker image                                                                               | (informational — attached to GitHub releases on `v*` tag. Removed from PR + main-push triggers to stay inside the Actions Pro quota; CVE catching is `pnpm audit` + Trivy, not the SBOM.) |
-| OpenSSF Scorecard | weekly cron + push to main                                                                                                         | (informational — uploads SARIF to Security tab; scores branch protection, pinned actions, signed releases, SAST presence, token perms, etc.)                                              |
-| Dependabot        | weekly cron                                                                                                                        | (informational PRs only — doesn't fail builds)                                                                                                                                            |
-| Audit moderate    | monthly cron                                                                                                                       | files a GitHub Issue when moderate CVEs accumulate                                                                                                                                        |
+Runs on pull requests, plus a weekly full run on `main` (Mondays 06:00 IST)
+and manual dispatch. On a PR every job runs **only when its area changed**
+(`Detect changed paths` routes them; gates fail open, so a routing error
+runs the job). No post-merge run — branch protection requires PRs to be up
+to date with `main`, so the merged tree is what CI already passed.
+★ = required check (exact job name pinned by branch protection).
+
+| Job → step                                     | Command                                                                                            | Runs on a PR when…                                  | Fails on                                                                                                                                                                                     |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Typecheck** ★                                | `pnpm -r typecheck`                                                                                | any app/package/script/root config changed          | any TS error in any project                                                                                                                                                                  |
+| Lint, format & build → format                  | `pnpm format:check` + `scripts/check-prisma-format.sh`                                             | always                                              | Prettier drift (incl. Markdown); `schema.prisma` not `prisma format`-clean                                                                                                                   |
+| … → purity                                     | `node scripts/check-domain-purity.mjs`                                                             | `packages/**` changed                               | forbidden imports, `Date.now`/`Math.random`/`new Date()` at call site, `node:` builtins reachable from the mobile-bundled barrel                                                             |
+| … → lint + build                               | `pnpm -r lint` (incl. `eslint-plugin-security`) + `pnpm build`                                     | any app/package/script/root config changed          | any ESLint warning/error; any package or app build failure                                                                                                                                   |
+| **Unit tests** ★                               | domain-logic `test:coverage` + server unit + admin + mobile (RNTL)                                 | per suite: that area changed                        | any failing test; domain-logic per-file coverage thresholds                                                                                                                                  |
+| **Integration** ★                              | `pnpm test:integration` (Testcontainers Postgres + Redis)                                          | server or `packages/**` changed                     | any server integration test                                                                                                                                                                  |
+| **Migrations** ★ (`Schema ↔ migration parity`) | parity script + squawk + drift replay                                                              | schema/migrations/migration scripts changed         | datamodel change without a migration; unsafe SQL in a NEW migration; replaying all migrations into an empty TimescaleDB does not produce `schema.prisma` (`prisma migrate diff --exit-code`) |
+| Mobile app checks                              | `scripts/check-i18n-parity.mjs` + `expo install --check` (offline) + `expo export` (Android + iOS) | mobile or `packages/**` changed                     | en/hi key, placeholder or blank-translation mismatch; Expo-managed package not matching the installed SDK; the JS bundle fails to build                                                      |
+| Dependency audit                               | `pnpm audit --prod --audit-level=high`                                                             | lockfile/manifests changed (+ weekly on `main`)     | a HIGH/CRITICAL CVE in the prod graph (accepted ones: `pnpm.auditConfig`, justified in `SECURITY.md`)                                                                                        |
+| Secret scan                                    | gitleaks                                                                                           | always                                              | secret pattern in git history                                                                                                                                                                |
+| Image smoke                                    | `docker build` + curl `/health`; Trivy (informational)                                             | server, `packages/**`, root config, compose changed | Dockerfile doesn't produce a bootable image                                                                                                                                                  |
+| SBOM (`sbom.yml`)                              | Syft (CycloneDX + SPDX)                                                                            | release tags / manual only                          | (informational — attached to GitHub releases)                                                                                                                                                |
+| Dependabot                                     | weekly                                                                                             | —                                                   | (informational PRs)                                                                                                                                                                          |
+| Audit moderate (`audit-moderate.yml`)          | monthly cron                                                                                       | —                                                   | files/updates a GitHub Issue when moderate CVEs accumulate                                                                                                                                   |
 
 ### How to run this locally
 
@@ -170,17 +170,22 @@ Don't use Sentry for product metrics (slow + wrong tool). Don't use PostHog for 
 
 ### Code-security tooling — a fourth layer for "is the code itself safe"
 
-These are NOT runtime observability — they run pre-merge in CI and
-report into the GitHub Security tab. Treat their findings the same way
-you'd treat a failing test: triage at PR time, not after deploy.
+These are NOT runtime observability — they run pre-merge in CI. Treat
+their findings the same way you'd treat a failing test: triage at PR
+time, not after deploy.
 
 | Tool                     | Source                                  | What it catches                                                                                              | Where findings appear     |
 | ------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------- |
-| CodeQL                   | `.github/workflows/codeql.yml`          | SAST: injection, weak crypto, prototype pollution, ReDoS, hardcoded secrets, unsafe data flows               | Security → Code scanning  |
-| Dependency review        | `ci.yml` job                            | New HIGH/CRITICAL CVEs + GPL/AGPL/SSPL licenses in the PR diff                                               | PR comment + check status |
+| `pnpm audit`             | `ci.yml` `audit` job                    | HIGH/CRITICAL CVEs in the production dependency graph                                                        | CI log + check status     |
 | Trivy                    | `image-smoke` job (post-build)          | OS + library CVEs in the produced server Docker image (HIGH+CRITICAL, fixable-only)                          | CI log                    |
 | `eslint-plugin-security` | `eslint.config.mjs` (hand-picked rules) | dynamic-code eval, ReDoS, timing-attacks on `===`-compared tokens, weak RNG, `child_process` injection, bidi | Local lint + CI lint step |
 | gitleaks                 | `ci.yml` `secret-scan` job              | Secret patterns in git history                                                                               | CI log                    |
+
+CodeQL, `dependency-review-action` and OpenSSF Scorecard were removed
+(2026-10-20): on a private repo they need GitHub Advanced Security, so they
+were permanently skipped and never produced a finding. Restore them from git
+history (`codeql.yml`, `scorecard.yml`, the `dependency-review` job) if the
+repo goes public or GHAS is enabled.
 
 Triage recipes for each are in `docs/HOWTO.md` (sections starting
 "Triage a …").
@@ -193,14 +198,12 @@ is the most common observability mistake. Wire the three from day one
 just dropping in DSNs.
 
 A fourth set of tools belongs in CI to keep the code itself
-trustworthy (CodeQL, dependency review, Trivy, eslint-plugin-security,
-gitleaks). None of these need keys; all of them ship findings to the
-GitHub Security tab where they survive across PRs and aren't drowned
-out by ephemeral run-logs.
+trustworthy (dependency audit, Trivy, eslint-plugin-security, gitleaks).
+None of these need keys or paid features.
 
-### Supply-chain transparency — SBOM + Scorecard
+### Supply-chain transparency — SBOM
 
-Two informational (non-blocking) workflows audit what's actually being
+One informational (non-blocking) workflow audits what's actually being
 shipped:
 
 - **`.github/workflows/sbom.yml`** — Syft generates CycloneDX + SPDX
@@ -212,17 +215,9 @@ shipped:
   quality gate, and per-PR generation was the largest single consumer
   of Actions minutes. Auditors and procurement consume the SBOM, not
   the lockfile.
-- **`.github/workflows/scorecard.yml`** — OpenSSF Scorecard runs
-  weekly + on push to main. Audits 19 supply-chain hygiene rules
-  (branch protection, pinned actions, signed releases, token
-  permissions, SAST presence, etc.). Results land in the Security
-  tab as SARIF and a numeric score is published at
-  `https://api.securityscorecards.dev/projects/github.com/<org>/<repo>`.
-  Failing rules become a punch list for incremental hardening, not a
-  blocker on the current PR.
 
-Neither workflow fails the build. They're audit, not gate. The gates
-that DO fail PRs are the ones in the table above.
+It never fails the build — it's audit, not gate. The gates that DO fail
+PRs are the ones in the table above.
 
 ---
 
@@ -375,7 +370,7 @@ A flag service is generic. Flag _keys_ are added on-demand whenever a real ops n
 - Enforced by **three independent mechanisms**:
   1. `tsconfig.json` path mappings that redirect forbidden imports (`@prisma/client`, `ioredis`, `bullmq`, `express`, `axios`, `node:fs/net/http/https/child_process`) to a stub `_blocked.d.ts`
   2. `scripts/check-domain-purity.mjs` — regex scan for `Date.now`, `Math.random`, `new Date()` in `.ts` files
-  3. CI job `Domain-logic purity` that runs the script on every push
+  3. the purity step of the CI `Lint, format & build` job (runs whenever `packages/**` changes)
   4. CODEOWNERS rule requiring 2 reviewers for any change under `packages/domain-logic/src/`
 
 ### Why it's worth lifting whole
