@@ -42,3 +42,19 @@ export interface NotificationCandidate {
   scheduledFor: string;
   params: Record<string, string | number>;
 }
+
+/**
+ * Android notification channels — the single list the app creates at
+ * startup and the server may send to. Android silently drops a push whose
+ * `channelId` doesn't exist on the device (audit P10), so the server's
+ * `ExpoPushMessage.channelId` is typed against this list.
+ */
+export const ANDROID_NOTIFICATION_CHANNELS = {
+  default: { name: "General", importance: "high" },
+  critical: { name: "Critical health alerts", importance: "max", bypassDnd: true },
+  reminders: { name: "Reading reminders", importance: "default" },
+  medications: { name: "Medicine reminders", importance: "high" },
+  guardian: { name: "Family alerts", importance: "high" },
+} as const;
+
+export type AndroidChannelId = keyof typeof ANDROID_NOTIFICATION_CHANNELS;

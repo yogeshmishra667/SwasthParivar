@@ -1,3 +1,4 @@
+import type { AndroidChannelId } from "@swasth/shared-types";
 import { env } from "../../config/env.js";
 import { logger } from "../logger.js";
 import { prisma } from "../database.js";
@@ -9,7 +10,8 @@ export interface ExpoPushMessage {
   data?: Record<string, unknown>;
   sound?: "default";
   priority?: "high" | "default";
-  channelId?: string;
+  /** Must be a channel the app creates, or Android drops the push (P10). */
+  channelId?: AndroidChannelId;
 }
 
 export interface ExpoPushResult {
