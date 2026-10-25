@@ -14,7 +14,9 @@
 //     `prescription-approver-resolver` module and frozen on
 //     `Prescription.requiresGuardianApproval`. Every subsequent
 //     write checks `req.user.id === approverUserId` and rejects with
-//     `APPROVAL_REQUIRES_GUARDIAN` otherwise.
+//     `APPROVAL_REQUIRES_GUARDIAN` otherwise. Once a guardian was
+//     required, authority never falls back to the patient
+//     (`resolveEffectiveApprover`, audit P6).
 //   - Once `status` is `approved` or `rejected` the prescription is
 //     locked for clarify / approve / reject. New writes throw
 //     `PRESCRIPTION_LOCKED` (409).
@@ -30,7 +32,11 @@
 import { randomUUID } from "node:crypto";
 
 import type { Prisma } from "@prisma/client";
-import { resolveApprover } from "@swasth/domain-logic";
+import {
+  resolveApprover,
+  resolveEffectiveApprover,
+  type ApproverResolution,
+} from "@swasth/domain-logic";
 import { DomainError } from "@swasth/shared-types";
 
 import type { AuthClaims } from "../../shared/middleware/auth.js";
@@ -184,7 +190,10 @@ export const getPrescription = async (input: GetPrescriptionInput): Promise<Pres
   }
   await ensureHouseholdRead(input.auth, row.userId);
 
-  const approver = await resolveApproverForUser(row.userId);
+  const approver = resolveEffectiveApprover(
+    row.requiresGuardianApproval,
+    await resolveApproverForUser(row.userId),
+  );
   const refreshedOriginal = await Promise.all(
     row.originalPhotoUrls.map((u) => refreshUrlIfNeeded(u)),
   );
@@ -200,8 +209,10 @@ export const getPrescription = async (input: GetPrescriptionInput): Promise<Pres
     userId: row.userId,
     status: row.status,
     requiresGuardianApproval: row.requiresGuardianApproval,
-    approverUserId: approver.approverUserId,
-    approverFrictionLevel: approver.frictionLevel,
+    // null: a guardian had to approve and none is linked now — read-only
+    // for everyone until one is (audit P6).
+    approverUserId: approver?.approverUserId ?? null,
+    approverFrictionLevel: approver?.frictionLevel ?? "none",
     originalPhotoUrls: refreshedOriginal,
     approvalRequestedAt: row.approvalRequestedAt?.toISOString() ?? null,
     approvalCompletedAt: row.approvalCompletedAt?.toISOString() ?? null,
@@ -1020,8 +1031,17 @@ const loadPrescriptionForApprover = async (
     throw new DomainError("PRESCRIPTION_NOT_FOUND", "prescription not found");
   }
 
-  const approver = await resolveApproverForUser(prescription.userId);
-  if (approver.approverUserId !== input.auth.sub) {
+  // Authority comes from the live family links, but a prescription that
+  // needed a guardian at upload can never fall back to the patient — a
+  // patient who revokes their guardian must not self-approve it (P6).
+  const approver = resolveEffectiveApprover(
+    prescription.requiresGuardianApproval,
+    await resolveApproverForUser(prescription.userId),
+  );
+  // Kept as an explicit null check, not `approver?.approverUserId`: a
+  // missing approver must never let `undefined === undefined` through.
+  const approverUserId = approver === null ? null : approver.approverUserId;
+  if (approverUserId === null || approverUserId !== input.auth.sub) {
     captureAnalyticsEvent("prescription_approval_authority_blocked", prescription.userId, {
       prescription_id: prescription.id,
       action: input.action,
@@ -1070,14 +1090,7 @@ const ensureHouseholdRead = async (auth: AuthClaims, patientUserId: string): Pro
   throw new DomainError("FAMILY_NO_ACCESS", "not authorised to read this prescription");
 };
 
-const resolveApproverForUser = async (
-  patientUserId: string,
-): Promise<{
-  approverUserId: string;
-  requiresGuardianApproval: boolean;
-  frictionLevel: "none" | "high";
-  reason: string;
-}> => {
+const resolveApproverForUser = async (patientUserId: string): Promise<ApproverResolution> => {
   const [accepted, guardianElsewhere] = await Promise.all([
     prisma.familyLink.findMany({
       where: { patientId: patientUserId, status: "accepted" },

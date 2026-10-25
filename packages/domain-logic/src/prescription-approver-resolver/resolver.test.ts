@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { relationshipFamily } from "./relationship.js";
-import { resolveApprover } from "./resolver.js";
+import { resolveApprover, resolveEffectiveApprover } from "./resolver.js";
 import type { AcceptedFamilyLink, ApproverResolverInput } from "./types.js";
 
 const link = (overrides: Partial<AcceptedFamilyLink> = {}): AcceptedFamilyLink => ({
@@ -255,5 +255,30 @@ describe("resolveApprover — invariants", () => {
         expect(r.reason).toBe("self_solo_with_friction");
       }
     }
+  });
+});
+
+describe("resolveEffectiveApprover (audit P6 — authority frozen at upload)", () => {
+  const guardianLive = resolveApprover(input({ acceptedFamilyLinks: [link()] }));
+  const soloLive = resolveApprover(input());
+  const capableLive = resolveApprover(input({ patientIsGuardianElsewhere: true }));
+
+  it("guardian required at upload + guardian still linked → that guardian", () => {
+    expect(resolveEffectiveApprover(true, guardianLive)).toEqual(guardianLive);
+  });
+
+  it("guardian required at upload + guardian revoked → nobody (never the patient)", () => {
+    expect(resolveEffectiveApprover(true, soloLive)).toBeNull();
+    expect(resolveEffectiveApprover(true, capableLive)).toBeNull();
+  });
+
+  it("guardian required at upload + a different guardian now → the new guardian", () => {
+    const other = resolveApprover(input({ acceptedFamilyLinks: [link({ guardianId: "g-2" })] }));
+    expect(resolveEffectiveApprover(true, other)?.approverUserId).toBe("g-2");
+  });
+
+  it("solo at upload → the live resolution (self, or a guardian linked since)", () => {
+    expect(resolveEffectiveApprover(false, soloLive)).toEqual(soloLive);
+    expect(resolveEffectiveApprover(false, guardianLive)).toEqual(guardianLive);
   });
 });
