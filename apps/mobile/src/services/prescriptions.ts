@@ -35,7 +35,8 @@ export interface PrescriptionView {
   userId: string;
   status: PrescriptionStatus;
   requiresGuardianApproval: boolean;
-  approverUserId: string;
+  /** null — a guardian had to approve and none is linked now (read-only). */
+  approverUserId: string | null;
   approverFrictionLevel: "none" | "high";
   originalPhotoUrls: string[];
   approvedBy: string | null;
