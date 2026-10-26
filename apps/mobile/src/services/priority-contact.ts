@@ -8,7 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { logError } from "@/services/analytics";
 import { listEmergencyContacts, type EmergencyContactDto } from "@/services/emergency-contacts";
 import { useProfileStore } from "@/stores/profile.store";
-import { sanitizePhoneForTelUri } from "@/utils/phone";
+import { isDialablePhone } from "@/utils/phone";
 
 export interface CallTarget {
   id: string;
@@ -24,8 +24,23 @@ export const pickPriorityContact = (
 ): CallTarget | null => {
   const top = [...contacts]
     .sort((a, b) => a.priority - b.priority)
-    .find((c) => sanitizePhoneForTelUri(c.phone).length > 0);
+    .find((c) => isDialablePhone(c.phone));
   return top ? { id: top.id, name: top.name, phone: top.phone } : null;
+};
+
+/** Caches the profile's priority-1 contact from a contact list just fetched for it. */
+export const storePriorityContact = async (
+  userId: string,
+  contacts: readonly EmergencyContactDto[],
+): Promise<CallTarget | null> => {
+  const target = pickPriorityContact(contacts);
+  try {
+    if (target) await AsyncStorage.setItem(cacheKey(userId), JSON.stringify(target));
+    else await AsyncStorage.removeItem(cacheKey(userId));
+  } catch (err) {
+    logError("priorityContactCache", err);
+  }
+  return target;
 };
 
 export const readCachedPriorityContact = async (userId: string): Promise<CallTarget | null> => {
@@ -43,20 +58,18 @@ export const readCachedPriorityContact = async (userId: string): Promise<CallTar
  */
 export const refreshPriorityContact = async (userId: string): Promise<CallTarget | null> => {
   // Same rule as the contacts screen: the primary's own contacts are the
-  // JWT subject's; a sub-profile's need `targetUserId`.
+  // JWT subject's; a sub-profile's need `targetUserId`. Until the
+  // household is loaded we can't tell which, and asking without
+  // `targetUserId` would cache the primary's contacts under a
+  // sub-profile (P2 review W1), so use the cache alone.
   const { primaryUserId } = useProfileStore.getState();
-  const targetUserId = primaryUserId !== null && userId !== primaryUserId ? userId : undefined;
-  let target: CallTarget | null;
+  if (primaryUserId === null) return await readCachedPriorityContact(userId);
+  const targetUserId = userId !== primaryUserId ? userId : undefined;
+  let contacts: EmergencyContactDto[];
   try {
-    target = pickPriorityContact(await listEmergencyContacts(targetUserId));
+    contacts = await listEmergencyContacts(targetUserId);
   } catch {
     return await readCachedPriorityContact(userId);
   }
-  try {
-    if (target) await AsyncStorage.setItem(cacheKey(userId), JSON.stringify(target));
-    else await AsyncStorage.removeItem(cacheKey(userId));
-  } catch (err) {
-    logError("priorityContactCache", err);
-  }
-  return target;
+  return await storePriorityContact(userId, contacts);
 };

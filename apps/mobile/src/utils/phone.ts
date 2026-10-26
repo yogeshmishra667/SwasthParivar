@@ -45,3 +45,10 @@ export const sanitizePhoneForTelUri = (raw: string | null | undefined): string =
   const rest = trimmed.replace(/[^\d*#]/g, "");
   return hasPlusPrefix ? `+${rest}` : rest;
 };
+
+// A real phone number, not "+" or "#" alone: at least this many digits.
+const MIN_DIAL_DIGITS = 7;
+
+/** True when `phone` can be dialled as a person's number (audit P2). */
+export const isDialablePhone = (phone: string): boolean =>
+  sanitizePhoneForTelUri(phone).replace(/\D/g, "").length >= MIN_DIAL_DIGITS;

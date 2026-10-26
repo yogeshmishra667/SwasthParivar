@@ -9,7 +9,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { Linking } from "react-native";
 
 import { CriticalAlert } from "@/components/logging/CriticalAlert";
-import { track } from "@/services/analytics";
+import { logError, track } from "@/services/analytics";
 
 // The i18n mock (jest.setup.ts) returns keys verbatim.
 const base = {
@@ -102,10 +102,34 @@ describe("CriticalAlert", () => {
       });
       fireEvent(screen.getByTestId("critical-alert-root"), "touchStart");
       expect(screen.queryByText("critical.autoDialHint")).toBeNull();
+      // Says so, rather than silently vanishing.
+      expect(screen.getByText("critical.autoDialOff")).toBeTruthy();
+      expect(track).toHaveBeenCalledWith("critical_alert_autodial_cancelled");
       act(() => {
         jest.advanceTimersByTime(120_000);
       });
       expect(openURL).not.toHaveBeenCalled();
+    });
+
+    it("treats a contact without a real number as no contact", () => {
+      mockUsePriorityContact.mockReturnValue({ id: "junk", name: "Junk", phone: "+" });
+      render(<CriticalAlert {...base} value={48} direction="low" />);
+      expect(screen.queryByText("critical.callContact")).toBeNull();
+      expect(screen.queryByText("critical.autoDialHint")).toBeNull();
+      act(() => {
+        jest.advanceTimersByTime(120_000);
+      });
+      expect(openURL).not.toHaveBeenCalled();
+    });
+
+    it("a dialer that fails to open is logged, not thrown (review W3)", async () => {
+      openURL.mockRejectedValueOnce(new Error("no dialer"));
+      render(<CriticalAlert {...base} value={48} direction="low" />);
+      fireEvent.press(screen.getByText("critical.callEmergency"));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(logError).toHaveBeenCalledWith("criticalAlert.dial", expect.any(Error));
     });
 
     it("never auto-dials 112 when there is no contact", () => {

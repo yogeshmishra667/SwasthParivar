@@ -11,8 +11,9 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 }));
 jest.mock("@/services/emergency-contacts", () => ({ listEmergencyContacts: jest.fn() }));
 jest.mock("@/services/analytics", () => ({ logError: jest.fn() }));
+let mockPrimaryUserId: string | null = "primary";
 jest.mock("@/stores/profile.store", () => ({
-  useProfileStore: { getState: () => ({ primaryUserId: "primary" }) },
+  useProfileStore: { getState: () => ({ primaryUserId: mockPrimaryUserId }) },
 }));
 
 import { listEmergencyContacts, type EmergencyContactDto } from "@/services/emergency-contacts";
@@ -34,11 +35,18 @@ const contact = (id: string, priority: number, phone = "+919800000000"): Emergen
 beforeEach(() => {
   mockStorage.clear();
   list.mockReset();
+  mockPrimaryUserId = "primary";
 });
 
 describe("refreshPriorityContact", () => {
   it("picks the lowest priority with a dialable phone and caches it", async () => {
-    list.mockResolvedValue([contact("c3", 3), contact("c1", 1, "n/a"), contact("c2", 2)]);
+    list.mockResolvedValue([
+      contact("c4", 4),
+      contact("c1", 1, "n/a"),
+      contact("c0", 0, "+"),
+      contact("c3", 3, "#123"),
+      contact("c2", 2),
+    ]);
     await expect(refreshPriorityContact("primary")).resolves.toMatchObject({ id: "c2" });
     await expect(readCachedPriorityContact("primary")).resolves.toMatchObject({ id: "c2" });
   });
@@ -71,6 +79,16 @@ describe("refreshPriorityContact", () => {
     await refreshPriorityContact("primary");
     await refreshPriorityContact("maa");
     await expect(readCachedPriorityContact("primary")).resolves.toMatchObject({ id: "papa-c" });
+    await expect(readCachedPriorityContact("maa")).resolves.toMatchObject({ id: "maa-c" });
+  });
+
+  it("before the household is loaded, uses the cache and never asks the server (review W1)", async () => {
+    list.mockResolvedValueOnce([contact("maa-c", 1)]);
+    await refreshPriorityContact("maa");
+    mockPrimaryUserId = null;
+    list.mockResolvedValueOnce([contact("papa-c", 1)]);
+    await expect(refreshPriorityContact("maa")).resolves.toMatchObject({ id: "maa-c" });
+    expect(list).toHaveBeenCalledTimes(1);
     await expect(readCachedPriorityContact("maa")).resolves.toMatchObject({ id: "maa-c" });
   });
 });

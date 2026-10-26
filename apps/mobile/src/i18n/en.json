@@ -228,7 +228,8 @@
     "alertBodyHigh": "Drink water. Check if you took your medicine.",
     "callContact": "Call {{name}}",
     "callEmergency": "Call 112 (emergency)",
-    "autoDialHint": "If you don't touch the screen, a call to {{name}} opens in 1 minute. Touch the screen to stop it.",
+    "autoDialHint": "If you don't touch the screen, the phone dialer opens for {{name}} in {{seconds}} seconds. Touch anywhere to stop.",
+    "autoDialOff": "Auto-dial stopped. Use a button below to call.",
     "close": "Close",
     "waitDismiss": "Wait {{seconds}}s...",
     "bp": {
