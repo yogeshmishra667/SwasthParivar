@@ -17,7 +17,7 @@ import { notif } from "../shared/i18n/notifications.js";
 /**
  * Two shapes feed this worker. Glucose continues to use the original
  * `BypassDecision` shape (Phase 1 — historic, byte-identical behaviour
- * preserved). Cardiac and respiratory ride the new multi-category
+ * preserved). BP, cardiac and respiratory ride the new multi-category
  * dispatch shape from `planMultiCategoryBypassDispatch`. The two paths
  * share the helpers below (push-token resolution, SMS, PostHog) but
  * branch on shape so glucose can never regress while the new categories
@@ -39,7 +39,7 @@ export interface CriticalAlertGlucoseJob {
 }
 
 export interface CriticalAlertMultiCategoryJob {
-  category: "cardiac" | "respiratory";
+  category: "bp" | "cardiac" | "respiratory";
   readingId: string;
   userId: string;
   dispatch: MultiCategoryBypassDispatch;
@@ -51,6 +51,8 @@ export interface CriticalAlertMultiCategoryJob {
    * cooldown.
    */
   copyParams: {
+    systolic?: number;
+    diastolic?: number;
     heartRateBpm?: number;
     painSeverity?: number;
     peakFlow?: number;
@@ -165,7 +167,7 @@ interface FanOutInput {
   readonly smsText: string;
   readonly log: typeof logger;
   /** Extra props for the push_zero_recipients analytics event. */
-  readonly analytics: { readonly category?: "cardiac" | "respiratory" };
+  readonly analytics: { readonly category?: "bp" | "cardiac" | "respiratory" };
 }
 
 interface FanOutResult {
@@ -351,7 +353,7 @@ const pageIfUndelivered = (
  * full chain without booting a real BullMQ listener.
  *
  * Glucose jobs (the historical shape — no `category` discriminator)
- * route to the unchanged glucose path. Cardiac + respiratory ride a
+ * route to the unchanged glucose path. BP + cardiac + respiratory ride a
  * parallel branch that reuses the push/SMS helpers but speaks the
  * category-specific copy bundle.
  */
@@ -366,7 +368,7 @@ export type CriticalAlertJobRef<T extends CriticalAlertJob = CriticalAlertJob> =
 
 export const processCriticalAlert = async (job: CriticalAlertJobRef): Promise<void> => {
   const data = job.data;
-  if (data.category === "cardiac" || data.category === "respiratory") {
+  if (data.category === "bp" || data.category === "cardiac" || data.category === "respiratory") {
     await processMultiCategoryCriticalAlert(
       job as CriticalAlertJobRef<CriticalAlertMultiCategoryJob>,
       data,
@@ -512,6 +514,17 @@ const buildMultiCategoryCopy = (
   language: Language,
 ): { title: string; body: string } => {
   switch (copyKey) {
+    case "critical.bp.low":
+    case "critical.bp.high":
+      return notif(
+        copyKey === "critical.bp.low" ? "critical_bypass_bp_low" : "critical_bypass_bp_high",
+        {
+          patientName,
+          systolic: copyParams.systolic ?? 0,
+          diastolic: copyParams.diastolic ?? 0,
+        },
+        language,
+      );
     case "critical.cardiac.hr_low":
       return notif(
         "critical_bypass_cardiac_low",

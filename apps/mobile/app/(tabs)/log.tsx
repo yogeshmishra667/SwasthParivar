@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, ScrollView, Pressable, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { isCriticalGlucose } from "@swasth/shared-types";
+import { bpCriticalDirection, isCriticalGlucose } from "@swasth/shared-types";
 import type { GlucoseReadingType, MealCategory, MealType } from "@swasth/shared-types";
 import type { NumericVoiceParseResult, VoiceParseResult } from "@swasth/domain-logic";
 import { useTranslation } from "react-i18next";
@@ -95,6 +95,8 @@ export default function LogScreen(): JSX.Element {
     visible: boolean;
     value: number;
     direction: "low" | "high";
+    category?: "glucose" | "bp";
+    valueLabel?: string;
   }>({ visible: false, value: 0, direction: "low" });
 
   // BP
@@ -263,6 +265,21 @@ export default function LogScreen(): JSX.Element {
     hapticSave();
     setSaveError(null);
     setSaving(true);
+    // Critical BP (CLAUDE.md thresholds, shared with the server) raises the
+    // fullscreen alert on every outcome — synced, offline or rejected — the
+    // same way a critical glucose reading does. Push/SMS is the server's job.
+    const bpDirection = bpCriticalDirection(parsedBP.systolic, parsedBP.diastolic);
+    const raiseBPAlert = (): void => {
+      if (!bpDirection) return;
+      setCriticalAlert({
+        visible: true,
+        value: parsedBP.systolic,
+        direction: bpDirection,
+        category: "bp",
+        valueLabel: `${parsedBP.systolic}/${parsedBP.diastolic} mmHg`,
+      });
+      track("critical_bypass_triggered", { category: "bp", value: parsedBP.systolic });
+    };
     try {
       const result = await saveBPReading({
         userId,
@@ -275,6 +292,7 @@ export default function LogScreen(): JSX.Element {
 
       if (result.kind === "synced") {
         setSavedOffline(false);
+        raiseBPAlert();
         setSavedSummary({
           headline: `${parsedBP.systolic}/${parsedBP.diastolic} mmHg`,
           detail: t("bp.saved"),
@@ -284,6 +302,7 @@ export default function LogScreen(): JSX.Element {
       }
       if (result.kind === "queued") {
         setSavedOffline(true);
+        raiseBPAlert();
         setSavedSummary({
           headline: `${parsedBP.systolic}/${parsedBP.diastolic} mmHg`,
           detail: t("bp.savedOffline"),
@@ -291,6 +310,7 @@ export default function LogScreen(): JSX.Element {
         setStage("saved");
         return;
       }
+      raiseBPAlert();
       setSaveError(t("bp.saveFailed"));
     } finally {
       setSaving(false);
@@ -495,6 +515,8 @@ export default function LogScreen(): JSX.Element {
           visible={criticalAlert.visible}
           value={criticalAlert.value}
           direction={criticalAlert.direction}
+          {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
+          {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
           contactName="Emergency"
           contactPhone="112"
           onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}
@@ -505,16 +527,29 @@ export default function LogScreen(): JSX.Element {
 
   if (stage === "confirm" && mode === "bp" && parsedBP) {
     return (
-      <BPConfirmationScreen
-        systolic={parsedBP.systolic}
-        diastolic={parsedBP.diastolic}
-        {...(parsedBP.pulse !== undefined ? { pulse: parsedBP.pulse } : {})}
-        onConfirm={() => void saveBP()}
-        onEdit={() => {
-          setSaveError(null);
-          setStage("input");
-        }}
-      />
+      <>
+        <BPConfirmationScreen
+          systolic={parsedBP.systolic}
+          diastolic={parsedBP.diastolic}
+          {...(parsedBP.pulse !== undefined ? { pulse: parsedBP.pulse } : {})}
+          onConfirm={() => void saveBP()}
+          onEdit={() => {
+            setSaveError(null);
+            setStage("input");
+          }}
+        />
+        {/* A rejected save stays on this screen — the alert must still show. */}
+        <CriticalAlert
+          visible={criticalAlert.visible}
+          value={criticalAlert.value}
+          direction={criticalAlert.direction}
+          {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
+          {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
+          contactName="Emergency"
+          contactPhone="112"
+          onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}
+        />
+      </>
     );
   }
 
@@ -652,6 +687,8 @@ export default function LogScreen(): JSX.Element {
           visible={criticalAlert.visible}
           value={criticalAlert.value}
           direction={criticalAlert.direction}
+          {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
+          {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
           contactName="Emergency"
           contactPhone="112"
           onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}

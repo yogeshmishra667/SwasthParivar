@@ -11,6 +11,10 @@ interface CriticalAlertProps {
   visible: boolean;
   value: number;
   direction: "low" | "high";
+  /** Picks the copy. Defaults to glucose (the Phase 1 alert). */
+  category?: "glucose" | "bp";
+  /** Reading as shown, e.g. "190/120 mmHg". Defaults to "<value> mg/dL". */
+  valueLabel?: string;
   contactName: string;
   contactPhone: string;
   onDismiss: () => void;
@@ -24,6 +28,8 @@ export const CriticalAlert = ({
   visible,
   value,
   direction,
+  category = "glucose",
+  valueLabel,
   contactName,
   contactPhone,
   onDismiss,
@@ -68,6 +74,9 @@ export const CriticalAlert = ({
     return () => sub.remove();
   }, [visible, dismissible, onDismiss]);
 
+  const copyPrefix = category === "bp" ? "critical.bp" : "critical";
+  const copySuffix = direction === "low" ? "Low" : "High";
+
   const handleCall = (): void => {
     const tel = sanitizePhoneForTelUri(contactPhone);
     if (tel.length === 0) return;
@@ -87,11 +96,11 @@ export const CriticalAlert = ({
       <View className="flex-1 items-center justify-center bg-critical px-6">
         <Icon name="warning" size={72} color="#FFFFFF" accessibilityLabel="Critical alert" />
         <Text className="mt-4 text-hero font-bold text-white text-center">
-          {direction === "low" ? t("critical.alertTitleLow") : t("critical.alertTitleHigh")}
+          {t(`${copyPrefix}.alertTitle${copySuffix}`)}
         </Text>
-        <Text className="mt-2 text-hero text-white">{value} mg/dL</Text>
+        <Text className="mt-2 text-hero text-white">{valueLabel ?? `${value} mg/dL`}</Text>
         <Text className="mt-4 text-center text-important text-white">
-          {direction === "low" ? t("critical.alertBodyLow") : t("critical.alertBodyHigh")}
+          {t(`${copyPrefix}.alertBody${copySuffix}`)}
         </Text>
         <View className="mt-6 w-full gap-3">
           <Button

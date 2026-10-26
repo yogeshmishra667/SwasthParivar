@@ -228,7 +228,13 @@
     "alertBodyHigh": "Drink water. Check if you took your medicine.",
     "callContact": "Call {{name}}",
     "close": "Close",
-    "waitDismiss": "Wait {{seconds}}s..."
+    "waitDismiss": "Wait {{seconds}}s...",
+    "bp": {
+      "alertTitleLow": "BP very low",
+      "alertTitleHigh": "BP very high",
+      "alertBodyLow": "Lie down and drink water. If you feel dizzy, call right away.",
+      "alertBodyHigh": "Sit and rest. If you have chest pain or weakness, call right away."
+    }
   },
   "offline": {
     "banner": "Offline mode — readings are safe, will sync later",
