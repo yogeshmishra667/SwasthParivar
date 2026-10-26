@@ -2,6 +2,7 @@ import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { ANDROID_NOTIFICATION_CHANNELS } from "@swasth/shared-types";
 import { router } from "expo-router";
 import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
@@ -37,25 +38,37 @@ if (!isExpoGo) {
   });
 }
 
+const ANDROID_IMPORTANCE = {
+  default: Notifications.AndroidImportance.DEFAULT,
+  high: Notifications.AndroidImportance.HIGH,
+  max: Notifications.AndroidImportance.MAX,
+} as const;
+
+/**
+ * Creates every Android channel the server may push to. Android silently
+ * drops a push whose channel doesn't exist on the device (audit P10) —
+ * reminders, medicines and guardian alerts all went missing that way.
+ * Idempotent; runs before the token is registered.
+ */
+export const ensureAndroidChannels = async (): Promise<void> => {
+  if (Platform.OS !== "android") return;
+  for (const [id, channel] of Object.entries(ANDROID_NOTIFICATION_CHANNELS)) {
+    const critical = id === "critical";
+    await Notifications.setNotificationChannelAsync(id, {
+      name: channel.name,
+      importance: ANDROID_IMPORTANCE[channel.importance],
+      vibrationPattern: critical ? [0, 500, 250, 500] : [0, 250, 250, 250],
+      lightColor: critical ? "#DC2626" : "#2563EB",
+      ...("bypassDnd" in channel ? { bypassDnd: channel.bypassDnd } : {}),
+    });
+  }
+};
+
 export const registerForPushNotificationsAsync = async (): Promise<string | null> => {
   if (!Device.isDevice) return null;
   if (isExpoGo) return null;
 
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "default",
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#2563EB",
-    });
-    await Notifications.setNotificationChannelAsync("critical", {
-      name: "Critical health alerts",
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 500, 250, 500],
-      lightColor: "#DC2626",
-      bypassDnd: true,
-    });
-  }
+  await ensureAndroidChannels();
 
   const existing = await Notifications.getPermissionsAsync();
   let granted = existing.granted;
@@ -94,21 +107,7 @@ const probeRegistration = async (): Promise<PushTokenSyncResult> => {
   if (!Device.isDevice) return { ok: false, reason: "not_a_device" };
   if (isExpoGo) return { ok: false, reason: "expo_go" };
 
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "default",
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#2563EB",
-    });
-    await Notifications.setNotificationChannelAsync("critical", {
-      name: "Critical health alerts",
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 500, 250, 500],
-      lightColor: "#DC2626",
-      bypassDnd: true,
-    });
-  }
+  await ensureAndroidChannels();
 
   const existing = await Notifications.getPermissionsAsync();
   let granted = existing.granted;

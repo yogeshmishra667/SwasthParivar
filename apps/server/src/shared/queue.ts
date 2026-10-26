@@ -2,6 +2,7 @@ import { Queue, Worker, type Processor } from "bullmq";
 import { Redis } from "ioredis";
 import { env } from "../config/env.js";
 import { logger } from "./logger.js";
+import { withTimeout } from "./with-timeout.js";
 
 export const QUEUE_NAMES = {
   ANALYZE_READING: "analyze-reading",
@@ -133,6 +134,26 @@ export const createQueue = <T>(name: QueueName): Queue<T> =>
       removeOnFail: { age: 86_400 },
     },
   });
+
+const BEST_EFFORT_ENQUEUE_TIMEOUT_MS = 2_000;
+
+/**
+ * Enqueue for non-critical follow-up work (e.g. ANALYZE_READING). The
+ * Redis connection runs with `maxRetriesPerRequest: null`, so during an
+ * outage `add` hangs instead of failing — and a reading save must never
+ * stall on insight work. Bounded, logged, never throws. Critical alerts
+ * use `enqueueCriticalAlert`, which falls back to in-process dispatch.
+ */
+export const enqueueBestEffort = async (
+  queue: QueueName,
+  add: () => Promise<unknown>,
+): Promise<void> => {
+  try {
+    await withTimeout(add(), BEST_EFFORT_ENQUEUE_TIMEOUT_MS, `${queue} enqueue`);
+  } catch (err) {
+    logger.warn({ err, queue }, "best-effort enqueue skipped");
+  }
+};
 
 export const createWorker = <T>(name: QueueName, processor: Processor<T>): Worker<T> => {
   const worker = new Worker<T>(name, processor, {
