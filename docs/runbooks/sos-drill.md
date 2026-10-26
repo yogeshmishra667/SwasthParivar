@@ -6,8 +6,13 @@
 > the bottom of this file (PR + commit hash + duration).
 >
 > Owners on-call: see CODEOWNERS. Two reviewers required for any PR
-> that flips `sos_test_mode=false` for a cohort (per
-> `.github/PULL_REQUEST_TEMPLATE.md`).
+> that turns real mode on for anyone (`sos_test_mode=false`, or a
+> `sos_real_mode_enabled` rollout) (per `.github/PULL_REQUEST_TEMPLATE.md`).
+>
+> **Cohorts.** Every SOS flag is resolved per household: a cohort lists
+> account (household primary) user ids, and a sub-profile on that phone
+> follows its account. A cohort on `sos_test_mode` itself does nothing
+> (test mode stays on); real mode for a cohort is `sos_real_mode_enabled`.
 
 ---
 
@@ -34,7 +39,8 @@ the Exotel/Twilio wrappers, the SOS escalation cron, or `phase3.md
 
 **Pre-flight.**
 
-- [ ] `sos_enabled=true` for the drill account only (cohort flag).
+- [ ] `sos_enabled` = cohort of the drill account only:
+      `{"rollout": "cohort", "userIds": ["<drill account id>"]}`.
 - [ ] `sos_test_mode=true` — server-side default. Confirm via:
       `redis-cli GET flag:sos_test_mode` returns `true`.
 - [ ] Drill account has ≥ 2 `EmergencyContact` rows configured.
@@ -85,9 +91,11 @@ root-caused and a regression test is in.
       (`pnpm --filter @swasth/server exec npx ...` smoke).
 - [ ] Two reviewers approved the `sos_test_mode=false` PR.
 
-**Trigger.** Cohort-scoped `sos_test_mode=false` for the drill
-account only. Use the admin console's flag editor with a cohort of
-exactly one user id.
+**Trigger.** `sos_real_mode_enabled` = cohort of exactly the drill
+account (`{"rollout": "cohort", "userIds": ["<drill account id>"]}`),
+with `sos_test_mode` left at `true`. Use the admin console's flag
+editor. Real mode is decided when the SOS row is created, so set it
+before the drill account triggers.
 
 **Steps.**
 
@@ -99,7 +107,7 @@ exactly one user id.
      counters in the last minute = 0).
    - `SOSEvent.cancelledAt` set.
    - Sentry breadcrumbs include the test-mode flip + cancellation.
-4. Restore `sos_test_mode=true` immediately after the drill.
+4. Set `sos_real_mode_enabled=false` immediately after the drill.
 
 **Acceptance.** Cancellation propagates in < 30s AND no real call
 fires.

@@ -16,6 +16,8 @@ import { Prisma } from "@prisma/client";
 import { DomainError } from "@swasth/shared-types";
 import { prisma } from "../../shared/database.js";
 import { getFlag } from "../../shared/flags/flags.js";
+import type { FlagValue } from "../../shared/flags/index.js";
+import { isFeatureEnabledFor } from "../../shared/feature-gate.js";
 import { createQueue, QUEUE_NAMES } from "../../shared/queue.js";
 import { capture as captureAnalyticsEvent } from "../../shared/analytics/posthog.js";
 import { logger } from "../../shared/logger.js";
@@ -76,8 +78,25 @@ export interface TriggerSOSParams {
   requestId?: string;
 }
 
+/**
+ * Real calls / SMS / IVR for this patient's SOS? Only when ops turned test
+ * mode off for everyone (`sos_test_mode` exactly `false`), or rolled
+ * `sos_real_mode_enabled` out to this household, e.g. a drill cohort. Any
+ * other `sos_test_mode` value, a cohort included, keeps test mode (audit
+ * D3). Before, a cohort object on `sos_test_mode` reached the Boolean
+ * column as an object.
+ */
+const resolveSOSTestMode = async (userId: string): Promise<boolean> => {
+  const testMode = await getFlag<FlagValue>("sos_test_mode", true);
+  if (testMode === false) return false;
+  return !(await isFeatureEnabledFor("sos_real_mode_enabled", userId));
+};
+
+// Every SOS flag below is resolved for the patient's household (audit D3):
+// a cohort or percentage value enables SOS for those households only, not
+// for everyone.
 export const triggerSOS = async (params: TriggerSOSParams): Promise<SOSEventDto> => {
-  const sosEnabled = await getFlag<boolean>("sos_enabled", false);
+  const sosEnabled = await isFeatureEnabledFor("sos_enabled", params.userId);
   if (!sosEnabled) {
     throw new DomainError(
       "SOS_DISABLED",
@@ -92,7 +111,7 @@ export const triggerSOS = async (params: TriggerSOSParams): Promise<SOSEventDto>
   // remote pull. Patient-manual ships first because it's the only
   // path with explicit consent (long-press + 3s countdown).
   if (params.input.source === "critical_bypass_escalation") {
-    const enabled = await getFlag<boolean>("sos_source_critical_bypass_enabled", false);
+    const enabled = await isFeatureEnabledFor("sos_source_critical_bypass_enabled", params.userId);
     if (!enabled) {
       throw new DomainError(
         "SOS_DISABLED",
@@ -100,7 +119,10 @@ export const triggerSOS = async (params: TriggerSOSParams): Promise<SOSEventDto>
       );
     }
   } else if (params.input.source === "guardian_initiated") {
-    const enabled = await getFlag<boolean>("sos_source_guardian_initiated_enabled", false);
+    const enabled = await isFeatureEnabledFor(
+      "sos_source_guardian_initiated_enabled",
+      params.userId,
+    );
     if (!enabled) {
       throw new DomainError("SOS_DISABLED", "Guardian-initiated SOS is not enabled.");
     }
@@ -124,7 +146,7 @@ export const triggerSOS = async (params: TriggerSOSParams): Promise<SOSEventDto>
   // mid-escalation MUST NOT retroactively change whether THIS row
   // makes real calls (CLAUDE.md "SOS Test-Mode Default" — every
   // event carries its own decision).
-  const testMode = await getFlag<boolean>("sos_test_mode", true);
+  const testMode = await resolveSOSTestMode(params.userId);
 
   try {
     const row = await prisma.sOSEvent.create({
@@ -319,9 +341,12 @@ export const autoTriggerSOSFromCriticalBypass = async (params: {
   readingId: string;
   requestId?: string;
 }): Promise<SOSEventDto | null> => {
-  const sosEnabled = await getFlag<boolean>("sos_enabled", false);
+  const sosEnabled = await isFeatureEnabledFor("sos_enabled", params.userId);
   if (!sosEnabled) return null;
-  const sourceEnabled = await getFlag<boolean>("sos_source_critical_bypass_enabled", false);
+  const sourceEnabled = await isFeatureEnabledFor(
+    "sos_source_critical_bypass_enabled",
+    params.userId,
+  );
   if (!sourceEnabled) return null;
 
   // Skip if the patient already has a live SOS chain for any reason.
