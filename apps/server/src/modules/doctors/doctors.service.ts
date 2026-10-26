@@ -13,7 +13,7 @@
 
 import { DomainError } from "@swasth/shared-types";
 import { prisma } from "../../shared/database.js";
-import { getFlag } from "../../shared/flags/index.js";
+import { isFeatureEnabled } from "../../shared/rollout.js";
 import { resolveHouseholdMember } from "../../shared/auth/household.js";
 import type { AuthClaims } from "../../shared/middleware/auth.js";
 import type { DoctorProfileDto } from "./doctors.types.js";
@@ -22,8 +22,10 @@ import type { DoctorProfileDto } from "./doctors.types.js";
 // surfaces. Default OFF per phase4.md "Phase 4 kill-switch flags".
 // Exported so the appointments service gates on the same flag without
 // duplicating the copy.
-export const assertDoctorPortalEnabled = async (): Promise<void> => {
-  const enabled = await getFlag<boolean>("doctor_portal_enabled", false);
+// Resolved per account (the JWT subject), as `GET /config/features` does
+// (audit D3), so a cohort enables it for that account only.
+export const assertDoctorPortalEnabled = async (auth: AuthClaims): Promise<void> => {
+  const enabled = await isFeatureEnabled("doctor_portal_enabled", auth.sub);
   if (!enabled) {
     throw new DomainError(
       "DOCTOR_PORTAL_DISABLED",
@@ -54,7 +56,7 @@ export const listDoctors = async (
   auth: AuthClaims,
   targetUserId: string | undefined,
 ): Promise<DoctorProfileDto[]> => {
-  await assertDoctorPortalEnabled();
+  await assertDoctorPortalEnabled(auth);
   const userId = await resolveHouseholdMember(auth, targetUserId);
   const rows = await prisma.doctorProfile.findMany({
     where: { userId },
@@ -73,7 +75,7 @@ export const createDoctor = async (
     targetUserId?: string;
   },
 ): Promise<DoctorProfileDto> => {
-  await assertDoctorPortalEnabled();
+  await assertDoctorPortalEnabled(auth);
   const userId = await resolveHouseholdMember(auth, params.targetUserId);
   const created = await prisma.doctorProfile.create({
     data: {
@@ -97,7 +99,7 @@ export const updateDoctor = async (
     phone?: string | null;
   },
 ): Promise<DoctorProfileDto> => {
-  await assertDoctorPortalEnabled();
+  await assertDoctorPortalEnabled(auth);
   const existing = await prisma.doctorProfile.findUnique({ where: { id: params.doctorId } });
   if (!existing) {
     throw new DomainError("DOCTOR_NOT_FOUND", "doctor not found");

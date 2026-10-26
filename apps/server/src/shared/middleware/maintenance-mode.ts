@@ -10,6 +10,17 @@
  *   - /health, /health/deep — orchestrator liveness/readiness probes.
  *   - /admin/*              — the operator needs the admin flag API to
  *                             turn maintenance mode back OFF.
+ *   - /api/v1/sos/*         — an emergency can't wait for maintenance:
+ *                             trigger, cancel, resolve, the active-SOS
+ *                             screen, and the call-status callbacks that
+ *                             drive the escalation (audit D8).
+ *   - /api/v1/webhooks/*    — payment webhooks. Each verifies the
+ *                             provider's signature before any state
+ *                             change; a 503 only delays them into the
+ *                             provider's retry window (audit D8).
+ *
+ * So SOS keeps writing SOSEvent rows during maintenance: a migration of
+ * the SOS tables is not quiesced by this toggle.
  *
  * Fail-safe: `getFlag` returns the default `false` if Redis is down, so
  * a flag-store outage never traps the API in maintenance mode.
@@ -22,7 +33,11 @@ import type { NextFunction, Request, Response } from "express";
 import { DomainError } from "@swasth/shared-types";
 import { getFlag } from "../flags/index.js";
 
-const isExempt = (path: string): boolean => path.startsWith("/health") || path.startsWith("/admin");
+// Whole path segments only: /api/v1/sos and /api/v1/sos/..., never /api/v1/sosfoo.
+const EXEMPT_PREFIXES = ["/health", "/admin", "/api/v1/sos", "/api/v1/webhooks"] as const;
+
+const isExempt = (path: string): boolean =>
+  EXEMPT_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 
 export const maintenanceMode = async (
   req: Request,
