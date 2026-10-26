@@ -1,7 +1,7 @@
 import { DomainError } from "@swasth/shared-types";
 import type { SleepLog, SleepQuality, WearableSource } from "@prisma/client";
 import { prisma } from "../../shared/database.js";
-import { getFlag } from "../../shared/flags/flags.js";
+import { isFeatureEnabledFor } from "../../shared/feature-gate.js";
 import { startTrustWindowIfUnset } from "../../shared/wearables/trust-window.js";
 
 interface CreateSleepInput {
@@ -23,7 +23,7 @@ export interface CreateSleepResult {
 const toDateOnly = (s: string): Date => new Date(`${s}T00:00:00.000Z`);
 
 export const createSleepLog = async (input: CreateSleepInput): Promise<CreateSleepResult> => {
-  const enabled = await getFlag<boolean>("sleep_logging_enabled", false);
+  const enabled = await isFeatureEnabledFor("sleep_logging_enabled", input.userId);
   if (!enabled) {
     throw new DomainError("SLEEP_DISABLED", "Sleep logging is not enabled.");
   }

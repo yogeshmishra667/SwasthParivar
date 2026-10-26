@@ -1,7 +1,7 @@
 import { DomainError } from "@swasth/shared-types";
 import type { ActivityDaily, WearableSource } from "@prisma/client";
 import { prisma } from "../../shared/database.js";
-import { getFlag } from "../../shared/flags/flags.js";
+import { isFeatureEnabledFor } from "../../shared/feature-gate.js";
 import { startTrustWindowIfUnset } from "../../shared/wearables/trust-window.js";
 
 interface CreateActivityInput {
@@ -27,7 +27,7 @@ const toDateOnly = (s: string): Date => new Date(`${s}T00:00:00.000Z`);
 export const createActivityDaily = async (
   input: CreateActivityInput,
 ): Promise<CreateActivityResult> => {
-  const enabled = await getFlag<boolean>("activity_logging_enabled", false);
+  const enabled = await isFeatureEnabledFor("activity_logging_enabled", input.userId);
   if (!enabled) {
     throw new DomainError("ACTIVITY_DISABLED", "Activity logging is not enabled.");
   }
