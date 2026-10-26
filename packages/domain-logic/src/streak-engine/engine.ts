@@ -15,14 +15,16 @@ const MS_PER_HOUR = 3_600_000;
 const toUserMs = (iso: string, tzOffsetMinutes: number): number =>
   new Date(iso).getTime() + tzOffsetMinutes * MS_PER_MIN;
 
-const streakDateFor = (iso: string, tzOffsetMinutes: number): string => {
+/** The streak day (YYYY-MM-DD) a moment belongs to: user's timezone, 3 AM boundary. */
+export const streakDateFor = (iso: string, tzOffsetMinutes: number): string => {
   const userMs = toUserMs(iso, tzOffsetMinutes);
   const shifted = userMs - STREAK_DAY_BOUNDARY_HOUR * MS_PER_HOUR;
   const d = new Date(shifted);
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 };
 
-const dateDiffDays = (a: string, b: string): number => {
+/** Whole days from streak day `b` to streak day `a` (YYYY-MM-DD). */
+export const dateDiffDays = (a: string, b: string): number => {
   const ad = Date.parse(`${a}T00:00:00Z`);
   const bd = Date.parse(`${b}T00:00:00Z`);
   return Math.round((ad - bd) / MS_PER_DAY);

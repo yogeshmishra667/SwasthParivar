@@ -2,11 +2,18 @@ import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { ANDROID_NOTIFICATION_CHANNELS } from "@swasth/shared-types";
 import { router } from "expo-router";
 import { api } from "@/services/api";
 import { logError } from "@/services/analytics";
 import { markNotificationSeen } from "@/services/notification-dedup";
 import { useProfileStore } from "@/stores/profile.store";
+import { useAuthStore } from "@/stores/auth.store";
+import {
+  criticalReasonKey,
+  useCriticalAlertStore,
+  type CriticalAlertCategory,
+} from "@/stores/critical-alert.store";
 import { isExpoGo } from "@/utils/runtime";
 
 // Remote notification APIs were removed from Expo Go in SDK 53+.
@@ -37,25 +44,37 @@ if (!isExpoGo) {
   });
 }
 
+const ANDROID_IMPORTANCE = {
+  default: Notifications.AndroidImportance.DEFAULT,
+  high: Notifications.AndroidImportance.HIGH,
+  max: Notifications.AndroidImportance.MAX,
+} as const;
+
+/**
+ * Creates every Android channel the server may push to. Android silently
+ * drops a push whose channel doesn't exist on the device (audit P10) —
+ * reminders, medicines and guardian alerts all went missing that way.
+ * Idempotent; runs before the token is registered.
+ */
+export const ensureAndroidChannels = async (): Promise<void> => {
+  if (Platform.OS !== "android") return;
+  for (const [id, channel] of Object.entries(ANDROID_NOTIFICATION_CHANNELS)) {
+    const critical = id === "critical";
+    await Notifications.setNotificationChannelAsync(id, {
+      name: channel.name,
+      importance: ANDROID_IMPORTANCE[channel.importance],
+      vibrationPattern: critical ? [0, 500, 250, 500] : [0, 250, 250, 250],
+      lightColor: critical ? "#DC2626" : "#2563EB",
+      ...("bypassDnd" in channel ? { bypassDnd: channel.bypassDnd } : {}),
+    });
+  }
+};
+
 export const registerForPushNotificationsAsync = async (): Promise<string | null> => {
   if (!Device.isDevice) return null;
   if (isExpoGo) return null;
 
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "default",
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#2563EB",
-    });
-    await Notifications.setNotificationChannelAsync("critical", {
-      name: "Critical health alerts",
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 500, 250, 500],
-      lightColor: "#DC2626",
-      bypassDnd: true,
-    });
-  }
+  await ensureAndroidChannels();
 
   const existing = await Notifications.getPermissionsAsync();
   let granted = existing.granted;
@@ -94,21 +113,7 @@ const probeRegistration = async (): Promise<PushTokenSyncResult> => {
   if (!Device.isDevice) return { ok: false, reason: "not_a_device" };
   if (isExpoGo) return { ok: false, reason: "expo_go" };
 
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "default",
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#2563EB",
-    });
-    await Notifications.setNotificationChannelAsync("critical", {
-      name: "Critical health alerts",
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 500, 250, 500],
-      lightColor: "#DC2626",
-      bypassDnd: true,
-    });
-  }
+  await ensureAndroidChannels();
 
   const existing = await Notifications.getPermissionsAsync();
   let granted = existing.granted;
@@ -178,14 +183,137 @@ const switchProfileFromNotificationData = (data: unknown): void => {
   store.switchProfile(targetUserId);
 };
 
+interface CriticalAlertPushData {
+  type?: string;
+  notificationId?: string;
+  targetUserId?: string;
+  readingId?: string;
+  category?: string;
+  severity?: string;
+  copyKey?: string;
+  valueLabel?: string;
+}
+
+const CRITICAL_CATEGORIES: readonly CriticalAlertCategory[] = [
+  "glucose",
+  "bp",
+  "cardiac",
+  "respiratory",
+];
+
+/**
+ * Is this push about a profile on this device? The logged-in account
+ * always is. Before the household is loaded (e.g. a cold-start tap) we
+ * can't tell, so fail toward the patient's own alert, with its lock,
+ * contact and auto-dial (P3 review C1).
+ */
+const isOwnProfile = (targetUserId: string): boolean => {
+  if (targetUserId === useAuthStore.getState().userId) return true;
+  const { householdId, profiles } = useProfileStore.getState();
+  if (householdId === null) return true;
+  return profiles.some((p) => p.id === targetUserId);
+};
+
+/**
+ * A `critical_alert` push raises the fullscreen alert (audit P3). On a
+ * device that holds the reading's profile it is the patient's own alert
+ * (skipped when it only echoes one this device already showed); anywhere
+ * else it is a family member's, with the push's own title and body.
+ */
+export const raiseCriticalAlertFromPush = (
+  data: unknown,
+  content: { title?: string | null; body?: string | null } = {},
+): void => {
+  const p = data as CriticalAlertPushData | null;
+  if (p?.type !== "critical_alert" || typeof p.targetUserId !== "string") return;
+  // A push without a category is a glucose alert (the original shape).
+  const known: CriticalAlertCategory | undefined =
+    p.category === undefined ? "glucose" : CRITICAL_CATEGORIES.find((c) => c === p.category);
+  const category: CriticalAlertCategory = known ?? "glucose";
+  // An unknown category shows the push's own copy, never glucose's (review W5).
+  const pushCopy =
+    content.title && content.body ? { title: content.title, body: content.body } : {};
+  const direction: "low" | "high" | undefined =
+    category === "glucose"
+      ? p.severity === "low"
+        ? "low"
+        : "high"
+      : category === "bp"
+        ? p.copyKey === "critical.bp.low"
+          ? "low"
+          : "high"
+        : undefined;
+  const common = {
+    category,
+    ...(direction !== undefined ? { direction } : {}),
+    ...(category === "cardiac" || category === "respiratory"
+      ? { reasonKey: criticalReasonKey(p.copyKey) }
+      : {}),
+    ...(typeof p.valueLabel === "string" ? { valueLabel: p.valueLabel } : {}),
+  };
+  // The received and the tapped handler both see the same push: show it once.
+  const dedupeId =
+    typeof p.readingId === "string"
+      ? p.readingId
+      : typeof p.notificationId === "string"
+        ? p.notificationId
+        : null;
+  const alerts = useCriticalAlertStore.getState();
+  if (isOwnProfile(p.targetUserId)) {
+    alerts.raiseFromPush(
+      {
+        audience: "patient",
+        userId: p.targetUserId,
+        ...common,
+        ...(known === undefined ? pushCopy : {}),
+      },
+      dedupeId,
+    );
+    return;
+  }
+  alerts.raiseFromPush(
+    { audience: "guardian", userId: null, patientId: p.targetUserId, ...common, ...pushCopy },
+    dedupeId,
+  );
+};
+
+// The habit-loop reminders (not medicine or critical pushes). A tap on one
+// is reported, so the server resets fatigue and doesn't count it as
+// ignored (audit P11).
+const OPEN_REPORTED_TYPES: ReadonlySet<string> = new Set([
+  "best_time",
+  "missed_day",
+  "re_engagement",
+  "streak_risk",
+  "welcome_back",
+  "generic_morning",
+]);
+
+export const reportNotificationOpened = (data: unknown): void => {
+  const p = data as { type?: unknown; notificationId?: unknown; targetUserId?: unknown } | null;
+  if (typeof p?.type !== "string" || !OPEN_REPORTED_TYPES.has(p.type)) return;
+  if (typeof p.notificationId !== "string") return;
+  api
+    .post("/notifications/opened", {
+      notificationId: p.notificationId,
+      ...(typeof p.targetUserId === "string" ? { targetUserId: p.targetUserId } : {}),
+    })
+    .catch((err: unknown) => logError("notifications.opened", err));
+};
+
 // Phase 3 Feature C — deep-link a tapped notification to its screen.
 // Silent Guardian alerts open AlertDetail; the daily summary opens
 // GuardianHome. Other notification types fall through (handled, if at
 // all, by their own screens).
-const routeFromNotificationData = (data: unknown): void => {
+const routeFromNotificationData = (
+  data: unknown,
+  content: { title?: string | null; body?: string | null } = {},
+): void => {
   const payload = data as { type?: string; alertId?: string } | null;
   if (!payload) return;
   switchProfileFromNotificationData(data);
+  raiseCriticalAlertFromPush(data, content);
+  reportNotificationOpened(data);
   if (payload.type === "guardian_alert" && typeof payload.alertId === "string") {
     router.push({
       pathname: "/guardian/alert/[alertId]",
@@ -201,9 +329,22 @@ const routeFromNotificationData = (data: unknown): void => {
 // the app is already running.
 export const registerNotificationRouting = (): void => {
   void Notifications.getLastNotificationResponseAsync().then((response) => {
-    if (response) routeFromNotificationData(response.notification.request.content.data);
+    if (response) {
+      routeFromNotificationData(
+        response.notification.request.content.data,
+        response.notification.request.content,
+      );
+    }
   });
   Notifications.addNotificationResponseReceivedListener((response) => {
-    routeFromNotificationData(response.notification.request.content.data);
+    routeFromNotificationData(
+      response.notification.request.content.data,
+      response.notification.request.content,
+    );
+  });
+  // A critical alert arriving while the app is open goes fullscreen at
+  // once, without waiting for a tap (audit P3).
+  Notifications.addNotificationReceivedListener((notification) => {
+    raiseCriticalAlertFromPush(notification.request.content.data, notification.request.content);
   });
 };

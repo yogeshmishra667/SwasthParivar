@@ -1,19 +1,23 @@
 import { DomainError } from "@swasth/shared-types";
-import { classifyRespiratoryReading, planMultiCategoryBypassDispatch } from "@swasth/domain-logic";
+import {
+  classifyRespiratoryReading,
+  planMultiCategoryBypassDispatch,
+  type MultiCategoryBypassDispatch,
+} from "@swasth/domain-logic";
 import { Prisma, type RespiratoryLog } from "@prisma/client";
 import { prisma } from "../../shared/database.js";
 import { logger } from "../../shared/logger.js";
-import { createQueue, QUEUE_NAMES } from "../../shared/queue.js";
+import { createQueue, enqueueBestEffort, QUEUE_NAMES } from "../../shared/queue.js";
 import { checkIdempotent } from "../../shared/idempotency.js";
-import { getFlag } from "../../shared/flags/index.js";
-import { getLastBypassIso, markBypassed } from "../../shared/critical-bypass-cooldown.js";
-import type {
-  CriticalAlertJob,
-  CriticalAlertMultiCategoryJob,
-} from "../../workers/critical-alert.processor.js";
+import { isFeatureEnabledFor } from "../../shared/feature-gate.js";
+import { bypassOwner, getLastBypass, markBypassed } from "../../shared/critical-bypass-cooldown.js";
+import type { CriticalAlertMultiCategoryJob } from "../../workers/critical-alert.processor.js";
+import {
+  enqueueCriticalAlert,
+  isFreshForReplayDispatch,
+} from "../../workers/critical-alert.enqueue.js";
 import type { AnalyzeReadingJob } from "../../workers/analyze-reading.processor.js";
 
-const criticalQueue = createQueue<CriticalAlertJob>(QUEUE_NAMES.CRITICAL_ALERT);
 const analyzeQueue = createQueue<AnalyzeReadingJob>(QUEUE_NAMES.ANALYZE_READING);
 
 interface CreateRespiratoryInput {
@@ -48,13 +52,109 @@ export interface CreateRespiratoryResult {
   };
 }
 
-const buildReplayResult = (reading: RespiratoryLog): CreateRespiratoryResult => {
+/**
+ * Plans the respiratory critical-bypass dispatch: per-category cooldown +
+ * emergency contacts. The fresh path runs this BEFORE saving the row, so
+ * no lookup can fail between the save and the hand-off (audit P5).
+ *
+ * CLAUDE.md "Phase 4 Invariants — Multi-condition Critical-Bypass
+ * Dispatch": cooldown is **per-category**, kept in its own Redis key.
+ */
+const planRespiratoryBypass = async (
+  userId: string,
+  reasons: Parameters<typeof planMultiCategoryBypassDispatch>[0]["reasons"],
+  nowIso: string,
+  /** Replays only: this reading version's own stamp owner. */
+  replayOf?: string,
+): Promise<MultiCategoryBypassDispatch> => {
+  const last = await getLastBypass("respiratory", userId);
+  // A replay must not read its OWN earlier dispatch as a cooldown — that
+  // stamp proves the original was outside it — or a job that failed for
+  // good could never be revived (P5 review N2).
+  const lastBypassIso = last !== null && last.owner !== replayOf ? last.atIso : null;
+  const contacts = await prisma.emergencyContact.findMany({
+    where: { userId },
+    orderBy: { priority: "asc" },
+    select: { id: true, priority: true, isGuardian: true },
+  });
+  return planMultiCategoryBypassDispatch({
+    category: "respiratory",
+    reasons,
+    nowIso,
+    lastBypassTriggeredAtIso: lastBypassIso,
+    emergencyContacts: contacts.map((ec) => ({
+      contactId: ec.id,
+      priority: ec.priority,
+      isGuardian: ec.isGuardian,
+    })),
+  });
+};
+
+/**
+ * Hands a planned dispatch off, then stamps the cooldown. Never throws. A
+ * replay doesn't re-stamp, so retries can't stretch the cooldown.
+ */
+const handOffRespiratoryBypass = async (
+  reading: RespiratoryLog,
+  dispatch: MultiCategoryBypassDispatch,
+  requestId: string | undefined,
+  stamp: boolean,
+): Promise<void> => {
+  if (dispatch.withinCooldown) return;
+  const job: CriticalAlertMultiCategoryJob = {
+    category: "respiratory",
+    readingId: reading.id,
+    userId: reading.userId,
+    dispatch,
+    copyParams: {
+      ...(reading.peakFlow !== null ? { peakFlow: reading.peakFlow } : {}),
+      ...(reading.baselinePeakFlow !== null ? { baselinePeakFlow: reading.baselinePeakFlow } : {}),
+    },
+    ...(requestId ? { requestId } : {}),
+  };
+  await enqueueCriticalAlert(job, reading.version);
+  // Stamp the Redis cooldown AFTER the hand-off — a Redis outage before it
+  // would silence the dispatch, which is the opposite of safety-first.
+  if (stamp) {
+    await markBypassed(
+      "respiratory",
+      reading.userId,
+      new Date().toISOString(),
+      bypassOwner(reading.id, reading.version),
+    );
+  }
+};
+
+/**
+ * Idempotent replay response. A fresh critical reading's dispatch is
+ * re-ensured, not re-sent (audit P5) — see cardiac.service.ts.
+ */
+const buildReplayResult = async (
+  reading: RespiratoryLog,
+  requestId?: string,
+): Promise<CreateRespiratoryResult> => {
   const classification = classifyRespiratoryReading({
     peakFlow: reading.peakFlow,
     baselinePeakFlow: reading.baselinePeakFlow,
     inhalerUsed: reading.inhalerUsed,
     symptomSeverity: reading.symptomSeverity,
   });
+  if (
+    classification.severity === "critical_bypass" &&
+    isFreshForReplayDispatch(reading.updatedAt)
+  ) {
+    // Plan as of the moment this version was saved: the cooldown stamp is
+    // kept for twice the window, so a reading another dispatch suppressed
+    // is still suppressed. Its own earlier dispatch is ignored, so the
+    // hand-off re-ensures (or revives) that job — a no-op when it's fine.
+    const dispatch = await planRespiratoryBypass(
+      reading.userId,
+      classification.reasons,
+      reading.updatedAt.toISOString(),
+      bypassOwner(reading.id, reading.version),
+    );
+    await handOffRespiratoryBypass(reading, dispatch, requestId, false);
+  }
   return {
     reading,
     critical: {
@@ -68,7 +168,7 @@ const buildReplayResult = (reading: RespiratoryLog): CreateRespiratoryResult => 
 export const createRespiratoryLog = async (
   input: CreateRespiratoryInput,
 ): Promise<CreateRespiratoryResult> => {
-  const enabled = await getFlag<boolean>("respiratory_logging_enabled", false);
+  const enabled = await isFeatureEnabledFor("respiratory_logging_enabled", input.userId);
   if (!enabled) {
     throw new DomainError(
       "RESPIRATORY_DISABLED",
@@ -81,7 +181,7 @@ export const createRespiratoryLog = async (
     throw new DomainError("READING_STALE_VERSION", "incoming version not newer than stored");
   }
   if (idem.kind === "replay") {
-    return buildReplayResult(idem.existing);
+    return await buildReplayResult(idem.existing, input.requestId);
   }
   const existing = idem.kind === "update" ? idem.existing : null;
 
@@ -100,6 +200,11 @@ export const createRespiratoryLog = async (
     inhalerUsed: input.inhalerUsed,
     symptomSeverity: input.symptomSeverity,
   });
+
+  const plannedBypass =
+    classification.severity === "critical_bypass"
+      ? await planRespiratoryBypass(input.userId, classification.reasons, new Date().toISOString())
+      : null;
 
   let reading: RespiratoryLog;
   if (existing) {
@@ -156,61 +261,27 @@ export const createRespiratoryLog = async (
             { clientUuid: input.clientUuid, userId: input.userId },
             "respiratory concurrent create resolved as idempotent replay",
           );
-          return buildReplayResult(winner);
+          return await buildReplayResult(winner, input.requestId);
         }
       }
       throw err;
     }
   }
 
-  let withinCooldown = false;
-  if (classification.severity === "critical_bypass") {
-    const lastBypassIso = await getLastBypassIso("respiratory", input.userId);
-    const contacts = await prisma.emergencyContact.findMany({
-      where: { userId: input.userId },
-      orderBy: { priority: "asc" },
-      select: { id: true, priority: true, isGuardian: true },
-    });
-    const dispatch = planMultiCategoryBypassDispatch({
-      category: "respiratory",
-      reasons: classification.reasons,
-      nowIso: new Date().toISOString(),
-      lastBypassTriggeredAtIso: lastBypassIso,
-      emergencyContacts: contacts.map((c) => ({
-        contactId: c.id,
-        priority: c.priority,
-        isGuardian: c.isGuardian,
-      })),
-    });
-    withinCooldown = dispatch.withinCooldown;
-    if (!dispatch.withinCooldown) {
-      const job: CriticalAlertMultiCategoryJob = {
-        category: "respiratory",
-        readingId: reading.id,
-        userId: input.userId,
-        dispatch,
-        copyParams: {
-          ...(reading.peakFlow !== null ? { peakFlow: reading.peakFlow } : {}),
-          ...(reading.baselinePeakFlow !== null
-            ? { baselinePeakFlow: reading.baselinePeakFlow }
-            : {}),
-        },
-        ...(input.requestId ? { requestId: input.requestId } : {}),
-      };
-      await criticalQueue.add("dispatch", job);
-      await markBypassed("respiratory", input.userId, new Date().toISOString());
-    }
-  }
+  if (plannedBypass) await handOffRespiratoryBypass(reading, plannedBypass, input.requestId, true);
+  const withinCooldown = plannedBypass?.withinCooldown ?? false;
 
   // Phase 4 §E follow-up — ANALYZE_READING enqueue parity with glucose.
   // Runs detectRespiratoryTrend across 5/14/30-day windows in the
   // worker; null-peakFlow rows are filtered at the worker boundary.
-  await analyzeQueue.add("analyze", {
-    category: "respiratory",
-    readingId: reading.id,
-    userId: input.userId,
-    ...(input.requestId ? { requestId: input.requestId } : {}),
-  });
+  await enqueueBestEffort(QUEUE_NAMES.ANALYZE_READING, () =>
+    analyzeQueue.add("analyze", {
+      category: "respiratory",
+      readingId: reading.id,
+      userId: input.userId,
+      ...(input.requestId ? { requestId: input.requestId } : {}),
+    }),
+  );
 
   return {
     reading,

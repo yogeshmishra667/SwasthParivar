@@ -29,6 +29,7 @@
   "patient": {
     "sentToGuardian": "{{name}} ko approval ke liye bheja gaya hai. Notification jaa chuki hai.",
     "sentToGuardianGeneric": "Aapke family member ko approval ke liye bheja gaya hai.",
+    "noGuardianLinked": "Ise approve karne ke liye koi family member juda nahi hai. Unhe dobara jodein, ya prescription phir se upload karein.",
     "readOnly": "In dawaiyon ko sirf approver hi confirm kar sakta hai.",
     "resend": "Phir se yaad dilayein",
     "resent": "Reminder bhej diya"

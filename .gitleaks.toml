@@ -1,0 +1,26 @@
+# gitleaks config — keeps every default rule, plus one narrow allowlist.
+#
+# CI uses throwaway stub values so the server's env schema parses
+# (`.github/workflows/ci.yml` → `env:`), e.g.
+#   JWT_SECRET: "stub_jwt_secret_that_is_at_least_32_chars_long"
+# They are not credentials and are used nowhere else. PR scans only look at
+# new commits so they never surfaced there, but the weekly/manual full run
+# scans all history and flagged them (generic-api-key) on every run.
+#
+# Allowlist ONLY that exact stub shape — real secrets never match it.
+#
+# The app's local-storage key names, e.g.
+#   const PENDING_KEY = "swasth.pendingCriticalBP.v1";
+# trip generic-api-key on the `*_KEY = "..."` shape. They are AsyncStorage
+# slot names, not credentials; allowlist only the `swasth.<name>.v<N>` shape.
+title = "SwasthParivar gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Throwaway CI stub values and app storage key names (not credentials)"
+regexes = [
+  '''^stub_[a-z_]+_that_is_at_least_32_chars_long$''',
+  '''^swasth\.[A-Za-z]+\.v[0-9]+(\.\$\{[A-Za-z]+\})?$''',
+]

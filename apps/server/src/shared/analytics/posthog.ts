@@ -52,14 +52,24 @@ export interface EventPropsMap {
     // categories without per-category branches.
     value_mg_dl?: number;
     severity?: "low" | "high";
-    category?: "glucose" | "cardiac" | "respiratory";
+    category?: "glucose" | "bp" | "cardiac" | "respiratory";
     copy_key?: string;
     push_targets: number;
     push_success: boolean;
+    // Contacts whose OWN device received the push (the patient's device
+    // never counts) and contacts texted because push didn't reach them.
+    contacts_reached_by_push: number;
+    sms_contacts: number;
     sms_targets: number;
     sms_triggered: boolean;
     sms_success: boolean;
     within_cooldown: boolean;
+  };
+  // CLAUDE.md edge case #22 — one event per emergency contact texted by a
+  // critical-bypass dispatch, so SMS delivery can be tracked per contact.
+  critical_sms_per_contact: {
+    contact_id: string;
+    delivered: boolean;
   };
   streak_milestone: {
     milestone_days: number;
@@ -70,6 +80,15 @@ export interface EventPropsMap {
     variant_id: number | null;
     suppressed: boolean;
     suppress_reason: string | null;
+  };
+  // Audit P11 / P25 — anti-fatigue inputs (CLAUDE.md "Raw Events").
+  notification_opened: {
+    trigger_type: string;
+    source: "push";
+  };
+  notification_ignored: {
+    trigger_type: string;
+    fatigue_level: number;
   };
   // Phase 3 chat — emitted by the Claude wrapper after every upstream
   // call. `tier` distinguishes haiku-cached from sonnet-cold; cost
@@ -359,7 +378,7 @@ export interface EventPropsMap {
     // same `critical_alert` surface; the category disambiguates which
     // chain ran. Optional so the historical glucose-only emission
     // shape continues to validate unchanged.
-    category?: "glucose" | "cardiac" | "respiratory";
+    category?: "glucose" | "bp" | "cardiac" | "respiratory";
     household_size: number;
   };
   // Emitted by the admin "Send test push" endpoint. distinctId is the

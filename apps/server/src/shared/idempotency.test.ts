@@ -4,15 +4,20 @@ import { checkIdempotent, type IdempotentModel, type VersionedRow } from "./idem
 interface FakeRow extends VersionedRow {
   id: string;
   clientUuid: string;
+  userId?: string;
   payload: string;
 }
 
 // Lightweight in-memory stand-in for a Prisma model. The helper only
-// reads `findFirst({ where: { clientUuid } })`, so a single-key map
-// is all we need to exercise every branch.
+// reads `findFirst({ where: { clientUuid, userId? } })`, so a filtered
+// list is all we need to exercise every branch.
 const makeStubModel = (rows: readonly FakeRow[]): IdempotentModel<FakeRow> => ({
-  findFirst: ({ where: { clientUuid } }) =>
-    Promise.resolve(rows.find((r) => r.clientUuid === clientUuid) ?? null),
+  findFirst: ({ where: { clientUuid, userId } }) =>
+    Promise.resolve(
+      rows.find(
+        (r) => r.clientUuid === clientUuid && (userId === undefined || r.userId === userId),
+      ) ?? null,
+    ),
 });
 
 const UUID = "00000000-0000-0000-0000-000000000001";
@@ -68,5 +73,18 @@ describe("checkIdempotent", () => {
     };
     const result = await checkIdempotent(makeStubModel([other]), UUID, 5);
     expect(result.kind).toBe("insert");
+  });
+
+  it("with an owner, another user's row sharing the clientUuid is an insert", async () => {
+    const othersRow: FakeRow = {
+      id: "r3",
+      clientUuid: UUID,
+      userId: "u-b",
+      version: 1,
+      payload: "b",
+    };
+    expect((await checkIdempotent(makeStubModel([othersRow]), UUID, 1, "u-a")).kind).toBe("insert");
+    expect((await checkIdempotent(makeStubModel([othersRow]), UUID, 2, "u-a")).kind).toBe("insert");
+    expect((await checkIdempotent(makeStubModel([othersRow]), UUID, 1, "u-b")).kind).toBe("replay");
   });
 });

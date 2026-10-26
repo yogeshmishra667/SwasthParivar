@@ -251,18 +251,32 @@ function CriticalSmsBanner({ metric }: { metric: AdminMetricResult }) {
       </Alert>
     );
   }
+  // `total` = alerts that needed an SMS; `rate` is null when none did.
   const v = metric.value as {
-    rate: number;
+    rate: number | null;
     total: number;
     success: number;
+    alerts?: number;
   };
+  if (v.rate === null) {
+    return (
+      <Alert variant="success">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Critical-bypass SMS success — no SMS needed</AlertTitle>
+        <AlertDescription>
+          No critical alert in the last 30 days needed an SMS
+          {v.alerts !== undefined ? ` (${num(v.alerts)} alerts, all reached by push)` : ""}.
+        </AlertDescription>
+      </Alert>
+    );
+  }
   const ok = v.rate >= 0.95;
   return (
     <Alert variant={ok ? "success" : "destructive"}>
       <AlertCircle className="h-4 w-4" />
       <AlertTitle>Critical-bypass SMS success — {pct(v.rate)}</AlertTitle>
       <AlertDescription>
-        {num(v.success)} of {num(v.total)} alerts delivered · target ≥ 95%.
+        {num(v.success)} of {num(v.total)} alerts that needed an SMS got one · target ≥ 95%.
       </AlertDescription>
     </Alert>
   );

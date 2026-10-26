@@ -12,7 +12,7 @@
 //   • §F.10b augmentation (append-photos delta, manual-add) + locking
 //   • clarify attempt cap, reject cascade, routine medicine-photo cross-check
 
-import { describe, it, beforeAll, afterAll, beforeEach, expect, vi } from "vitest";
+import { describe, it, beforeAll, afterAll, beforeEach, afterEach, expect, vi } from "vitest";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
 import { spawnSync } from "node:child_process";
@@ -732,5 +732,152 @@ describe("read authority — GET /:id", () => {
     const res = await getRx(guardianToken, rxId);
     expect(res.status).toBe(200);
     expect(res.body.data.id).toBe(rxId);
+  });
+});
+
+describe("approval authority — guardian revoked mid-approval (audit P6)", () => {
+  const setLink = (status: "accepted" | "revoked") =>
+    prisma.familyLink.updateMany({ where: { patientId, guardianId }, data: { status } });
+
+  afterEach(async () => {
+    await setLink("accepted");
+  });
+
+  it("a patient who revokes their guardian still cannot approve or reject it", async () => {
+    vision.lines = [line("Glycomet", 0.95)];
+    vision.bottleQueue = [{ aiReadName: "Glycomet", confidence: 0.95 }];
+    const rxId = await upload(patientToken, { pages: 1, bottles: 1 });
+    await runOcr(rxId, patientId);
+    const itemId = (await getRx(patientToken, rxId)).body.data.items[0].id as string;
+
+    await setLink("revoked");
+    const schedulesBefore = await prisma.medicationSchedule.count({ where: { userId: patientId } });
+
+    const approve = await request(app)
+      .post(`/api/v1/prescriptions/${rxId}/approve`)
+      .set(...bearer(patientToken))
+      .send({
+        items: [
+          {
+            id: itemId,
+            decision: "approve",
+            verifiedMedicineName: "Glycomet",
+            verifiedDosage: "500mg",
+            verifiedFrequency: "1-0-1",
+          },
+        ],
+      });
+    expect(approve.status).toBe(403);
+    expect(approve.body.error.code).toBe("APPROVAL_REQUIRES_GUARDIAN");
+    expect(await prisma.medicationSchedule.count({ where: { userId: patientId } })).toBe(
+      schedulesBefore,
+    );
+
+    const reject = await request(app)
+      .post(`/api/v1/prescriptions/${rxId}/reject`)
+      .set(...bearer(patientToken))
+      .send({ reason: "self" });
+    expect(reject.status).toBe(403);
+
+    // Read-only for everyone until a guardian is linked again.
+    const view = await getRx(patientToken, rxId);
+    expect(view.body.data.requiresGuardianApproval).toBe(true);
+    expect(view.body.data.approverUserId).toBeNull();
+    const rx = await prisma.prescription.findUnique({ where: { id: rxId } });
+    expect(rx.status).not.toBe("approved");
+  });
+
+  // Every write route shares one gate — prove none of them skips it.
+  it.each(["approve", "reject", "clarify", "append_photos", "add_item"] as const)(
+    "%s is refused for everyone while no guardian is linked",
+    async (action) => {
+      vision.lines = [line("Glycomet", 0.95)];
+      vision.bottleQueue = [{ aiReadName: "Glycomet", confidence: 0.95 }];
+      const rxId = await upload(patientToken, { pages: 1, bottles: 1 });
+      await runOcr(rxId, patientId);
+      const itemId = (await getRx(patientToken, rxId)).body.data.items[0].id as string;
+      await setLink("revoked");
+
+      const send = (token: string) => {
+        const base = `/api/v1/prescriptions/${rxId}`;
+        switch (action) {
+          case "approve":
+            return request(app)
+              .post(`${base}/approve`)
+              .set(...bearer(token))
+              .send({
+                items: [
+                  {
+                    id: itemId,
+                    decision: "approve",
+                    verifiedMedicineName: "Glycomet",
+                    verifiedDosage: "500mg",
+                    verifiedFrequency: "1-0-1",
+                  },
+                ],
+              });
+          case "reject":
+            return request(app)
+              .post(`${base}/reject`)
+              .set(...bearer(token))
+              .send({ reason: "self" });
+          case "clarify":
+            return request(app)
+              .post(`${base}/items/${itemId}/clarify`)
+              .set(...bearer(token))
+              .field("typedMedicineName", "Glycomet")
+              .field("clarificationAttemptId", randomUUID());
+          case "append_photos":
+            return request(app)
+              .post(`${base}/photos`)
+              .set(...bearer(token))
+              .attach("prescriptionPhotos", img, { filename: "x.jpg", contentType: "image/jpeg" })
+              .field("deltaUploadId", randomUUID());
+          case "add_item":
+            return request(app)
+              .post(`${base}/items`)
+              .set(...bearer(token))
+              .send({
+                typedMedicineName: "X",
+                typedDosage: "1",
+                typedFrequency: "1-0-0",
+                addAttemptId: randomUUID(),
+              });
+        }
+      };
+
+      for (const token of [patientToken, guardianToken, outsiderToken]) {
+        const res = await send(token);
+        expect(res.status).toBe(403);
+        expect(res.body.error.code).toBe("APPROVAL_REQUIRES_GUARDIAN");
+      }
+    },
+  );
+
+  it("once a guardian is linked again, that guardian can approve", async () => {
+    vision.lines = [line("Glycomet", 0.95)];
+    vision.bottleQueue = [{ aiReadName: "Glycomet", confidence: 0.95 }];
+    const rxId = await upload(patientToken, { pages: 1, bottles: 1 });
+    await runOcr(rxId, patientId);
+    const itemId = (await getRx(patientToken, rxId)).body.data.items[0].id as string;
+
+    await setLink("revoked");
+    await setLink("accepted");
+
+    const res = await request(app)
+      .post(`/api/v1/prescriptions/${rxId}/approve`)
+      .set(...bearer(guardianToken))
+      .send({
+        items: [
+          {
+            id: itemId,
+            decision: "approve",
+            verifiedMedicineName: "Glycomet",
+            verifiedDosage: "500mg",
+            verifiedFrequency: "1-0-1",
+          },
+        ],
+      });
+    expect(res.status).toBe(200);
   });
 });

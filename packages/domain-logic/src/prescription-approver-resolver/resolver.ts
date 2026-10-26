@@ -111,3 +111,21 @@ const compareCandidate = (a: CandidateLink, b: CandidateLink): number => {
   if (a.link.acceptedAt > b.link.acceptedAt) return 1;
   return 0;
 };
+
+/**
+ * Approval authority for an EXISTING prescription. Pure.
+ *
+ * `frozenRequiresGuardianApproval` is `Prescription.requiresGuardianApproval`,
+ * resolved at upload and immutable afterwards. The live resolution may move
+ * authority toward a guardian (a newly linked guardian, or a different
+ * guardian after churn) but never back to the patient: a patient who revokes
+ * their guardian must not be able to self-approve a prescription the
+ * guardian was meant to check (audit P6). Returns `null` when nobody may
+ * approve until a guardian is linked again — the patient can still upload a
+ * fresh prescription, which resolves authority anew.
+ */
+export const resolveEffectiveApprover = (
+  frozenRequiresGuardianApproval: boolean,
+  live: ApproverResolution,
+): ApproverResolution | null =>
+  frozenRequiresGuardianApproval && !live.requiresGuardianApproval ? null : live;

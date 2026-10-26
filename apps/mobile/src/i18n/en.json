@@ -45,7 +45,11 @@
     "addMedicinesLater": "You can add them later too.",
     "conditionSubtitle": "Choose your condition so we can set up the right tracking.",
     "firstReadingSubtitle": "Check your glucometer and type the reading below.",
-    "celebrateSubtitle": "Great job! You logged your first reading. 🎉"
+    "celebrateSubtitle": "Great job! You logged your first reading. 🎉",
+    "firstReadingCriticalTitle": "Reading saved",
+    "firstReadingCriticalBody": "This reading is very {{level}}. Talk to your doctor. Call 112 if you need help now.",
+    "levelLow": "low",
+    "levelHigh": "high"
   },
   "tabs": {
     "home": "Home",
@@ -227,8 +231,44 @@
     "alertBodyLow": "Eat something sweet now — juice, glucose, mithai.",
     "alertBodyHigh": "Drink water. Check if you took your medicine.",
     "callContact": "Call {{name}}",
+    "callEmergency": "Call 112 (emergency)",
+    "autoDialHint": "The phone dialer opens for {{name}} in {{seconds}} seconds. Touch anywhere to stop.",
+    "autoDialOff": "Auto-dial stopped. Use a button below to call.",
     "close": "Close",
-    "waitDismiss": "Wait {{seconds}}s..."
+    "waitDismiss": "Wait {{seconds}}s...",
+    "bp": {
+      "alertTitleLow": "BP very low",
+      "alertTitleHigh": "BP very high",
+      "alertBodyLow": "Lie down and drink water. If you feel dizzy, call right away.",
+      "alertBodyHigh": "Sit and rest. If you have chest pain or weakness, call right away."
+    },
+    "cardiac": {
+      "title": {
+        "hr_low": "Heart rate very low",
+        "hr_high": "Heart rate very high",
+        "chest_pain": "Severe chest pain",
+        "generic": "Heart — needs attention now"
+      },
+      "body": {
+        "hr_low": "Heart rate very low — call the doctor immediately.",
+        "hr_high": "Heart rate very high — rest, then call the doctor.",
+        "chest_pain": "Severe chest pain — go to hospital or dial 108 now.",
+        "generic": "Severe — call the doctor now."
+      }
+    },
+    "respiratory": {
+      "title": {
+        "peak_flow": "Peak flow very low",
+        "severe_symptom": "Severe breathing trouble",
+        "generic": "Breathing — needs attention now"
+      },
+      "body": {
+        "peak_flow": "Peak flow in red zone — use inhaler and call the doctor.",
+        "severe_symptom": "Severe breathing distress — go to hospital or dial 108 now.",
+        "generic": "Severe — call the doctor now."
+      }
+    },
+    "openDetails": "See details"
   },
   "offline": {
     "banner": "Offline mode — readings are safe, will sync later",
@@ -350,7 +390,8 @@
     "confirmSave": "Save {{sys}}/{{dia}} for {{profile}}?",
     "saved": "BP saved",
     "saveFailed": "Could not save — try again.",
-    "savedOffline": "Saved locally — will sync when online.",
+    "saveFailedNetwork": "No internet — BP not saved. Try again.",
+    "saveFailedCriticalRetrying": "No internet — BP not saved yet. We'll keep trying to send it so your family gets alerted. Don't wait: call now.",
     "invalidPair": "Upper must be greater than lower.",
     "rangeHint": "Upper: 60-250, Lower: 40-150",
     "latest": "Last BP",

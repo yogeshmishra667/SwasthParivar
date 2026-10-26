@@ -34,6 +34,7 @@ import {
 } from "@/services/prescriptions";
 import { useAuthStore } from "@/stores/auth.store";
 import { logError } from "@/services/analytics";
+import { isPrescriptionApprover } from "@/utils/isPrescriptionApprover";
 
 const draftFor = (item: PrescriptionItemView): ItemDraft => ({
   decision: "approve",
@@ -93,8 +94,11 @@ export default function PrescriptionDetailScreen(): JSX.Element {
     setRefreshing(false);
   };
 
-  const isApprover = view !== null && currentUserId === view.approverUserId;
+  // Both ids must be real: a signed-out `null` must never match the
+  // `null` approver of a prescription whose guardian is gone (audit P6).
+  const isApprover = isPrescriptionApprover(view?.approverUserId, currentUserId);
   const patientWaiting = view !== null && view.requiresGuardianApproval && !isApprover;
+  const noGuardianLinked = patientWaiting && view.approverUserId === null;
 
   const editableItems = useMemo(
     () => (view?.items ?? []).filter((i) => !isTerminal(i.status)),
@@ -196,7 +200,9 @@ export default function PrescriptionDetailScreen(): JSX.Element {
         {patientWaiting ? (
           <Card className="mb-4 border-amber-200 bg-amber-50 dark:bg-amber-900/20">
             <Text className="text-important font-semibold text-warning">
-              {t("prescriptions.patient.sentToGuardianGeneric")}
+              {noGuardianLinked
+                ? t("prescriptions.patient.noGuardianLinked")
+                : t("prescriptions.patient.sentToGuardianGeneric")}
             </Text>
             <Text className="mt-1 text-body text-gray-600 dark:text-gray-300">
               {t("prescriptions.patient.readOnly")}

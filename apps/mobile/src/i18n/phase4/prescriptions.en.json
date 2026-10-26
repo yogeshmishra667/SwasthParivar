@@ -29,6 +29,7 @@
   "patient": {
     "sentToGuardian": "Sent to {{name}} for approval. They've been notified.",
     "sentToGuardianGeneric": "Sent to your family member for approval.",
+    "noGuardianLinked": "No family member is linked to approve this. Link them again, or upload the prescription again.",
     "readOnly": "Only the approver can confirm these medicines.",
     "resend": "Remind again",
     "resent": "Reminder sent"

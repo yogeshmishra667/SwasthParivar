@@ -51,7 +51,7 @@ export const createAppointment = async (
     targetUserId?: string;
   },
 ): Promise<DoctorAppointmentDto> => {
-  await assertDoctorPortalEnabled();
+  await assertDoctorPortalEnabled(auth);
   const userId = await resolveHouseholdMember(auth, params.targetUserId);
 
   // The referenced doctor must exist AND be owned by the same household.
@@ -94,7 +94,7 @@ export const listAppointments = async (
     cursor?: string;
   },
 ): Promise<{ data: DoctorAppointmentDto[]; cursor: string | null; hasMore: boolean }> => {
-  await assertDoctorPortalEnabled();
+  await assertDoctorPortalEnabled(auth);
   const userId = await resolveHouseholdMember(auth, params.targetUserId);
 
   const where: Prisma.DoctorAppointmentWhereInput = {
@@ -150,7 +150,7 @@ export const updateAppointment = async (
     status?: AppointmentStatusDto;
   },
 ): Promise<DoctorAppointmentDto> => {
-  await assertDoctorPortalEnabled();
+  await assertDoctorPortalEnabled(auth);
   const existing = await resolveOwnedAppointment(auth, params.appointmentId);
 
   // Reschedule → re-arm all three reminder windows. We compare on epoch
@@ -177,7 +177,7 @@ export const completeAppointment = async (
   auth: AuthClaims,
   appointmentId: string,
 ): Promise<DoctorAppointmentDto> => {
-  await assertDoctorPortalEnabled();
+  await assertDoctorPortalEnabled(auth);
   await resolveOwnedAppointment(auth, appointmentId);
   const updated = await prisma.doctorAppointment.update({
     where: { id: appointmentId },

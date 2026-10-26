@@ -76,6 +76,28 @@ export const BP_DIASTOLIC_MAX = 150 as const;
 export const BP_PULSE_MIN = 30 as const;
 export const BP_PULSE_MAX = 250 as const;
 
+// Critical-bypass thresholds — HARDCODED medical safety (CLAUDE.md
+// "Phase 4 Invariants — Multi-condition Critical-Bypass Dispatch"):
+// low = sys < 90 OR dia < 60, high = sys > 180 OR dia > 110.
+export const BP_CRITICAL_SYSTOLIC_LOW = 90 as const;
+export const BP_CRITICAL_DIASTOLIC_LOW = 60 as const;
+export const BP_CRITICAL_SYSTOLIC_HIGH = 180 as const;
+export const BP_CRITICAL_DIASTOLIC_HIGH = 110 as const;
+
+/**
+ * Which way a BP reading is critical, or null when it isn't. A reading
+ * that is both (e.g. 190/55) reads as "high": a hypertensive-crisis
+ * systolic is the more acute signal, and both copies say "call now".
+ */
+export const bpCriticalDirection = (systolic: number, diastolic: number): "low" | "high" | null => {
+  if (systolic > BP_CRITICAL_SYSTOLIC_HIGH || diastolic > BP_CRITICAL_DIASTOLIC_HIGH) return "high";
+  if (systolic < BP_CRITICAL_SYSTOLIC_LOW || diastolic < BP_CRITICAL_DIASTOLIC_LOW) return "low";
+  return null;
+};
+
+export const isCriticalBP = (systolic: number, diastolic: number): boolean =>
+  bpCriticalDirection(systolic, diastolic) !== null;
+
 // ─────────────────────────────────────────────────────────────
 // Cardiac (Phase 4 Feature E.1)
 // CLAUDE.md "Phase 4 Invariants — Multi-condition Critical-Bypass
@@ -194,4 +216,4 @@ export interface CreateRespiratoryLogInput {
 // shape below.
 // ─────────────────────────────────────────────────────────────
 
-export type CriticalBypassCategory = "glucose" | "cardiac" | "respiratory";
+export type CriticalBypassCategory = "glucose" | "bp" | "cardiac" | "respiratory";

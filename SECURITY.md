@@ -47,6 +47,21 @@ The project is pre-1.0 and is currently rolling-release on `main`. Only
 the latest commit on `main` is supported for security fixes. Once a `v1.0.0`
 tag is cut, this section will be updated with a version-support matrix.
 
+## Dependency audit exceptions
+
+CI fails on any HIGH/CRITICAL advisory in the production dependency graph
+(`pnpm audit --prod --audit-level=high`). Fixable advisories are fixed
+through `pnpm.overrides` in the root `package.json`. The advisories below
+are listed in `pnpm.auditConfig.ignoreGhsas` because no safe fix exists
+**and** the vulnerable code never runs in the shipped server or mobile app.
+Re-check each one on every Expo SDK / Prisma upgrade and remove it as soon
+as a compatible patched version ships.
+
+| Advisory                                 | Package              | Why it is accepted                                                                                                                                                                                                                                                                                                                               |
+| ---------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GHSA-86w9-cpqp-85rv                      | `node-forge` ≤ 1.4.0 | No patched version published. Only used by the Expo CLI dev server; not bundled into the app or the server.                                                                                                                                                                                                                                      |
+| GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr | `image-size` 1.x     | Fixed only in 2.x, which can't be forced: Metro (`metro/src/Assets.js`) passes image _file paths_, and 2.x only accepts buffers — overriding breaks every image asset in the bundle (verified). Metro only reads this repo's own image assets at build time; the server uses `sharp` for uploads. Clears with the next Expo SDK / Metro upgrade. |
+
 ## Acknowledgements
 
 We will credit reporters in release notes (with permission) unless

@@ -6,6 +6,11 @@ module.exports = {
   moduleNameMapper: {
     // Mirror the `@/*` -> `src/*` alias from tsconfig + babel module-resolver.
     "^@/(.*)$": "<rootDir>/src/$1",
+    // Workspace package SOURCE (not its unbuilt dist), as the server's
+    // vitest aliases do; its NodeNext `./x.js` imports map to `./x`.
+    "^@swasth/shared-types$": "<rootDir>/../../packages/shared-types/src/index.ts",
+    "^@swasth/domain-logic$": "<rootDir>/../../packages/domain-logic/src/index.ts",
+    "^(\\.{1,2}/.+)\\.js$": "$1",
   },
   testMatch: ["<rootDir>/__tests__/**/*.test.{ts,tsx}"],
 };

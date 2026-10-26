@@ -65,7 +65,8 @@ export interface PrescriptionView {
   readonly userId: string;
   readonly status: "pending_ocr" | "pending_approval" | "partial" | "approved" | "rejected";
   readonly requiresGuardianApproval: boolean;
-  readonly approverUserId: string;
+  /** null — a guardian had to approve and none is linked now (read-only). */
+  readonly approverUserId: string | null;
   readonly approverFrictionLevel: "none" | "high";
   readonly originalPhotoUrls: readonly string[];
   readonly approvalRequestedAt: string | null;

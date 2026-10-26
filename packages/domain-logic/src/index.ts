@@ -16,6 +16,7 @@ export * from "./feature-rollout/index.js";
 export * from "./silent-guardian/index.js";
 export * from "./schedule-compliance/index.js";
 export * from "./sos-escalation/index.js";
+export * from "./bp-thresholds/index.js";
 export * from "./cardiac-thresholds/index.js";
 export * from "./respiratory-thresholds/index.js";
 export * from "./prescription-color-classifier/index.js";

@@ -32,13 +32,13 @@ Last updated: 2026-05-14 (after the audit landed).
 
 ## P2 — repo + GitHub configuration
 
-| #   | Item                                                | Where                             | Notes                                                                                                                                                                                                       |
-| --- | --------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 13  | Enable branch protection on `main`                  | GitHub repo settings              | Require PR + at least 1 approving review (raise to 2 once a second engineer joins), require status checks `Typecheck`, `Lint`, `Build`, `Unit tests`, `Integration tests`, `Image smoke`, `Danger` to pass. |
-| 14  | Add a second human to `CODEOWNERS`                  | `.github/CODEOWNERS`              | Currently lists `@yogeshmishra667` only. The "2 reviewers required for safety-critical paths" rule in `PULL_REQUEST_TEMPLATE.md` is aspirational until a second name lands here.                            |
-| 15  | Configure deploy host secrets via the platform's UI | Render / Fly / k8s secret manager | Copy each env var from items 1–12. Never commit them; never put them in `app.json` for mobile except for non-secret values like Sentry DSN.                                                                 |
-| 16  | Wire CI status checks into branch protection        | GitHub repo settings              | Each CI job is a status check; pick the ones from item 13 above.                                                                                                                                            |
-| 17  | Enable Code scanning + Dependency graph             | GitHub repo settings              | See [Enabling code-security features](#enabling-code-security-features-codeql--dependency-review) below. Currently soft-fail; enable to upgrade to hard gates.                                              |
+| #   | Item                                                | Where                             | Notes                                                                                                                                                                                                         |
+| --- | --------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 13  | Enable branch protection on `main`                  | GitHub repo settings              | Require PR + at least 1 approving review (raise to 2 once a second engineer joins), require status checks `Typecheck`, `Lint`, `Build`, `Unit tests`, `Integration tests`, `Image smoke`, `Danger` to pass.   |
+| 14  | Add a second human to `CODEOWNERS`                  | `.github/CODEOWNERS`              | Currently lists `@yogeshmishra667` only. The "2 reviewers required for safety-critical paths" rule in `PULL_REQUEST_TEMPLATE.md` is aspirational until a second name lands here.                              |
+| 15  | Configure deploy host secrets via the platform's UI | Render / Fly / k8s secret manager | Copy each env var from items 1–12. Never commit them; never put them in `app.json` for mobile except for non-secret values like Sentry DSN.                                                                   |
+| 16  | Wire CI status checks into branch protection        | GitHub repo settings              | Each CI job is a status check; pick the ones from item 13 above.                                                                                                                                              |
+| 17  | Enable Code scanning + Dependency graph             | GitHub repo settings              | Optional — CodeQL / dependency review / Scorecard are removed until the repo is public or GHAS is enabled. See [Enabling code-security features](#enabling-code-security-features-codeql--dependency-review). |
 
 ## P3 — operational followups that can land any time
 
@@ -64,62 +64,32 @@ Last updated: 2026-05-14 (after the audit landed).
 
 ## Enabling code-security features (CodeQL + Dependency review)
 
-Two of the new gates (CodeQL SAST and Dependency review on PR diffs)
-ship with `continue-on-error: true` so they don't BLOCK PRs on a fresh
-repo. They become hard gates once the underlying GitHub features are
-enabled. Without enabling them, the gates run but their failures are
-informational.
+**Status (2026-10-20): not run.** CodeQL SAST, `dependency-review-action`
+and OpenSSF Scorecard all need GitHub Advanced Security (GHAS) on a private
+repo. Without it they were permanently skipped — they showed up on every PR as
+grey "skipped" checks and never produced a finding — so they were removed from
+CI. Restore `.github/workflows/codeql.yml`, `.github/workflows/scorecard.yml`
+and the `dependency-review` job from git history when one of these becomes
+true:
 
-### What needs enabling
+| Path                      | What it unlocks                                                             | Cost                                        |
+| ------------------------- | --------------------------------------------------------------------------- | ------------------------------------------- |
+| **Make the repo public**  | Code scanning (CodeQL), dependency review, secret scanning, Scorecard SARIF | Free                                        |
+| **Enable GHAS** (private) | Same features, repo stays private (Settings → Code security, per feature)   | Paid (~$21/user/month for orgs, as of 2026) |
 
-| Feature              | Required for          | How to enable                                                           | Cost                            |
-| -------------------- | --------------------- | ----------------------------------------------------------------------- | ------------------------------- |
-| **Dependency graph** | `dependency-review`   | Settings → Code security → "Dependency graph" toggle                    | Free on public; GHAS on private |
-| **Code scanning**    | `CodeQL`, `Scorecard` | Settings → Code security → "Code scanning" → click "Set up" → "Default" | Free on public; GHAS on private |
-| **Secret scanning**  | Better than gitleaks  | Settings → Code security → "Secret scanning" toggle                     | Free on public; GHAS on private |
+### What already runs without GHAS
 
-### Two paths to upgrade soft gates to hard gates
+- `pnpm audit` — HIGH/CRITICAL CVEs in the production graph (`audit` job:
+  PRs that change dependencies + the weekly full run on `main`)
+- Trivy image scan (in `image-smoke`, informational)
+- gitleaks (`secret-scan`, every PR)
+- `eslint-plugin-security` (lint step of `Lint, format & build`)
+- Dependabot alerts + weekly grouped update PRs
+- SBOM generation (release attachments)
 
-**Option A — Make the repo public** (recommended if the code is meant
-to be open):
-
-1. Settings → General → Danger Zone → Change visibility → Public
-2. All three features above become FREE
-3. After the next push: gates pass cleanly with no extra work
-4. Drop `continue-on-error: true` from `ci.yml` (dependency-review job)
-   and `codeql.yml` (analyze job) in a follow-up PR
-
-**Option B — Enable GitHub Advanced Security** (keep repo private):
-
-1. Settings → Code security → enable each feature one by one
-2. GHAS is paid (~$21/user/month for orgs as of 2026). For a single-
-   user account, GitHub may offer a free trial — check
-   `Settings → Billing`.
-3. After enabling, drop `continue-on-error: true` as in Option A.
-
-### What still works without either
-
-These gates run fine on a private repo with no GHAS:
-
-- `pnpm audit` (full-tree CVE scan, runs in the `audit` job)
-- Trivy image scan (runs in `image-smoke`)
-- gitleaks (runs in `secret-scan`)
-- `eslint-plugin-security` (runs in `lint`)
-- SBOM generation (workflow artefacts + release attachments)
-- OpenSSF Scorecard analysis itself (only the SARIF upload to Security
-  tab fails; the score artefact still gets generated)
-
-So the security posture is already strong without GHAS — CodeQL just
-adds the SAST flow-analysis layer on top, and dependency-review adds
-the PR-diff earlier signal vs `pnpm audit`'s full-tree run.
-
-### What I recommend for SwasthParivar
-
-For a medical-grade project pre-launch: **enable GHAS** when budget
-allows, because CodeQL's session-fixation / data-flow rules find a
-class of bug `pnpm audit` and Trivy can't see. Until then, the
-soft-fail keeps the gates in place so the day GHAS lands, every PR
-since this commit gets re-scanned in the historical timeline.
+For a medical-grade project pre-launch, **CodeQL is still worth adding when
+budget allows**: its data-flow rules (injection, session fixation, unsafe
+deserialisation) find a class of bug that `pnpm audit` and Trivy can't see.
 
 ---
 

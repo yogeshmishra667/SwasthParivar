@@ -37,6 +37,21 @@ describe("notif() — critical bypass copy", () => {
   });
 });
 
+describe("notif() — BP critical bypass copy", () => {
+  it.each([
+    ["critical_bypass_bp_low", "hi", "BP Bahut Kam"],
+    ["critical_bypass_bp_high", "hi", "BP Bahut Zyada"],
+    ["critical_bypass_bp_low", "en", "BP Very Low"],
+    ["critical_bypass_bp_high", "en", "BP Very High"],
+  ] as const)("%s (%s) names the patient and both readings", (key, lang, title) => {
+    const out = notif(key, { patientName: "Kamla", systolic: 192, diastolic: 118 }, lang);
+    expect(out.title).toBe(`⚠️ Kamla: ${title}`);
+    expect(out.body).toContain("192/118");
+    // Tone rule: never "kharab"/"worse" — instructions, not alarm.
+    expect(out.body.toLowerCase()).not.toMatch(/kharab|worse/);
+  });
+});
+
 describe("notif() — re-engagement copy ramps gently by days", () => {
   it("Hindi day-2 uses 'din se reading nahi'", () => {
     const out = notif("re_engagement", { days: 2 }, "hi");

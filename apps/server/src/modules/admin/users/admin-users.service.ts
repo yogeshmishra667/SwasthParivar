@@ -483,7 +483,7 @@ export const sendTestPush = async (params: {
     body: `Push delivery test for ${user.name}. Yeh sirf test hai — koi medical alert nahi.`,
     sound: "default" as const,
     priority: "default" as const,
-    channelId: "default",
+    channelId: "default" as const,
     data: { type: "admin_test_push" },
   }));
 

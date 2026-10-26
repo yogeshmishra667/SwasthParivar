@@ -1,19 +1,23 @@
 import { DomainError } from "@swasth/shared-types";
-import { classifyCardiacReading, planMultiCategoryBypassDispatch } from "@swasth/domain-logic";
+import {
+  classifyCardiacReading,
+  planMultiCategoryBypassDispatch,
+  type MultiCategoryBypassDispatch,
+} from "@swasth/domain-logic";
 import { Prisma, type CardiacLog } from "@prisma/client";
 import { prisma } from "../../shared/database.js";
 import { logger } from "../../shared/logger.js";
-import { createQueue, QUEUE_NAMES } from "../../shared/queue.js";
+import { createQueue, enqueueBestEffort, QUEUE_NAMES } from "../../shared/queue.js";
 import { checkIdempotent } from "../../shared/idempotency.js";
-import { getFlag } from "../../shared/flags/index.js";
-import { getLastBypassIso, markBypassed } from "../../shared/critical-bypass-cooldown.js";
-import type {
-  CriticalAlertJob,
-  CriticalAlertMultiCategoryJob,
-} from "../../workers/critical-alert.processor.js";
+import { isFeatureEnabledFor } from "../../shared/feature-gate.js";
+import { bypassOwner, getLastBypass, markBypassed } from "../../shared/critical-bypass-cooldown.js";
+import type { CriticalAlertMultiCategoryJob } from "../../workers/critical-alert.processor.js";
+import {
+  enqueueCriticalAlert,
+  isFreshForReplayDispatch,
+} from "../../workers/critical-alert.enqueue.js";
 import type { AnalyzeReadingJob } from "../../workers/analyze-reading.processor.js";
 
-const criticalQueue = createQueue<CriticalAlertJob>(QUEUE_NAMES.CRITICAL_ALERT);
 const analyzeQueue = createQueue<AnalyzeReadingJob>(QUEUE_NAMES.ANALYZE_READING);
 
 interface CreateCardiacInput {
@@ -46,11 +50,89 @@ export interface CreateCardiacResult {
 }
 
 /**
+ * Plans the cardiac critical-bypass dispatch: per-category cooldown +
+ * emergency contacts. The fresh path runs this BEFORE saving the row, so
+ * no lookup can fail between the save and the hand-off (audit P5).
+ *
+ * CLAUDE.md "Phase 4 Invariants — Multi-condition Critical-Bypass
+ * Dispatch": cooldown is **per-category**, kept in its own Redis key.
+ */
+const planCardiacBypass = async (
+  userId: string,
+  reasons: Parameters<typeof planMultiCategoryBypassDispatch>[0]["reasons"],
+  nowIso: string,
+  /** Replays only: this reading version's own stamp owner. */
+  replayOf?: string,
+): Promise<MultiCategoryBypassDispatch> => {
+  const last = await getLastBypass("cardiac", userId);
+  // A replay must not read its OWN earlier dispatch as a cooldown — that
+  // stamp proves the original was outside it — or a job that failed for
+  // good could never be revived (P5 review N2).
+  const lastBypassIso = last !== null && last.owner !== replayOf ? last.atIso : null;
+  const contacts = await prisma.emergencyContact.findMany({
+    where: { userId },
+    orderBy: { priority: "asc" },
+    select: { id: true, priority: true, isGuardian: true },
+  });
+  return planMultiCategoryBypassDispatch({
+    category: "cardiac",
+    reasons,
+    nowIso,
+    lastBypassTriggeredAtIso: lastBypassIso,
+    emergencyContacts: contacts.map((ec) => ({
+      contactId: ec.id,
+      priority: ec.priority,
+      isGuardian: ec.isGuardian,
+    })),
+  });
+};
+
+/**
+ * Hands a planned dispatch off, then stamps the cooldown. Never throws. A
+ * replay doesn't re-stamp, so retries can't stretch the cooldown.
+ */
+const handOffCardiacBypass = async (
+  reading: CardiacLog,
+  dispatch: MultiCategoryBypassDispatch,
+  requestId: string | undefined,
+  stamp: boolean,
+): Promise<void> => {
+  if (dispatch.withinCooldown) return;
+  const job: CriticalAlertMultiCategoryJob = {
+    category: "cardiac",
+    readingId: reading.id,
+    userId: reading.userId,
+    dispatch,
+    copyParams: {
+      heartRateBpm: reading.heartRate,
+      ...(reading.painSeverity !== null ? { painSeverity: reading.painSeverity } : {}),
+    },
+    ...(requestId ? { requestId } : {}),
+  };
+  await enqueueCriticalAlert(job, reading.version);
+  // Stamp the Redis cooldown AFTER the hand-off — a Redis outage before it
+  // would silence the dispatch, which is the opposite of safety-first.
+  if (stamp) {
+    await markBypassed(
+      "cardiac",
+      reading.userId,
+      new Date().toISOString(),
+      bypassOwner(reading.id, reading.version),
+    );
+  }
+};
+
+/**
  * Idempotent replay response — fired when a client retries a POST with the
  * same {clientUuid, version} we already persisted. Returns the existing
- * reading without re-running the classifier or re-enqueueing the bypass.
+ * reading. A fresh critical reading's dispatch is re-ensured, not re-sent:
+ * the original request may have died before the hand-off (audit P5); if it
+ * didn't, the per-version jobId makes this a no-op (or revives a failed job).
  */
-const buildReplayResult = (reading: CardiacLog): CreateCardiacResult => {
+const buildReplayResult = async (
+  reading: CardiacLog,
+  requestId?: string,
+): Promise<CreateCardiacResult> => {
   const classification = classifyCardiacReading({
     heartRateBpm: reading.heartRate,
     rhythmStatus: reading.rhythmStatus,
@@ -58,6 +140,22 @@ const buildReplayResult = (reading: CardiacLog): CreateCardiacResult => {
     painSeverity: reading.painSeverity,
     exerciseTolerance: reading.exerciseTolerance,
   });
+  if (
+    classification.severity === "critical_bypass" &&
+    isFreshForReplayDispatch(reading.updatedAt)
+  ) {
+    // Plan as of the moment this version was saved: the cooldown stamp is
+    // kept for twice the window, so a reading another dispatch suppressed
+    // is still suppressed. Its own earlier dispatch is ignored, so the
+    // hand-off re-ensures (or revives) that job — a no-op when it's fine.
+    const dispatch = await planCardiacBypass(
+      reading.userId,
+      classification.reasons,
+      reading.updatedAt.toISOString(),
+      bypassOwner(reading.id, reading.version),
+    );
+    await handOffCardiacBypass(reading, dispatch, requestId, false);
+  }
   return {
     reading,
     critical: {
@@ -74,7 +172,7 @@ export const createCardiacLog = async (input: CreateCardiacInput): Promise<Creat
   // chest pain ≥ 7) stay alive on classifier read-paths even when the
   // write surface is disabled, so an existing CardiacLog still drives
   // bypass on its next sync if a guardian opens it later.
-  const enabled = await getFlag<boolean>("cardiac_logging_enabled", false);
+  const enabled = await isFeatureEnabledFor("cardiac_logging_enabled", input.userId);
   if (!enabled) {
     throw new DomainError(
       "CARDIAC_DISABLED",
@@ -87,7 +185,7 @@ export const createCardiacLog = async (input: CreateCardiacInput): Promise<Creat
     throw new DomainError("READING_STALE_VERSION", "incoming version not newer than stored");
   }
   if (idem.kind === "replay") {
-    return buildReplayResult(idem.existing);
+    return await buildReplayResult(idem.existing, input.requestId);
   }
   const existing = idem.kind === "update" ? idem.existing : null;
 
@@ -102,6 +200,11 @@ export const createCardiacLog = async (input: CreateCardiacInput): Promise<Creat
     painSeverity: input.painSeverity ?? null,
     exerciseTolerance: input.exerciseTolerance,
   });
+
+  const plannedBypass =
+    classification.severity === "critical_bypass"
+      ? await planCardiacBypass(input.userId, classification.reasons, new Date().toISOString())
+      : null;
 
   let reading: CardiacLog;
   if (existing) {
@@ -153,56 +256,15 @@ export const createCardiacLog = async (input: CreateCardiacInput): Promise<Creat
             { clientUuid: input.clientUuid, userId: input.userId },
             "cardiac concurrent create resolved as idempotent replay",
           );
-          return buildReplayResult(winner);
+          return await buildReplayResult(winner, input.requestId);
         }
       }
       throw err;
     }
   }
 
-  let withinCooldown = false;
-  if (classification.severity === "critical_bypass") {
-    // CLAUDE.md "Phase 4 Invariants — Multi-condition Critical-Bypass
-    // Dispatch": cooldown is **per-category**. Glucose's cooldown lives
-    // in `FeedbackEvent.feedbackType=critical_warn`; cardiac uses the
-    // Redis-backed module so the two never inhibit each other.
-    const lastBypassIso = await getLastBypassIso("cardiac", input.userId);
-    const contacts = await prisma.emergencyContact.findMany({
-      where: { userId: input.userId },
-      orderBy: { priority: "asc" },
-      select: { id: true, priority: true, isGuardian: true },
-    });
-    const dispatch = planMultiCategoryBypassDispatch({
-      category: "cardiac",
-      reasons: classification.reasons,
-      nowIso: new Date().toISOString(),
-      lastBypassTriggeredAtIso: lastBypassIso,
-      emergencyContacts: contacts.map((c) => ({
-        contactId: c.id,
-        priority: c.priority,
-        isGuardian: c.isGuardian,
-      })),
-    });
-    withinCooldown = dispatch.withinCooldown;
-    if (!dispatch.withinCooldown) {
-      const job: CriticalAlertMultiCategoryJob = {
-        category: "cardiac",
-        readingId: reading.id,
-        userId: input.userId,
-        dispatch,
-        copyParams: {
-          heartRateBpm: reading.heartRate,
-          ...(reading.painSeverity !== null ? { painSeverity: reading.painSeverity } : {}),
-        },
-        ...(input.requestId ? { requestId: input.requestId } : {}),
-      };
-      await criticalQueue.add("dispatch", job);
-      // Stamp the Redis cooldown AFTER the enqueue succeeds — a Redis
-      // outage before the queue add would silence the dispatch, which is
-      // the opposite of safety-first. Order: enqueue, then stamp.
-      await markBypassed("cardiac", input.userId, new Date().toISOString());
-    }
-  }
+  if (plannedBypass) await handOffCardiacBypass(reading, plannedBypass, input.requestId, true);
+  const withinCooldown = plannedBypass?.withinCooldown ?? false;
 
   // Phase 4 §E follow-up — ANALYZE_READING enqueue parity with glucose.
   // Runs detectCardiacTrend across 5/14/30-day windows in the worker;
@@ -210,12 +272,14 @@ export const createCardiacLog = async (input: CreateCardiacInput): Promise<Creat
   // within 24h so an idempotent replay (same clientUuid) does not
   // double-publish an insight card. 3 retries + exp backoff come from
   // queue defaults.
-  await analyzeQueue.add("analyze", {
-    category: "cardiac",
-    readingId: reading.id,
-    userId: input.userId,
-    ...(input.requestId ? { requestId: input.requestId } : {}),
-  });
+  await enqueueBestEffort(QUEUE_NAMES.ANALYZE_READING, () =>
+    analyzeQueue.add("analyze", {
+      category: "cardiac",
+      readingId: reading.id,
+      userId: input.userId,
+      ...(input.requestId ? { requestId: input.requestId } : {}),
+    }),
+  );
 
   return {
     reading,

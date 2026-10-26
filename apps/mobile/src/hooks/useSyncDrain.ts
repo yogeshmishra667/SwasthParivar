@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import NetInfo from "@react-native-community/netinfo";
 import { drainPendingReadings, refreshPendingCount } from "@/services/readings";
+import { resumePendingCriticalBP } from "@/services/bp";
 import { useAuthStore } from "@/stores/auth.store";
 import { logError } from "@/services/analytics";
 
@@ -31,6 +32,8 @@ export const useSyncDrain = (): void => {
     const tryDrain = (): void => {
       if (!mounted) return;
       void drainPendingReadings().catch((err) => logError("useSyncDrain.drain", err));
+      // BP has no local queue; only a critical BP is kept for re-send (P4).
+      void resumePendingCriticalBP().catch((err) => logError("useSyncDrain.criticalBP", err));
     };
 
     // 1. Seed pending count + first drain.
