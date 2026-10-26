@@ -25,9 +25,9 @@ const OUTLINED = {
   minHeight: 56,
 } as const;
 const OUTLINED_TEXT = { color: "#FFFFFF", fontSize: 18, fontWeight: "700" } as const;
-// Reserved even when empty, so nothing moves under the user's finger when
-// the hint changes or the contact loads.
-const HINT_AREA = { minHeight: 72 } as const;
+// Reserved for the longest hint (Hindi, large text), so nothing moves
+// under the user's finger when the hint changes on the first touch.
+const HINT_AREA = { minHeight: 120 } as const;
 
 const openDialer = (phone: string): void => {
   const tel = sanitizePhoneForTelUri(phone);
@@ -158,7 +158,7 @@ export const CriticalAlert = ({
           <Text className="mt-4 text-center text-important text-white">
             {t(`${copyPrefix}.alertBody${copySuffix}`)}
           </Text>
-          <View className="mt-4 w-full justify-center" style={HINT_AREA}>
+          <View className="mt-4 w-full justify-center" style={contact ? HINT_AREA : undefined}>
             {contact ? (
               <View className="rounded-xl px-4 py-2" style={{ backgroundColor: DARK_RED }}>
                 <Text className="text-center text-important font-semibold text-white">

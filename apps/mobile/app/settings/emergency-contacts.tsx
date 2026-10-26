@@ -72,14 +72,16 @@ export default function EmergencyContactsScreen(): JSX.Element {
       const list = await listEmergencyContacts(targetUserId);
       setContacts(list);
       // Keep the critical alert's call target current (audit P2).
-      if (activeProfileId) void storePriorityContact(activeProfileId, list);
+      // Only once the household is known: before that a sub-profile's list
+      // may really be the primary's.
+      if (activeProfileId && primaryUserId) void storePriorityContact(activeProfileId, list);
     } catch (e) {
       logError("emergencyContacts.load", e);
       setLoadError(true);
     } finally {
       setLoading(false);
     }
-  }, [targetUserId, activeProfileId]);
+  }, [targetUserId, activeProfileId, primaryUserId]);
 
   useEffect(() => {
     void load();
