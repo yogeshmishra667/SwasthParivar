@@ -454,6 +454,8 @@ const processGlucoseCriticalAlert = async (
         // switch the shared device to the right household profile.
         targetUserId: userId,
         severity,
+        // Shown on the app's fullscreen alert raised from this push (P3).
+        valueLabel: `${value} mg/dL`,
       },
     }),
     smsText: smsCopy(severity, value, patientName, language),
@@ -526,6 +528,23 @@ const processGlucoseCriticalAlert = async (
 // the SOS auto-escalation scheduler below — only the copy bundle and
 // the queue payload shape differ.
 // ─────────────────────────────────────────────────────────────
+
+// Shown on the app's fullscreen alert raised from the push (audit P3).
+const multiCategoryValueLabel = (
+  category: CriticalAlertMultiCategoryJob["category"],
+  p: CriticalAlertMultiCategoryJob["copyParams"],
+): { valueLabel: string } | null => {
+  if (category === "bp" && p.systolic !== undefined && p.diastolic !== undefined) {
+    return { valueLabel: `${p.systolic}/${p.diastolic} mmHg` };
+  }
+  if (category === "cardiac" && p.heartRateBpm !== undefined) {
+    return { valueLabel: `${p.heartRateBpm} bpm` };
+  }
+  if (category === "respiratory" && p.peakFlow !== undefined) {
+    return { valueLabel: `${p.peakFlow} L/min` };
+  }
+  return null;
+};
 
 const buildMultiCategoryCopy = (
   copyKey: MultiCategoryBypassDispatch["copyKey"],
@@ -621,6 +640,7 @@ const processMultiCategoryCriticalAlert = async (
         userId,
         targetUserId: userId,
         copyKey: dispatch.copyKey,
+        ...(multiCategoryValueLabel(category, copyParams) ?? {}),
       },
     }),
     // Cardiac/respiratory SMS reuse the localised push copy; BP has its
