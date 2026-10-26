@@ -52,7 +52,7 @@ export interface EventPropsMap {
     // categories without per-category branches.
     value_mg_dl?: number;
     severity?: "low" | "high";
-    category?: "glucose" | "cardiac" | "respiratory";
+    category?: "glucose" | "bp" | "cardiac" | "respiratory";
     copy_key?: string;
     push_targets: number;
     push_success: boolean;
@@ -80,6 +80,15 @@ export interface EventPropsMap {
     variant_id: number | null;
     suppressed: boolean;
     suppress_reason: string | null;
+  };
+  // Audit P11 / P25 — anti-fatigue inputs (CLAUDE.md "Raw Events").
+  notification_opened: {
+    trigger_type: string;
+    source: "push";
+  };
+  notification_ignored: {
+    trigger_type: string;
+    fatigue_level: number;
   };
   // Phase 3 chat — emitted by the Claude wrapper after every upstream
   // call. `tier` distinguishes haiku-cached from sonnet-cold; cost
@@ -369,7 +378,7 @@ export interface EventPropsMap {
     // same `critical_alert` surface; the category disambiguates which
     // chain ran. Optional so the historical glucose-only emission
     // shape continues to validate unchanged.
-    category?: "glucose" | "cardiac" | "respiratory";
+    category?: "glucose" | "bp" | "cardiac" | "respiratory";
     household_size: number;
   };
   // Emitted by the admin "Send test push" endpoint. distinctId is the

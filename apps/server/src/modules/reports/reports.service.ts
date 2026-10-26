@@ -36,7 +36,7 @@ export const generateReport = async (
   auth: AuthClaims,
   params: { appointmentId?: string; targetUserId?: string },
 ): Promise<ReportDto> => {
-  await assertDoctorPortalEnabled();
+  await assertDoctorPortalEnabled(auth);
   const userId = await resolveHouseholdMember(auth, params.targetUserId);
 
   // If an appointment was named, confirm it belongs to this patient —
@@ -94,7 +94,7 @@ export const getReportStatus = async (
   auth: AuthClaims,
   reportId: string,
 ): Promise<{ status: ReportDto["status"]; ready: boolean }> => {
-  await assertDoctorPortalEnabled();
+  await assertDoctorPortalEnabled(auth);
   const report = await resolveOwnedReport(auth, reportId);
   return { status: report.status, ready: report.status === "ready" };
 };
@@ -102,7 +102,7 @@ export const getReportStatus = async (
 // Returns a freshly-signed R2 URL (1-hour expiry). Throws
 // REPORT_NOT_READY (409) before the PDF exists.
 export const getReportDownloadUrl = async (auth: AuthClaims, reportId: string): Promise<string> => {
-  await assertDoctorPortalEnabled();
+  await assertDoctorPortalEnabled(auth);
   const report = await resolveOwnedReport(auth, reportId);
   if (report.status !== "ready" || !report.pdfR2Key) {
     throw new DomainError("REPORT_NOT_READY", "report is not ready yet");

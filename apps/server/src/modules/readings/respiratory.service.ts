@@ -9,7 +9,7 @@ import { prisma } from "../../shared/database.js";
 import { logger } from "../../shared/logger.js";
 import { createQueue, enqueueBestEffort, QUEUE_NAMES } from "../../shared/queue.js";
 import { checkIdempotent } from "../../shared/idempotency.js";
-import { getFlag } from "../../shared/flags/index.js";
+import { isFeatureEnabledFor } from "../../shared/feature-gate.js";
 import { bypassOwner, getLastBypass, markBypassed } from "../../shared/critical-bypass-cooldown.js";
 import type { CriticalAlertMultiCategoryJob } from "../../workers/critical-alert.processor.js";
 import {
@@ -168,7 +168,7 @@ const buildReplayResult = async (
 export const createRespiratoryLog = async (
   input: CreateRespiratoryInput,
 ): Promise<CreateRespiratoryResult> => {
-  const enabled = await getFlag<boolean>("respiratory_logging_enabled", false);
+  const enabled = await isFeatureEnabledFor("respiratory_logging_enabled", input.userId);
   if (!enabled) {
     throw new DomainError(
       "RESPIRATORY_DISABLED",

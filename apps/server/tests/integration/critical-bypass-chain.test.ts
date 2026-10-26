@@ -223,13 +223,15 @@ describe("Critical-bypass full chain (HTTP → service → queue → worker → 
     const pushArgs = sendExpoPushMock.mock.calls[0]![0] as {
       title: string;
       body: string;
-      data: { type: string; severity: string };
+      data: { type: string; severity: string; valueLabel?: string };
     }[];
     expect(pushArgs.length).toBeGreaterThan(0);
     expect(pushArgs[0]!.title).toContain("Bahut Kam");
     expect(pushArgs[0]!.body).toContain("48");
     expect(pushArgs[0]!.data.type).toBe("critical_alert");
     expect(pushArgs[0]!.data.severity).toBe("low");
+    // The app raises its fullscreen alert from this push, with the value (P3).
+    expect(pushArgs[0]!.data.valueLabel).toBe("48 mg/dL");
 
     expect(sendSmsBatchMock).not.toHaveBeenCalled();
     // Push delivered → the alert reached a recipient → no Sentry page.

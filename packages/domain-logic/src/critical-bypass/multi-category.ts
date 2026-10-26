@@ -11,6 +11,8 @@ const MS_PER_MIN = 60_000;
  * condition Critical-Bypass Dispatch", per-category cooldown).
  */
 export type MultiCategoryCopyKey =
+  | "critical.bp.low"
+  | "critical.bp.high"
   | "critical.cardiac.hr_low"
   | "critical.cardiac.hr_high"
   | "critical.cardiac.chest_pain"
@@ -21,7 +23,7 @@ export interface MultiCategoryBypassInput {
   readonly category: Exclude<CriticalBypassCategory, "glucose">;
   /**
    * Stable identifier for the reason the classifier picked. Each
-   * `reasons[]` value from `classifyCardiacReading` /
+   * `reasons[]` value from `classifyBPReading` / `classifyCardiacReading` /
    * `classifyRespiratoryReading` is mapped to one copy key by the
    * planner — falls through to the first matching critical reason.
    */
@@ -63,6 +65,13 @@ const cardiacCopyKey = (reasons: readonly string[]): MultiCategoryCopyKey => {
   return "critical.cardiac.hr_low";
 };
 
+const bpCopyKey = (reasons: readonly string[]): MultiCategoryCopyKey =>
+  // Mirrors `bpCriticalDirection`: any high reason wins, so a reading that
+  // is both (190/55) routes to the hypertensive-crisis copy.
+  reasons.includes("critical.sys_high") || reasons.includes("critical.dia_high")
+    ? "critical.bp.high"
+    : "critical.bp.low";
+
 const respiratoryCopyKey = (reasons: readonly string[]): MultiCategoryCopyKey => {
   // Peak-flow red zone is the more actionable signal — a numeric red-
   // zone reading is independently dispatchable to a clinician. Severe
@@ -98,9 +107,11 @@ export const planMultiCategoryBypassDispatch = (
   const smsTargets = withinCooldown ? [] : sorted.map((c) => c.contactId);
 
   const copyKey =
-    input.category === "cardiac"
-      ? cardiacCopyKey(input.reasons)
-      : respiratoryCopyKey(input.reasons);
+    input.category === "bp"
+      ? bpCopyKey(input.reasons)
+      : input.category === "cardiac"
+        ? cardiacCopyKey(input.reasons)
+        : respiratoryCopyKey(input.reasons);
 
   return {
     category: input.category,
