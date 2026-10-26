@@ -247,11 +247,12 @@ export default defineConfig({
           branches: 82,
           statements: 93,
         },
+        // Ratcheted after audit P11 (anti-fatigue) added its tests.
         "src/notification-resolver/resolver.ts": {
-          lines: 89,
-          functions: 78,
-          branches: 69,
-          statements: 87,
+          lines: 95,
+          functions: 100,
+          branches: 88,
+          statements: 96,
         },
         "src/streak-engine/engine.ts": {
           lines: 88,

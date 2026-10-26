@@ -38,7 +38,7 @@ import {
 import { createQueue, QUEUE_NAMES } from "../shared/queue.js";
 import { logger } from "../shared/logger.js";
 import { prisma } from "../shared/database.js";
-import { getFlag } from "../shared/flags/flags.js";
+import { isFeatureEnabledFor } from "../shared/feature-gate.js";
 import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
 import { sendExpoPush, type ExpoPushMessage } from "../shared/notifications/expo-push.js";
 import { sendSmsBatch } from "../shared/notifications/msg91-sms.js";
@@ -311,17 +311,6 @@ export const processSOSEscalation = async (job: Job<SOSEscalationJob>): Promise<
     ...(requestId ? { requestId } : {}),
   });
 
-  const sosEnabled = await getFlag<boolean>("sos_enabled", false);
-  if (!sosEnabled) {
-    log.warn("sos_enabled=false — skipping tick, NOT rescheduling");
-    return;
-  }
-
-  // `sos_ivr_enabled` gates the IVR sub-feature independently. When
-  // false the dispatcher skips Exotel/Twilio entirely, relying on
-  // push + SMS only. Default false until ops promote.
-  const ivrEnabled = await getFlag<boolean>("sos_ivr_enabled", false);
-
   const event = await prisma.sOSEvent.findUnique({
     where: { id: sosEventId },
     include: {
@@ -333,6 +322,19 @@ export const processSOSEscalation = async (job: Job<SOSEscalationJob>): Promise<
     log.error("SOSEvent not found — dropping tick");
     return;
   }
+
+  // Both flags resolve for this patient's household (audit D3): a cohort
+  // keeps SOS (and IVR) on for those households only.
+  const sosEnabled = await isFeatureEnabledFor("sos_enabled", event.userId);
+  if (!sosEnabled) {
+    log.warn("sos_enabled=false — skipping tick, NOT rescheduling");
+    return;
+  }
+
+  // `sos_ivr_enabled` gates the IVR sub-feature independently. When
+  // false the dispatcher skips Exotel/Twilio entirely, relying on
+  // push + SMS only. Default false until ops promote.
+  const ivrEnabled = await isFeatureEnabledFor("sos_ivr_enabled", event.userId);
 
   if (!isSOSChainActive(event.escalationStage)) {
     log.info({ stage: event.escalationStage }, "chain terminal — no further ticks");

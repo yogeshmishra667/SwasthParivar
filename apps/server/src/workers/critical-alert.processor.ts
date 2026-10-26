@@ -5,6 +5,7 @@ import type { Language } from "@prisma/client";
 import { isTest } from "../config/env.js";
 import { createQueue, QUEUE_NAMES } from "../shared/queue.js";
 import { withTimeout } from "../shared/with-timeout.js";
+import type { CriticalBypassAutoEscalateJob } from "./critical-bypass-auto-escalate.processor.js";
 import { logger } from "../shared/logger.js";
 import { prisma } from "../shared/database.js";
 import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
@@ -17,7 +18,7 @@ import { notif } from "../shared/i18n/notifications.js";
 /**
  * Two shapes feed this worker. Glucose continues to use the original
  * `BypassDecision` shape (Phase 1 — historic, byte-identical behaviour
- * preserved). Cardiac and respiratory ride the new multi-category
+ * preserved). BP, cardiac and respiratory ride the new multi-category
  * dispatch shape from `planMultiCategoryBypassDispatch`. The two paths
  * share the helpers below (push-token resolution, SMS, PostHog) but
  * branch on shape so glucose can never regress while the new categories
@@ -39,7 +40,7 @@ export interface CriticalAlertGlucoseJob {
 }
 
 export interface CriticalAlertMultiCategoryJob {
-  category: "cardiac" | "respiratory";
+  category: "bp" | "cardiac" | "respiratory";
   readingId: string;
   userId: string;
   dispatch: MultiCategoryBypassDispatch;
@@ -51,6 +52,8 @@ export interface CriticalAlertMultiCategoryJob {
    * cooldown.
    */
   copyParams: {
+    systolic?: number;
+    diastolic?: number;
     heartRateBpm?: number;
     painSeverity?: number;
     peakFlow?: number;
@@ -87,6 +90,24 @@ const smsCopy = (
   }
   const label = severity === "low" ? "KAM" : "ZYADA";
   return `SwasthParivar ALERT: ${patientName} ka sugar BAHUT ${label} hai (${valueMgDl} mg/dL). Turant call karein.`;
+};
+
+// BP SMS, plain ASCII like the glucose one above. The push copy's emoji
+// and em dash would force UCS-2, splitting the alert into several SMS
+// parts that can arrive out of order or partly (P4 review W7).
+const bpSmsCopy = (
+  severity: "low" | "high",
+  systolic: number,
+  diastolic: number,
+  patientName: string,
+  language: Language,
+): string => {
+  if (language === "en") {
+    const label = severity === "low" ? "VERY LOW" : "VERY HIGH";
+    return `SwasthParivar ALERT: ${patientName}'s BP is ${label} (${systolic}/${diastolic} mmHg). Please call now.`;
+  }
+  const label = severity === "low" ? "KAM" : "ZYADA";
+  return `SwasthParivar ALERT: ${patientName} ka BP BAHUT ${label} hai (${systolic}/${diastolic} mmHg). Turant call karein.`;
 };
 
 interface PushRecipients {
@@ -165,7 +186,7 @@ interface FanOutInput {
   readonly smsText: string;
   readonly log: typeof logger;
   /** Extra props for the push_zero_recipients analytics event. */
-  readonly analytics: { readonly category?: "cardiac" | "respiratory" };
+  readonly analytics: { readonly category?: "bp" | "cardiac" | "respiratory" };
 }
 
 interface FanOutResult {
@@ -351,7 +372,7 @@ const pageIfUndelivered = (
  * full chain without booting a real BullMQ listener.
  *
  * Glucose jobs (the historical shape — no `category` discriminator)
- * route to the unchanged glucose path. Cardiac + respiratory ride a
+ * route to the unchanged glucose path. BP + cardiac + respiratory ride a
  * parallel branch that reuses the push/SMS helpers but speaks the
  * category-specific copy bundle.
  */
@@ -366,7 +387,7 @@ export type CriticalAlertJobRef<T extends CriticalAlertJob = CriticalAlertJob> =
 
 export const processCriticalAlert = async (job: CriticalAlertJobRef): Promise<void> => {
   const data = job.data;
-  if (data.category === "cardiac" || data.category === "respiratory") {
+  if (data.category === "bp" || data.category === "cardiac" || data.category === "respiratory") {
     await processMultiCategoryCriticalAlert(
       job as CriticalAlertJobRef<CriticalAlertMultiCategoryJob>,
       data,
@@ -433,6 +454,8 @@ const processGlucoseCriticalAlert = async (
         // switch the shared device to the right household profile.
         targetUserId: userId,
         severity,
+        // Shown on the app's fullscreen alert raised from this push (P3).
+        valueLabel: `${value} mg/dL`,
       },
     }),
     smsText: smsCopy(severity, value, patientName, language),
@@ -491,6 +514,7 @@ const processGlucoseCriticalAlert = async (
   await scheduleCriticalBypassAutoEscalation({
     userId,
     readingId,
+    category: "glucose",
     ...(requestId !== undefined ? { requestId } : {}),
   });
 };
@@ -505,6 +529,23 @@ const processGlucoseCriticalAlert = async (
 // the queue payload shape differ.
 // ─────────────────────────────────────────────────────────────
 
+// Shown on the app's fullscreen alert raised from the push (audit P3).
+const multiCategoryValueLabel = (
+  category: CriticalAlertMultiCategoryJob["category"],
+  p: CriticalAlertMultiCategoryJob["copyParams"],
+): { valueLabel: string } | null => {
+  if (category === "bp" && p.systolic !== undefined && p.diastolic !== undefined) {
+    return { valueLabel: `${p.systolic}/${p.diastolic} mmHg` };
+  }
+  if (category === "cardiac" && p.heartRateBpm !== undefined) {
+    return { valueLabel: `${p.heartRateBpm} bpm` };
+  }
+  if (category === "respiratory" && p.peakFlow !== undefined) {
+    return { valueLabel: `${p.peakFlow} L/min` };
+  }
+  return null;
+};
+
 const buildMultiCategoryCopy = (
   copyKey: MultiCategoryBypassDispatch["copyKey"],
   copyParams: CriticalAlertMultiCategoryJob["copyParams"],
@@ -512,6 +553,17 @@ const buildMultiCategoryCopy = (
   language: Language,
 ): { title: string; body: string } => {
   switch (copyKey) {
+    case "critical.bp.low":
+    case "critical.bp.high":
+      return notif(
+        copyKey === "critical.bp.low" ? "critical_bypass_bp_low" : "critical_bypass_bp_high",
+        {
+          patientName,
+          systolic: copyParams.systolic ?? 0,
+          diastolic: copyParams.diastolic ?? 0,
+        },
+        language,
+      );
     case "critical.cardiac.hr_low":
       return notif(
         "critical_bypass_cardiac_low",
@@ -588,11 +640,21 @@ const processMultiCategoryCriticalAlert = async (
         userId,
         targetUserId: userId,
         copyKey: dispatch.copyKey,
+        ...(multiCategoryValueLabel(category, copyParams) ?? {}),
       },
     }),
-    // SMS body uses the localised push body — same bundle, same numeric
-    // value — so the guardian's SMS reads identically to the push.
-    smsText: `SwasthParivar ALERT: ${copy.title} — ${copy.body}`,
+    // Cardiac/respiratory SMS reuse the localised push copy; BP has its
+    // own single-part plain-text SMS.
+    smsText:
+      category === "bp"
+        ? bpSmsCopy(
+            dispatch.copyKey === "critical.bp.low" ? "low" : "high",
+            copyParams.systolic ?? 0,
+            copyParams.diastolic ?? 0,
+            patientName,
+            language,
+          )
+        : `SwasthParivar ALERT: ${copy.title} — ${copy.body}`,
     log,
     analytics: { category },
   });
@@ -642,6 +704,7 @@ const processMultiCategoryCriticalAlert = async (
   await scheduleCriticalBypassAutoEscalation({
     userId,
     readingId,
+    category,
     ...(requestId !== undefined ? { requestId } : {}),
   });
 };
@@ -655,12 +718,6 @@ const autoEscalateQueue = (): Queue<CriticalBypassAutoEscalateJob> => {
   );
   return _autoEscalateQueue;
 };
-
-export interface CriticalBypassAutoEscalateJob {
-  readonly userId: string;
-  readonly readingId: string;
-  readonly requestId?: string;
-}
 
 const ESCALATION_SCHEDULE_TIMEOUT_MS = 2_000;
 

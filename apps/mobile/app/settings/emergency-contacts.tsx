@@ -39,12 +39,14 @@ import {
   type EmergencyContactDto,
 } from "@/services/emergency-contacts";
 import { logError } from "@/services/analytics";
+import { refreshPriorityContact, storePriorityContact } from "@/services/priority-contact";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 
 export default function EmergencyContactsScreen(): JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
   const activeProfile = useActiveProfile();
+  const activeProfileId = activeProfile?.id ?? null;
   const primaryUserId = useProfileStore((s) => s.primaryUserId);
 
   // When the active profile is the household primary, the server treats
@@ -69,13 +71,17 @@ export default function EmergencyContactsScreen(): JSX.Element {
     try {
       const list = await listEmergencyContacts(targetUserId);
       setContacts(list);
+      // Keep the critical alert's call target current (audit P2).
+      // Only once the household is known: before that a sub-profile's list
+      // may really be the primary's.
+      if (activeProfileId && primaryUserId) void storePriorityContact(activeProfileId, list);
     } catch (e) {
       logError("emergencyContacts.load", e);
       setLoadError(true);
     } finally {
       setLoading(false);
     }
-  }, [targetUserId]);
+  }, [targetUserId, activeProfileId, primaryUserId]);
 
   useEffect(() => {
     void load();
@@ -109,6 +115,7 @@ export default function EmergencyContactsScreen(): JSX.Element {
       setContacts((prev) =>
         [...prev.filter((c) => c.id !== next.id), next].sort((a, b) => a.priority - b.priority),
       );
+      if (activeProfileId) void refreshPriorityContact(activeProfileId);
     } else {
       const created = await createEmergencyContact({ ...input, targetUserId });
       // Server cascades on insert; re-fetch to get the post-renumber

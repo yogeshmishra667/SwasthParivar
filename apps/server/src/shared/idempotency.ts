@@ -40,7 +40,7 @@ export type IdempotencyOutcome<T> =
 // helper is decoupled from `@prisma/client` — handy for unit tests
 // (drop in a stub) and for any future non-Prisma backing store.
 export interface IdempotentModel<TRow> {
-  findFirst(args: { where: { clientUuid: string } }): Promise<TRow | null>;
+  findFirst(args: { where: { clientUuid: string; userId?: string } }): Promise<TRow | null>;
 }
 
 export interface VersionedRow {
@@ -51,8 +51,15 @@ export const checkIdempotent = async <TRow extends VersionedRow>(
   model: IdempotentModel<TRow>,
   clientUuid: string,
   incomingVersion: number,
+  /**
+   * Restricts the lookup to this user's rows, so another user's row that
+   * happens to share the clientUuid is never replayed back or updated.
+   */
+  ownerUserId?: string,
 ): Promise<IdempotencyOutcome<TRow>> => {
-  const existing = await model.findFirst({ where: { clientUuid } });
+  const existing = await model.findFirst({
+    where: ownerUserId === undefined ? { clientUuid } : { clientUuid, userId: ownerUserId },
+  });
   if (!existing) return { kind: "insert" };
   if (incomingVersion < existing.version) return { kind: "stale", existing };
   if (incomingVersion === existing.version) return { kind: "replay", existing };

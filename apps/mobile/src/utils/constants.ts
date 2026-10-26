@@ -26,3 +26,6 @@ export const ANIMATION = {
 } as const;
 
 export const CRITICAL_FULLSCREEN_LOCK_MS = 30_000;
+// CLAUDE.md Edge Case #1: 60s with no tap on the critical alert → open the
+// dialer to the priority-1 contact. Any tap cancels.
+export const CRITICAL_AUTO_DIAL_MS = 60_000;

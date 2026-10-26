@@ -32,9 +32,23 @@ export interface NotificationState {
   lastNotificationAt: string | null;
   bestLogTimeFasting: string;
   bestLogTimePostMeal: string;
-  notificationHistory7d: { at: string; type: NotificationTriggerType; messageKey: string }[];
+  // Inline (not a named interface): it is stored as Prisma JSON, which needs
+  // the implicit index signature only object type literals get.
+  notificationHistory7d: {
+    at: string;
+    type: NotificationTriggerType;
+    messageKey: string;
+    /** The push's id, so an open the app reports can be matched to it. */
+    notificationId?: string;
+    /** When the app reported the push opened. */
+    openedAt?: string;
+    /** When it was counted as ignored (never opened). */
+    ignoredAt?: string;
+  }[];
   last3VariantIds: string[];
 }
+
+export type NotificationHistoryEntry = NotificationState["notificationHistory7d"][number];
 
 export interface NotificationCandidate {
   trigger: NotificationTriggerType;
