@@ -4,9 +4,9 @@
 // Side-effect-free at module import; the companion worker file binds
 // it to BullMQ. The processor:
 //   1. Re-reads the reading (it may have been edited / deleted)
-//   2. Checks the patient's recent activity — if they've logged
-//      anything fresh OR there's a guardian alert that has been
-//      read, we treat that as "responded" and skip.
+//   2. Checks the patient's recent activity — a fresh manual reading
+//      of any category that is not itself critical counts as
+//      "responded", and we skip.
 //   3. Otherwise calls `autoTriggerSOSFromCriticalBypass`, which
 //      itself guards on `sos_enabled` + the per-source flag.
 //
@@ -15,6 +15,8 @@
 // the same critical-bypass would be worse than missing one.
 
 import type { Job } from "bullmq";
+import { isCriticalBP, isCriticalGlucose } from "@swasth/shared-types";
+import { shouldTriggerCardiacBypass, shouldTriggerRespiratoryBypass } from "@swasth/domain-logic";
 import { logger } from "../shared/logger.js";
 import { prisma } from "../shared/database.js";
 import { autoTriggerSOSFromCriticalBypass } from "../modules/sos/sos.service.js";
@@ -32,18 +34,48 @@ export interface CriticalBypassAutoEscalateJob {
 
 const FIVE_MINUTES_MS = 5 * 60_000;
 
+/** Rows read per table; a few minutes of manual logging never comes close. */
+const RESPONSE_SCAN_LIMIT = 20;
+
+/**
+ * Did the patient respond after the critical reading? A newer reading of
+ * ANY category counts, unless it is itself critical (a re-measure that is
+ * still critical is no all-clear) or device-sourced (a wearable syncing in
+ * the background is not the patient) — P4 review W3.
+ */
 const patientResponded = async (userId: string, readingMeasuredAt: Date): Promise<boolean> => {
-  // A reading of ANY category newer than the critical one = the patient
-  // is engaging with the app, no need to auto-escalate.
-  const where = { userId, measuredAt: { gt: new Date(readingMeasuredAt.getTime() + 1_000) } };
-  const select = { id: true } as const;
-  const fresh = await Promise.all([
-    prisma.glucoseReading.findFirst({ where, select }),
-    prisma.bPReading.findFirst({ where, select }),
-    prisma.cardiacLog.findFirst({ where, select }),
-    prisma.respiratoryLog.findFirst({ where, select }),
+  const where = {
+    userId,
+    measuredAt: { gt: new Date(readingMeasuredAt.getTime() + 1_000) },
+    source: { not: "device" as const },
+  };
+  const take = RESPONSE_SCAN_LIMIT;
+  const [glucose, bp, cardiac, respiratory] = await Promise.all([
+    prisma.glucoseReading.findMany({ where, take, select: { valueMgDl: true } }),
+    prisma.bPReading.findMany({ where, take, select: { systolic: true, diastolic: true } }),
+    prisma.cardiacLog.findMany({
+      where,
+      take,
+      select: {
+        heartRate: true,
+        rhythmStatus: true,
+        chestPain: true,
+        painSeverity: true,
+        exerciseTolerance: true,
+      },
+    }),
+    prisma.respiratoryLog.findMany({
+      where,
+      take,
+      select: { peakFlow: true, baselinePeakFlow: true, inhalerUsed: true, symptomSeverity: true },
+    }),
   ]);
-  return fresh.some((row) => row !== null);
+  return (
+    glucose.some((r) => !isCriticalGlucose(r.valueMgDl)) ||
+    bp.some((r) => !isCriticalBP(r.systolic, r.diastolic)) ||
+    cardiac.some((r) => !shouldTriggerCardiacBypass({ ...r, heartRateBpm: r.heartRate })) ||
+    respiratory.some((r) => !shouldTriggerRespiratoryBypass(r))
+  );
 };
 
 /**
@@ -98,7 +130,7 @@ export const processCriticalBypassAutoEscalate = async (
   }
 
   if (await patientResponded(userId, reading.measuredAt)) {
-    log.info("patient logged fresh reading — skipping auto-escalation");
+    log.info("patient logged a fresh non-critical reading — skipping auto-escalation");
     return;
   }
 

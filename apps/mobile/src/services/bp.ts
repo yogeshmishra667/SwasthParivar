@@ -4,8 +4,10 @@
 // retry is an idempotent replay on the server, never a duplicate. A
 // CRITICAL BP is also re-sent in the background until it lands, so the
 // server-side family alert (push + SMS) still goes out once the network
-// returns (P4 review C1).
+// returns (P4 review C1). It is persisted, so an app kill or restart
+// doesn't drop it: `resumePendingCriticalBP` picks it up again (W1).
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { isAxiosError } from "axios";
 import { isCriticalBP, type ReadingContext, type ReadingSource } from "@swasth/shared-types";
 
@@ -46,38 +48,107 @@ const isNetworkOrServerError = (err: unknown): boolean => {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+interface BPPayload {
+  clientUuid: string;
+  [field: string]: unknown;
+}
+
+// Critical BPs not yet on the server, persisted across app restarts.
+const PENDING_KEY = "swasth.pendingCriticalBP.v1";
+// Past this age a re-send is dropped: the family alert would be a day late.
+const PENDING_MAX_AGE_MS = 24 * 60 * 60_000;
+
+interface PendingCriticalBP {
+  payload: BPPayload;
+  queuedAt: string;
+}
+
+const readPending = async (): Promise<PendingCriticalBP[]> => {
+  try {
+    const raw = await AsyncStorage.getItem(PENDING_KEY);
+    return raw ? (JSON.parse(raw) as PendingCriticalBP[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const writePending = async (items: readonly PendingCriticalBP[]): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(items));
+  } catch (err) {
+    logError("pendingCriticalBP", err);
+  }
+};
+
+const persistPending = async (payload: BPPayload): Promise<void> => {
+  const items = await readPending();
+  if (items.some((i) => i.payload.clientUuid === payload.clientUuid)) return;
+  await writePending([...items, { payload, queuedAt: new Date().toISOString() }]);
+};
+
+const clearPending = async (clientUuid: string): Promise<void> => {
+  const items = await readPending();
+  await writePending(items.filter((i) => i.payload.clientUuid !== clientUuid));
+};
+
 // Background re-send for a critical BP that failed to reach the server.
 const CRITICAL_RETRY_BACKOFF_MS = [5_000, 15_000, 30_000, 60_000, 120_000] as const;
 const retryingInBackground = new Set<string>();
 
-const resendCriticalInBackground = (clientUuid: string, payload: object): void => {
+const resendCriticalInBackground = (
+  payload: BPPayload,
+  backoffMs: readonly number[] = CRITICAL_RETRY_BACKOFF_MS,
+): void => {
+  const { clientUuid } = payload;
   if (retryingInBackground.has(clientUuid)) return;
   retryingInBackground.add(clientUuid);
   void (async () => {
     try {
-      for (const [attempt, backoffMs] of CRITICAL_RETRY_BACKOFF_MS.entries()) {
-        await sleep(backoffMs);
+      for (const [attempt, delayMs] of backoffMs.entries()) {
+        await sleep(delayMs);
         try {
           await api.post("/readings/bp", payload);
           track("critical_bp_background_sync", { attempt: attempt + 1, delivered: true });
+          await clearPending(clientUuid);
           return;
         } catch (err) {
-          if (!isNetworkOrServerError(err)) return; // the server answered — nothing to retry
+          if (!isNetworkOrServerError(err)) {
+            // The server answered (e.g. a validation reject): nothing to retry.
+            await clearPending(clientUuid);
+            return;
+          }
         }
       }
-      track("critical_bp_background_sync", {
-        attempt: CRITICAL_RETRY_BACKOFF_MS.length,
-        delivered: false,
-      });
+      // Still pending: the next resume (reconnect, app start, 60s sync tick)
+      // tries again.
+      track("critical_bp_background_sync", { attempt: backoffMs.length, delivered: false });
     } finally {
       retryingInBackground.delete(clientUuid);
     }
   })();
 };
 
+/**
+ * Re-sends every persisted critical BP not yet on the server. Called by
+ * the sync drain on app start, on reconnect and every 60s; a reading
+ * already being re-sent is skipped.
+ */
+export const resumePendingCriticalBP = async (): Promise<void> => {
+  const items = await readPending();
+  const now = Date.now();
+  const fresh = items.filter((i) => now - Date.parse(i.queuedAt) < PENDING_MAX_AGE_MS);
+  if (fresh.length !== items.length) {
+    track("critical_bp_background_sync_expired", { count: items.length - fresh.length });
+    await writePending(fresh);
+  }
+  for (const item of fresh)
+    resendCriticalInBackground(item.payload, [0, ...CRITICAL_RETRY_BACKOFF_MS]);
+};
+
 export const saveBPReading = async (input: SaveBPInput): Promise<SaveBPResult> => {
   const clientUuid = input.clientUuid;
-  const payload = {
+  const critical = isCriticalBP(input.systolic, input.diastolic);
+  const payload: BPPayload = {
     clientUuid,
     systolic: input.systolic,
     diastolic: input.diastolic,
@@ -88,7 +159,7 @@ export const saveBPReading = async (input: SaveBPInput): Promise<SaveBPResult> =
     measuredAt: input.measuredAtIso,
     version: 1,
     targetUserId: input.userId,
-  } as const;
+  };
 
   try {
     const res = await api.post<ServerBPResponse>("/readings/bp", payload);
@@ -98,15 +169,20 @@ export const saveBPReading = async (input: SaveBPInput): Promise<SaveBPResult> =
       value: input.systolic,
       offline: false,
     });
+    // A manual retry that lands supersedes any background re-send.
+    if (critical) await clearPending(clientUuid);
     return { kind: "synced", readingId: res.data.reading.id };
   } catch (err) {
     if (isNetworkOrServerError(err)) {
-      const critical = isCriticalBP(input.systolic, input.diastolic);
-      if (critical) resendCriticalInBackground(clientUuid, payload);
+      if (critical) {
+        await persistPending(payload);
+        resendCriticalInBackground(payload);
+      }
       return { kind: "network_failed", retrying: critical };
     }
 
     if (isAxiosError(err) && err.response) {
+      if (critical) await clearPending(clientUuid);
       const data = err.response.data as { error?: { code?: string; message?: string } } | undefined;
       return {
         kind: "rejected",

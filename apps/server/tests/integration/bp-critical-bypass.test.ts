@@ -442,4 +442,56 @@ describe("BP SOS auto-escalation (audit P4 review C2)", () => {
       expect(await sosEventsFor(seed.patientId)).toHaveLength(0);
     },
   );
+
+  it.each([
+    ["a still-critical glucose re-measure", "glucose"],
+    ["a still-critical BP re-measure", "bp"],
+    ["a still-critical cardiac log", "cardiac"],
+    ["a still-critical respiratory log", "respiratory"],
+    ["a device-synced normal reading", "device"],
+  ] as const)("%s is no response — SOS still fires (review W3)", async (_label, kind) => {
+    const seed = await seedPatient();
+    const readingId = await criticalBPSixMinutesAgo(seed.token);
+
+    const fresh = { clientUuid: randomUUID(), userId: seed.patientId, source: "manual" as const };
+    const measuredAt = minutesAgo(2);
+    switch (kind) {
+      case "glucose":
+        await prisma.glucoseReading.create({
+          data: {
+            ...fresh,
+            measuredAt,
+            valueMgDl: 50,
+            readingType: "random",
+            streakCreditedTo: measuredAt,
+          },
+        });
+        break;
+      case "bp":
+        await prisma.bPReading.create({
+          data: { ...fresh, measuredAt, systolic: 200, diastolic: 120 },
+        });
+        break;
+      case "cardiac":
+        await prisma.cardiacLog.create({ data: { ...fresh, measuredAt, heartRate: 30 } });
+        break;
+      case "respiratory":
+        await prisma.respiratoryLog.create({
+          data: { ...fresh, measuredAt, symptomSeverity: "severe" },
+        });
+        break;
+      case "device":
+        await prisma.cardiacLog.create({
+          data: { ...fresh, source: "device", measuredAt, heartRate: 80 },
+        });
+        break;
+    }
+
+    await processEscalate({
+      id: `test-${readingId}`,
+      data: { userId: seed.patientId, readingId, category: "bp" },
+    });
+    const sos = await sosEventsFor(seed.patientId);
+    expect(sos.map((e) => e.triggerSource)).toEqual(["critical_bypass_escalation"]);
+  });
 });

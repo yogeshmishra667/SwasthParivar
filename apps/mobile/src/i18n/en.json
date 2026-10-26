@@ -357,7 +357,7 @@
     "saved": "BP saved",
     "saveFailed": "Could not save — try again.",
     "saveFailedNetwork": "No internet — BP not saved. Try again.",
-    "saveFailedCriticalRetrying": "No internet — BP not saved yet. We'll keep sending it in the background so your family gets alerted. You can also call now.",
+    "saveFailedCriticalRetrying": "No internet — BP not saved yet. We'll keep trying to send it so your family gets alerted. Don't wait: call now.",
     "invalidPair": "Upper must be greater than lower.",
     "rangeHint": "Upper: 60-250, Lower: 40-150",
     "latest": "Last BP",

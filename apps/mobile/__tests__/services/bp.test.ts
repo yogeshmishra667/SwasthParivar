@@ -1,7 +1,16 @@
 // Audit P4 review C1 — BP has no local queue, so a network failure must
 // read "not saved" (never "saved locally"). A CRITICAL BP is re-sent in
 // the background with the SAME clientUuid, so the server sees an
-// idempotent replay and the family alert still goes out.
+// idempotent replay and the family alert still goes out. W1: the pending
+// critical BP is persisted, so an app restart doesn't drop it.
+const mockStorage = new Map<string, string>();
+jest.mock("@react-native-async-storage/async-storage", () => ({
+  __esModule: true,
+  default: {
+    getItem: jest.fn((k: string) => Promise.resolve(mockStorage.get(k) ?? null)),
+    setItem: jest.fn((k: string, v: string) => Promise.resolve(void mockStorage.set(k, v))),
+  },
+}));
 jest.mock("@/services/api", () => ({ api: { post: jest.fn(), get: jest.fn() } }));
 jest.mock("@/services/analytics", () => ({ track: jest.fn(), logError: jest.fn() }));
 
@@ -37,9 +46,17 @@ const bpInput = (clientUuid: string, systolic: number, diastolic: number): SaveB
 const sentPayloads = (): { clientUuid: string; version: number }[] =>
   post.mock.calls.map((call: unknown[]) => call[1] as { clientUuid: string; version: number });
 
+const pendingUuids = (): string[] =>
+  (
+    JSON.parse(mockStorage.get("swasth.pendingCriticalBP.v1") ?? "[]") as {
+      payload: { clientUuid: string };
+    }[]
+  ).map((i) => i.payload.clientUuid);
+
 beforeEach(() => {
   jest.useFakeTimers();
   post.mockReset();
+  mockStorage.clear();
 });
 
 afterEach(() => {
@@ -100,5 +117,63 @@ describe("saveBPReading", () => {
     });
     await jest.advanceTimersByTimeAsync(10 * 60_000);
     expect(post).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("pending critical BP across an app restart (review W1)", () => {
+  it("persists a critical BP that failed, and clears it once it lands", async () => {
+    post
+      .mockRejectedValueOnce(networkError())
+      .mockResolvedValueOnce({ data: { reading: { id: "r9" } } });
+    await saveBPReading(bpInput("uuid-persist", 195, 120));
+    expect(pendingUuids()).toEqual(["uuid-persist"]);
+    await jest.advanceTimersByTimeAsync(5_000);
+    expect(pendingUuids()).toEqual([]);
+  });
+
+  it("a normal BP that failed is not persisted", async () => {
+    post.mockRejectedValue(networkError());
+    await saveBPReading(bpInput("uuid-normal-2", 128, 82));
+    expect(pendingUuids()).toEqual([]);
+  });
+
+  it("after a restart, the resume re-sends it at once with the same clientUuid", async () => {
+    post.mockRejectedValue(networkError());
+    await saveBPReading(bpInput("uuid-restart", 85, 55));
+    expect(pendingUuids()).toEqual(["uuid-restart"]);
+
+    // App killed: fresh module state (no in-memory retry), storage survives.
+    jest.resetModules();
+    const fresh = jest.requireMock("@/services/api");
+    fresh.api.post.mockReset().mockResolvedValue({ data: { reading: { id: "r10" } } });
+    const { resumePendingCriticalBP } = jest.requireActual("@/services/bp");
+    await resumePendingCriticalBP();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(fresh.api.post).toHaveBeenCalledTimes(1);
+    expect(fresh.api.post.mock.calls[0][1]).toMatchObject({
+      clientUuid: "uuid-restart",
+      version: 1,
+    });
+    expect(pendingUuids()).toEqual([]);
+  });
+
+  it("drops a pending critical BP older than 24 hours instead of alerting a day late", async () => {
+    mockStorage.set(
+      "swasth.pendingCriticalBP.v1",
+      JSON.stringify([
+        {
+          payload: { clientUuid: "uuid-old" },
+          queuedAt: new Date(Date.now() - 25 * 60 * 60_000).toISOString(),
+        },
+      ]),
+    );
+    jest.resetModules();
+    const fresh = jest.requireMock("@/services/api");
+    fresh.api.post.mockReset().mockResolvedValue({ data: { reading: { id: "r11" } } });
+    const { resumePendingCriticalBP } = jest.requireActual("@/services/bp");
+    await resumePendingCriticalBP();
+    await jest.advanceTimersByTimeAsync(10 * 60_000);
+    expect(fresh.api.post).not.toHaveBeenCalled();
+    expect(pendingUuids()).toEqual([]);
   });
 });
