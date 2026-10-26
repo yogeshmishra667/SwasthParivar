@@ -1,7 +1,7 @@
 # Audit Progress
 
 > Source plan: `~/.claude/plans/flickering-wiggling-sundae.md`
-> Last updated: 2026-10-25 (phase-audit fix wave: P1, P6, D1 merged; P5 #202 and P10 #203 queued; P4 on branch `feat/bp-critical-bypass`)
+> Last updated: 2026-10-26 (phase-audit fix wave: P1, P5, P6, P10, D1 merged; P4 on branch `feat/bp-critical-bypass`, in safety review)
 > Current session focus: Working through `phase-audit.md` in its §7 order, safety items first. Each fix gets its own PR, a `safety-reviewer` pass and a sabotage-checked test. **Resume at "Phase-audit fix wave" below.**
 
 ## Status Legend
@@ -60,9 +60,9 @@ Each item gets its own PR based on `main`, a `safety-reviewer` pass (re-run unti
 - [x] **P6** prescription approval authority frozen — #200
 - [x] **D1** SMS success-rate denominator — #201 (`010a96b`)
 - [x] Pin third-party GitHub Actions to SHAs — #199. This unblocked #85 and #86; Dependabot should auto-close them.
-- [~] **P5** durable critical-alert hand-off — #202. Safety review PASS. In the merge queue.
-- [~] **P10** Android notification channels — #203. In the merge queue. Confirm on a device afterwards.
-- [~] **P4** BP critical bypass — branch `feat/bp-critical-bypass`, built on #202's branch. **Do not open its PR until #202 is in main**: rebase onto main first. All code and tests are done (local gate + safety review were running at hand-off). That covers shared-types thresholds, the domain-logic classifier, planner copy keys, `bp.service` (checkIdempotent, plan before save, hand-off, replay), processor routing, hi/en copy and the app's fullscreen alert.
+- [x] **P5** durable critical-alert hand-off — #202 (`f689e80`)
+- [x] **P10** Android notification channels — #203 (`8917188`). Still to confirm on an Android device: one test push per channel.
+- [~] **P4** BP critical bypass — branch `feat/bp-critical-bypass`, rebased onto main after #202 merged. Its PR opens after the `safety-reviewer` passes. All code and tests are done (local gate + safety review were running at hand-off). That covers shared-types thresholds, the domain-logic classifier, planner copy keys, `bp.service` (checkIdempotent, plan before save, hand-off, replay), processor routing, hi/en copy and the app's fullscreen alert.
 - [ ] **P2** the critical alert's Call button dials 112, not the priority-1 contact, and there's no 60-second auto-dial. App side; the decision is in `phase-audit.md` §8.6.1 (recommended: priority-1 contact, with 112 as the second button).
 - [ ] **P3** no fullscreen alert for a critical first reading (onboarding), for cardiac/respiratory, or on push receipt. App side.
 - [ ] **D3** cohort flags read as booleans: switch per-user features to `isFeatureEnabled(key, userId)`. SOS parts are safety-critical.

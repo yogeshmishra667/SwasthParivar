@@ -6,17 +6,17 @@
 > **Pass 2 — app features (patient + guardian app and the server paths behind them):** section 4 (P1–P34). Scope: glucose/BP/cardiac/respiratory logging, voice, critical-bypass, SOS, offline sync, shared-phone profiles, medicines + reminders, medicine/prescription scan, AI chat + chat signals, guardian/family flow, settings, auth, privacy and security. Pass 2 is based on reading code, one local `pino` redaction check, and the Expo push docs. **No tests were run in pass 2.**
 > **Rule for the fix phase:** do not break existing behaviour. See "Safety rules for the fix work" before starting anything.
 
-## 0. Fix status — updated 2026-10-25
+## 0. Fix status — updated 2026-10-26
 
 Every fix below shipped as its own PR, with a `safety-reviewer` pass (re-run until PASS) and a sabotage check: each new test fails with its fix removed. Details are in `audit-progress.md` → "Phase-audit fix wave".
 
 | Item | What | Status |
 |---|---|---|
 | **P1** | Per-contact SMS: a push to the patient's own phone no longer suppresses SMS to contacts. Household-member contacts are always texted. The push stage can't block SMS. SMS retries 3×. On-call is paged on any undelivered SMS. | ✅ #198 |
-| **P5** | Durable critical-alert hand-off: bounded enqueue with in-process fallback, replay re-ensures and revives, plan before save, escalation can't re-send, Redis calls bounded. | 🔄 #202 (queued) |
+| **P5** | Durable critical-alert hand-off: bounded enqueue with in-process fallback, replay re-ensures and revives, plan before save, escalation can't re-send, Redis calls bounded. | ✅ #202 |
 | **P6** | Prescription approval authority frozen: once a guardian is required, it never falls back to the patient. | ✅ #200 |
-| **P4** | BP critical bypass (sys < 90 / dia < 60, sys > 180 / dia > 110) through the shared chain with a per-category cooldown, plus the app's fullscreen alert. | 🔄 branch `feat/bp-critical-bypass` (stacked on #202; PR opens after #202 merges) |
-| **P10** | Android channels: the app creates every channel the server pushes to. `channelId` is typed against one shared list. | 🔄 #203 (queued) |
+| **P4** | BP critical bypass (sys < 90 / dia < 60, sys > 180 / dia > 110) through the shared chain with a per-category cooldown, plus the app's fullscreen alert. | 🔄 branch `feat/bp-critical-bypass` (rebased on main; PR after its safety review) |
+| **P10** | Android channels: the app creates every channel the server pushes to. `channelId` is typed against one shared list. | ✅ #203 |
 | **D1** | SMS success rate divides only by alerts that attempted an SMS. | ✅ #201 |
 | CI / supply chain | Third-party actions pinned to SHAs. This unblocked #85 and #86, which CodeQL review threads had blocked. | ✅ #199 |
 | Next, in order | P2 → P3 (app) · D3 → D8 · P11 (now urgent: P10 makes reminders arrive) · P22 · the rest per §7 | ⏳ |
@@ -331,7 +331,7 @@ IDs use the `P` prefix so they don't clash with `phase6.md`'s own A1–A10.
 
 #### P4 — High — BP critical bypass is not implemented
 
-> **🔄 In progress (2026-10-25):** branch `feat/bp-critical-bypass`. It is built on #202 (P5); open its PR after #202 merges and the branch is rebased onto main.
+> **🔄 In progress (2026-10-26):** branch `feat/bp-critical-bypass`, rebased onto main after #202 merged. Its PR opens after the safety review passes.
 
 - **Evidence:** `CriticalBypassCategory = "glucose" | "cardiac" | "respiratory"` (`packages/shared-types/src/readings.ts:197`). `bp.service.ts` only enqueues `ANALYZE_READING`. A BP of 220/130 raises no alert.
 - **Spec:** CLAUDE.md "Phase 4 Invariants" threshold table (bp: sys < 90 OR dia < 60 / sys > 180 OR dia > 110) and `phase4.md` CC.15. `.claude/PROGRESS.md` records the Phase 2 deferral ("wait until Phase 3"), which was never closed.
@@ -339,7 +339,7 @@ IDs use the `P` prefix so they don't clash with `phase6.md`'s own A1–A10.
 
 #### P5 — High — A critical alert is lost if its enqueue fails after the reading is saved
 
-> **🔄 #202 (2026-10-25).** Also bounds the Redis calls on the alert path. Both clients run `maxRetriesPerRequest: null`, so an outage made `queue.add` hang rather than fail.
+> **✅ Fixed in #202 (2026-10-25).** Also bounds the Redis calls on the alert path. Both clients run `maxRetriesPerRequest: null`, so an outage made `queue.add` hang rather than fail.
 
 - **Evidence:** `readings.service.ts:322` inserts the reading, then `:342` updates the streak, `:358` writes the feedback event, and only then `:370-377` enqueues the alert. If anything after the insert throws (e.g. Redis unavailable at `criticalQueue.add`), the client gets a 500.
 - The app queues the reading and retries it (`mobile readings.ts:183-196`). The retry hits the replay branch (`readings.service.ts:145-149`), and `buildReplayResult` (`:86-131`) never enqueues. There is no cron fallback, although CLAUDE.md "Fallback Mechanisms" requires "BullMQ stuck → cron fallback for critical".
@@ -401,7 +401,7 @@ CLAUDE.md "Data Corruption Prevention" requires every save to go to the active p
 
 #### P10 — High — Server pushes use Android channels the app never creates, so Android doesn't display them
 
-> **🔄 #203 (2026-10-25).** Confirm on an Android device with one test push per channel after merge.
+> **✅ Fixed in #203 (2026-10-25).** Confirm on an Android device with one test push per channel after merge.
 
 - **Evidence:** the app creates only `default` and `critical` (`notifications.ts:44-57, 97-110`; no channel config in `app.json`). The server sends:
   - `reminders` — `notification-trigger.worker.ts:258` (all habit-loop reminders)
