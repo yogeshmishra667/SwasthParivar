@@ -129,6 +129,24 @@ const hi = {
     title: `🚨 ${p.patientName}: Saans Lene Mein Takleef`,
     body: `Bahut zyada takleef hai. Turant hospital le jayein ya 108 dial karein.`,
   }),
+  // CLAUDE.md BP thresholds: low = sys < 90 or dia < 60, high = sys > 180
+  // or dia > 110. Both readings inline so the family sees the actual value.
+  critical_bypass_bp_low: (p: {
+    patientName: string;
+    systolic: number;
+    diastolic: number;
+  }): NotifContent => ({
+    title: `⚠️ ${p.patientName}: BP Bahut Kam`,
+    body: `BP ${p.systolic}/${p.diastolic} — bahut kam hai. Let jayein, paani peeyein. Turant doctor ko call karein.`,
+  }),
+  critical_bypass_bp_high: (p: {
+    patientName: string;
+    systolic: number;
+    diastolic: number;
+  }): NotifContent => ({
+    title: `⚠️ ${p.patientName}: BP Bahut Zyada`,
+    body: `BP ${p.systolic}/${p.diastolic} — bahut zyada hai. Aaram se baithein, doctor ko call karein. Seene mein dard ya kamzori ho to 108 dial karein.`,
+  }),
   // Phase 4 Feature G.3 — pre-visit appointment reminder. Copy varies by
   // window: the 7d bucket is phrased generically ("aane wali hai") since
   // an appointment booked only 3 days out also lands in it.
@@ -236,6 +254,14 @@ const en: Bundle = {
   critical_bypass_respiratory_severe: (p): NotifContent => ({
     title: `🚨 ${p.patientName}: Severe Breathing Distress`,
     body: `Severe symptoms. Go to hospital immediately or dial 108.`,
+  }),
+  critical_bypass_bp_low: (p): NotifContent => ({
+    title: `⚠️ ${p.patientName}: BP Very Low`,
+    body: `BP ${p.systolic}/${p.diastolic} — very low. Lie down, drink water. Call the doctor now.`,
+  }),
+  critical_bypass_bp_high: (p): NotifContent => ({
+    title: `⚠️ ${p.patientName}: BP Very High`,
+    body: `BP ${p.systolic}/${p.diastolic} — very high. Sit and rest, call the doctor. Chest pain or weakness: dial 108.`,
   }),
   appointment_reminder: (p): NotifContent => {
     if (p.window === "2h") {

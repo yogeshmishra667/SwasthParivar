@@ -228,7 +228,13 @@
     "alertBodyHigh": "Paani peeyein. Dawai li hai check karein.",
     "callContact": "{{name}} ko call karein",
     "close": "Close",
-    "waitDismiss": "Ruko {{seconds}}s..."
+    "waitDismiss": "Ruko {{seconds}}s...",
+    "bp": {
+      "alertTitleLow": "BP bahut kam",
+      "alertTitleHigh": "BP bahut zyada",
+      "alertBodyLow": "Let jayein aur paani peeyein. Chakkar aa rahe hain to turant call karein.",
+      "alertBodyHigh": "Aaram se baithein. Seene mein dard ya kamzori ho to turant call karein."
+    }
   },
   "offline": {
     "banner": "Offline mode — readings safe hain, sync baad mein hoga",

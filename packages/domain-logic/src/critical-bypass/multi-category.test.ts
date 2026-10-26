@@ -162,3 +162,40 @@ describe("planMultiCategoryBypassDispatch — target resolution", () => {
     expect(r.showCallButton).toBe(true);
   });
 });
+
+describe("planMultiCategoryBypassDispatch — BP copy keys + per-category cooldown", () => {
+  const plan = (reasons: string[], lastBypassTriggeredAtIso: string | null = null) =>
+    planMultiCategoryBypassDispatch({
+      category: "bp",
+      reasons,
+      nowIso: "2026-06-05T10:00:00.000Z",
+      lastBypassTriggeredAtIso,
+      emergencyContacts: contacts,
+    });
+
+  it.each([
+    [["critical.sys_high"], "critical.bp.high"],
+    [["critical.dia_high"], "critical.bp.high"],
+    [["critical.sys_high", "critical.dia_low"], "critical.bp.high"],
+    [["critical.sys_low"], "critical.bp.low"],
+    [["critical.dia_low"], "critical.bp.low"],
+  ])("%j → %s", (reasons, copyKey) => {
+    expect(plan(reasons).copyKey).toBe(copyKey);
+  });
+
+  it("dispatches outside the cooldown: push to guardians, SMS targets everyone", () => {
+    const r = plan(["critical.sys_high"]);
+    expect(r.category).toBe("bp");
+    expect(r.withinCooldown).toBe(false);
+    expect(r.pushTargets).toEqual(["c1", "c3"]);
+    expect(r.smsTargets).toEqual(["c1", "c2", "c3"]);
+  });
+
+  it("suppresses push + SMS inside its own 30-min cooldown", () => {
+    const r = plan(["critical.sys_low"], "2026-06-05T09:45:00.000Z");
+    expect(r.withinCooldown).toBe(true);
+    expect(r.triggerPush).toBe(false);
+    expect(r.smsTargets).toEqual([]);
+    expect(r.showFullscreenAlert).toBe(true);
+  });
+});
