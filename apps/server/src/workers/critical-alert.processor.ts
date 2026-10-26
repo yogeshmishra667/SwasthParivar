@@ -92,6 +92,24 @@ const smsCopy = (
   return `SwasthParivar ALERT: ${patientName} ka sugar BAHUT ${label} hai (${valueMgDl} mg/dL). Turant call karein.`;
 };
 
+// BP SMS, plain ASCII like the glucose one above. The push copy's emoji
+// and em dash would force UCS-2, splitting the alert into several SMS
+// parts that can arrive out of order or partly (P4 review W7).
+const bpSmsCopy = (
+  severity: "low" | "high",
+  systolic: number,
+  diastolic: number,
+  patientName: string,
+  language: Language,
+): string => {
+  if (language === "en") {
+    const label = severity === "low" ? "VERY LOW" : "VERY HIGH";
+    return `SwasthParivar ALERT: ${patientName}'s BP is ${label} (${systolic}/${diastolic} mmHg). Please call now.`;
+  }
+  const label = severity === "low" ? "KAM" : "ZYADA";
+  return `SwasthParivar ALERT: ${patientName} ka BP BAHUT ${label} hai (${systolic}/${diastolic} mmHg). Turant call karein.`;
+};
+
 interface PushRecipients {
   /** Every token to push — patient household + guardian contacts, de-duplicated. */
   readonly tokens: string[];
@@ -605,9 +623,18 @@ const processMultiCategoryCriticalAlert = async (
         copyKey: dispatch.copyKey,
       },
     }),
-    // SMS body uses the localised push body — same bundle, same numeric
-    // value — so the guardian's SMS reads identically to the push.
-    smsText: `SwasthParivar ALERT: ${copy.title} — ${copy.body}`,
+    // Cardiac/respiratory SMS reuse the localised push copy; BP has its
+    // own single-part plain-text SMS.
+    smsText:
+      category === "bp"
+        ? bpSmsCopy(
+            dispatch.copyKey === "critical.bp.low" ? "low" : "high",
+            copyParams.systolic ?? 0,
+            copyParams.diastolic ?? 0,
+            patientName,
+            language,
+          )
+        : `SwasthParivar ALERT: ${copy.title} — ${copy.body}`,
     log,
     analytics: { category },
   });

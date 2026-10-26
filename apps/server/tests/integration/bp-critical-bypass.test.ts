@@ -200,6 +200,19 @@ const bpBody = (clientUuid: string, systolic: number, diastolic: number) => ({
 const postBP = (token: string, body: ReturnType<typeof bpBody>) =>
   request(app).post("/api/v1/readings/bp").set("Authorization", `Bearer ${token}`).send(body);
 
+const postGlucose = (token: string, valueMgDl: number) =>
+  request(app).post("/api/v1/readings/glucose").set("Authorization", `Bearer ${token}`).send({
+    clientUuid: randomUUID(),
+    valueMgDl,
+    readingType: "fasting",
+    context: "normal",
+    source: "manual",
+    measuredAt: new Date().toISOString(),
+    version: 1,
+  });
+
+const minutesAgo = (m: number): Date => new Date(Date.now() - m * 60_000);
+
 describe("BP critical bypass (audit P4)", () => {
   it.each([
     [190, 100, "high"],
@@ -229,6 +242,10 @@ describe("BP critical bypass (audit P4)", () => {
     const sms = sendSmsBatchMock.mock.calls[0]![0] as { phone: string; message: string }[];
     expect(sms[0]!.phone).toBe(seed.contactPhone);
     expect(sms[0]!.message).toContain(`${sys}/${dia}`);
+    // Plain ASCII and one SMS part (review W7): an emoji or em dash would
+    // switch the SMS to UCS-2 and split it.
+    expect(sms[0]!.message).toMatch(/^[\x20-\x7E]+$/);
+    expect(sms[0]!.message.length).toBeLessThanOrEqual(160);
   });
 
   it.each([
@@ -252,18 +269,7 @@ describe("BP critical bypass (audit P4)", () => {
     expect(second.body.data.critical).toMatchObject({ isCritical: true, withinCooldown: true });
     expect(await criticalJobsFor(second.body.data.reading.id)).toHaveLength(0);
 
-    const glucose = await request(app)
-      .post("/api/v1/readings/glucose")
-      .set("Authorization", `Bearer ${seed.token}`)
-      .send({
-        clientUuid: randomUUID(),
-        valueMgDl: 50,
-        readingType: "fasting",
-        context: "normal",
-        source: "manual",
-        measuredAt: new Date().toISOString(),
-        version: 1,
-      });
+    const glucose = await postGlucose(seed.token, 50);
     expect(glucose.body.data.critical.withinCooldown).toBe(false);
     expect(await criticalJobsFor(glucose.body.data.reading.id)).toHaveLength(1);
   });
@@ -277,4 +283,163 @@ describe("BP critical bypass (audit P4)", () => {
     expect(replay.body.data.reading.id).toBe(first.body.data.reading.id);
     expect(await criticalJobsFor(first.body.data.reading.id)).toHaveLength(1);
   });
+
+  it("a critical glucose then a critical BP within 5 minutes both dispatch", async () => {
+    const seed = await seedPatient();
+    const glucose = await postGlucose(seed.token, 50);
+    expect(glucose.body.data.critical).toMatchObject({ isCritical: true, withinCooldown: false });
+    expect(await criticalJobsFor(glucose.body.data.reading.id)).toHaveLength(1);
+
+    const bp = await postBP(seed.token, bpBody(randomUUID(), 195, 120));
+    expect(bp.body.data.critical).toMatchObject({ isCritical: true, withinCooldown: false });
+    expect(await criticalJobsFor(bp.body.data.reading.id)).toHaveLength(1);
+  });
+
+  it("an edit (version bump) from a normal to a critical BP dispatches", async () => {
+    const seed = await seedPatient();
+    const clientUuid = randomUUID();
+    const v1 = await postBP(seed.token, bpBody(clientUuid, 128, 82));
+    expect(v1.body.data.critical.isCritical).toBe(false);
+    const id = v1.body.data.reading.id as string;
+    expect(await criticalJobsFor(id)).toHaveLength(0);
+
+    const v2 = await postBP(seed.token, { ...bpBody(clientUuid, 195, 120), version: 2 });
+    expect([200, 201]).toContain(v2.status);
+    expect(v2.body.data.reading.id).toBe(id);
+    expect(v2.body.data.critical).toMatchObject({ isCritical: true, withinCooldown: false });
+    const jobs = await criticalJobsFor(id);
+    expect(jobs.map((j) => j.id)).toEqual([`critical-bp-${id}-v2`]);
+  });
+
+  it("a clientUuid another user already used is never replayed or updated across users (W5)", async () => {
+    const a = await seedPatient();
+    const b = await seedPatient();
+    const clientUuid = randomUUID();
+    const mine = await postBP(a.token, bpBody(clientUuid, 128, 82));
+    expect(mine.status).toBe(201);
+
+    // Same clientUuid from another user: v1 would have been a replay that
+    // returned A's reading; v2 an update that rewrote it.
+    for (const version of [1, 2]) {
+      const theirs = await postBP(b.token, {
+        ...bpBody(clientUuid, 140 + version, 90),
+        measuredAt: minutesAgo(version).toISOString(),
+        version,
+      });
+      expect([200, 201]).toContain(theirs.status);
+      expect(theirs.body.data.reading.userId).toBe(b.patientId);
+      expect(theirs.body.data.reading.id).not.toBe(mine.body.data.reading.id);
+    }
+
+    const stored = await prisma.bPReading.findFirst({ where: { id: mine.body.data.reading.id } });
+    expect(stored).toMatchObject({ userId: a.patientId, systolic: 128, diastolic: 82, version: 1 });
+  });
+});
+
+describe("BP SOS auto-escalation (audit P4 review C2)", () => {
+  let processEscalate: (job: { id?: string; data: unknown }) => Promise<void>;
+  let escalateQueueName: string;
+
+  beforeAll(async () => {
+    const flagsModule = await import("../../src/shared/flags/index.js");
+    await flagsModule.setFlag("sos_enabled", true, "integration_test");
+    await flagsModule.setFlag("sos_source_critical_bypass_enabled", true, "integration_test");
+    flagsModule.__resetFlagCache();
+    const escalateModule =
+      await import("../../src/workers/critical-bypass-auto-escalate.processor.js");
+    processEscalate = escalateModule.processCriticalBypassAutoEscalate as typeof processEscalate;
+    const queueModule = await import("../../src/shared/queue.js");
+    escalateQueueName = queueModule.QUEUE_NAMES.CRITICAL_BYPASS_AUTO_ESCALATE;
+  });
+
+  afterAll(async () => {
+    const flagsModule = await import("../../src/shared/flags/index.js");
+    await flagsModule.setFlag("sos_enabled", false, "integration_test");
+    await flagsModule.setFlag("sos_source_critical_bypass_enabled", false, "integration_test");
+    flagsModule.__resetFlagCache();
+  });
+
+  /** The 5-minute escalation job the critical-alert worker scheduled for a reading. */
+  const escalationJobFor = async (
+    readingId: string,
+  ): Promise<{ id?: string; data: { category?: string } } | undefined> => {
+    const { Redis } = await import("ioredis");
+    const conn = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: null });
+    const probe = new Queue(escalateQueueName, { connection: conn });
+    try {
+      return await probe.getJob(`critbypass-escalate-${readingId}`);
+    } finally {
+      await probe.close();
+      await conn.quit();
+    }
+  };
+
+  /** A critical BP measured 6 minutes ago, dispatched by the worker. */
+  const criticalBPSixMinutesAgo = async (token: string): Promise<string> => {
+    const res = await postBP(token, {
+      ...bpBody(randomUUID(), 195, 120),
+      measuredAt: minutesAgo(6).toISOString(),
+    });
+    expect(res.body.data.critical.isCritical).toBe(true);
+    const id = res.body.data.reading.id as string;
+    const [job] = await criticalJobsFor(id);
+    await processCriticalAlert({ id: job!.id!, data: (job as { data: unknown }).data });
+    return id;
+  };
+
+  const sosEventsFor = (userId: string): Promise<{ triggerSource: string }[]> =>
+    prisma.sOSEvent.findMany({ where: { userId } });
+
+  it("finds the BP reading and escalates to SOS when nobody responded", async () => {
+    const seed = await seedPatient();
+    const readingId = await criticalBPSixMinutesAgo(seed.token);
+
+    const escalation = await escalationJobFor(readingId);
+    expect(escalation?.data.category).toBe("bp");
+    await processEscalate({ id: escalation!.id!, data: escalation!.data });
+
+    const sos = await sosEventsFor(seed.patientId);
+    expect(sos.map((e) => e.triggerSource)).toEqual(["critical_bypass_escalation"]);
+  });
+
+  it.each(["glucose", "bp", "cardiac", "respiratory"] as const)(
+    "a fresh %s reading after the critical BP counts as responded — no SOS",
+    async (category) => {
+      const seed = await seedPatient();
+      const readingId = await criticalBPSixMinutesAgo(seed.token);
+
+      const fresh = { clientUuid: randomUUID(), userId: seed.patientId, source: "manual" as const };
+      const measuredAt = minutesAgo(2);
+      switch (category) {
+        case "glucose":
+          await prisma.glucoseReading.create({
+            data: {
+              ...fresh,
+              measuredAt,
+              valueMgDl: 120,
+              readingType: "random",
+              streakCreditedTo: measuredAt,
+            },
+          });
+          break;
+        case "bp":
+          await prisma.bPReading.create({
+            data: { ...fresh, measuredAt, systolic: 130, diastolic: 85 },
+          });
+          break;
+        case "cardiac":
+          await prisma.cardiacLog.create({ data: { ...fresh, measuredAt, heartRate: 80 } });
+          break;
+        case "respiratory":
+          await prisma.respiratoryLog.create({ data: { ...fresh, measuredAt } });
+          break;
+      }
+
+      await processEscalate({
+        id: `test-${readingId}`,
+        data: { userId: seed.patientId, readingId, category: "bp" },
+      });
+      expect(await sosEventsFor(seed.patientId)).toHaveLength(0);
+    },
+  );
 });

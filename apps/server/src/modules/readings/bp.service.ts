@@ -143,7 +143,14 @@ const buildReplayResult = async (
 };
 
 export const createBPReading = async (input: CreateBPInput): Promise<CreateBPResult> => {
-  const idem = await checkIdempotent(prisma.bPReading, input.clientUuid, input.version);
+  // Scoped to the caller: a clientUuid owned by another user is never
+  // replayed back or updated (P4 review W5).
+  const idem = await checkIdempotent(
+    prisma.bPReading,
+    input.clientUuid,
+    input.version,
+    input.userId,
+  );
   if (idem.kind === "stale") {
     throw new DomainError("READING_STALE_VERSION", "incoming version not newer than stored");
   }
@@ -211,7 +218,7 @@ export const createBPReading = async (input: CreateBPInput): Promise<CreateBPRes
       // race — treat as a replay so the client gets a deterministic 2xx.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         const winner = await prisma.bPReading.findFirst({
-          where: { clientUuid: input.clientUuid },
+          where: { clientUuid: input.clientUuid, userId: input.userId },
         });
         if (winner) {
           logger.info(
