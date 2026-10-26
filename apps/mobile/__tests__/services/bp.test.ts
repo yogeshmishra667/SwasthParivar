@@ -157,13 +157,63 @@ describe("pending critical BP across an app restart (review W1)", () => {
     expect(pendingUuids()).toEqual([]);
   });
 
-  it("drops a pending critical BP older than 24 hours instead of alerting a day late", async () => {
+  it.each([401, 408, 429])(
+    "a %i on the re-send keeps it pending until it lands (review W2)",
+    async (status) => {
+      post
+        .mockRejectedValueOnce(networkError())
+        .mockRejectedValueOnce(httpError(status))
+        .mockResolvedValueOnce({ data: { reading: { id: "r12" } } });
+      await saveBPReading(bpInput(`uuid-${status}`, 195, 120));
+      await jest.advanceTimersByTimeAsync(5_000);
+      expect(post).toHaveBeenCalledTimes(2);
+      expect(pendingUuids()).toEqual([`uuid-${status}`]);
+      await jest.advanceTimersByTimeAsync(15_000);
+      expect(post).toHaveBeenCalledTimes(3);
+      expect(pendingUuids()).toEqual([]);
+    },
+  );
+
+  it.each([400, 409])(
+    "a %i on the re-send ends it (refused for good, or already stored)",
+    async (status) => {
+      post.mockRejectedValueOnce(networkError()).mockRejectedValueOnce(httpError(status));
+      await saveBPReading(bpInput(`uuid-final-${status}`, 195, 120));
+      await jest.advanceTimersByTimeAsync(10 * 60_000);
+      expect(post).toHaveBeenCalledTimes(2);
+      expect(pendingUuids()).toEqual([]);
+    },
+  );
+
+  it("a critical BP whose first save gets a 429 is kept and re-sent", async () => {
+    post
+      .mockRejectedValueOnce(httpError(429))
+      .mockResolvedValueOnce({ data: { reading: { id: "r13" } } });
+    await expect(saveBPReading(bpInput("uuid-429-first", 195, 120))).resolves.toEqual({
+      kind: "network_failed",
+      retrying: true,
+    });
+    expect(pendingUuids()).toEqual(["uuid-429-first"]);
+    await jest.advanceTimersByTimeAsync(5_000);
+    expect(pendingUuids()).toEqual([]);
+  });
+
+  it("concurrent saves of two critical BPs both stay pending", async () => {
+    post.mockRejectedValue(networkError());
+    await Promise.all([
+      saveBPReading(bpInput("uuid-a", 195, 120)),
+      saveBPReading(bpInput("uuid-b", 85, 55)),
+    ]);
+    expect(pendingUuids().sort()).toEqual(["uuid-a", "uuid-b"]);
+  });
+
+  it("drops a pending critical BP older than 2 hours instead of alerting hours late", async () => {
     mockStorage.set(
       "swasth.pendingCriticalBP.v1",
       JSON.stringify([
         {
           payload: { clientUuid: "uuid-old" },
-          queuedAt: new Date(Date.now() - 25 * 60 * 60_000).toISOString(),
+          queuedAt: new Date(Date.now() - 3 * 60 * 60_000).toISOString(),
         },
       ]),
     );

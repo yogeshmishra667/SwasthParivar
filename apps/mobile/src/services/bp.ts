@@ -46,6 +46,15 @@ const isNetworkOrServerError = (err: unknown): boolean => {
   return err.response.status >= 500;
 };
 
+// Answers after which the server may still accept the same reading later:
+// an expired session (401), a timeout (408) or a rate limit (429).
+const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([401, 408, 429]);
+
+/** True when a critical BP must stay pending: the server hasn't accepted or refused it for good. */
+const isRetryable = (err: unknown): boolean =>
+  isNetworkOrServerError(err) ||
+  (isAxiosError(err) && err.response !== undefined && RETRYABLE_STATUSES.has(err.response.status));
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 interface BPPayload {
@@ -55,8 +64,9 @@ interface BPPayload {
 
 // Critical BPs not yet on the server, persisted across app restarts.
 const PENDING_KEY = "swasth.pendingCriticalBP.v1";
-// Past this age a re-send is dropped: the family alert would be a day late.
-const PENDING_MAX_AGE_MS = 24 * 60 * 60_000;
+// Past this age a re-send is dropped: the server would page the family
+// "BP very high" for a reading hours old.
+const PENDING_MAX_AGE_MS = 2 * 60 * 60_000;
 
 interface PendingCriticalBP {
   payload: BPPayload;
@@ -80,15 +90,31 @@ const writePending = async (items: readonly PendingCriticalBP[]): Promise<void> 
   }
 };
 
+// Every read-modify-write of the queue runs one at a time, so a clear
+// for one reading can't drop another reading's concurrent persist.
+let pendingQueueTail: Promise<unknown> = Promise.resolve();
+const updatePending = (
+  update: (items: PendingCriticalBP[]) => PendingCriticalBP[],
+): Promise<PendingCriticalBP[]> => {
+  const run = pendingQueueTail.then(async () => {
+    const next = update(await readPending());
+    await writePending(next);
+    return next;
+  });
+  pendingQueueTail = run.catch(() => undefined);
+  return run;
+};
+
 const persistPending = async (payload: BPPayload): Promise<void> => {
-  const items = await readPending();
-  if (items.some((i) => i.payload.clientUuid === payload.clientUuid)) return;
-  await writePending([...items, { payload, queuedAt: new Date().toISOString() }]);
+  await updatePending((items) =>
+    items.some((i) => i.payload.clientUuid === payload.clientUuid)
+      ? items
+      : [...items, { payload, queuedAt: new Date().toISOString() }],
+  );
 };
 
 const clearPending = async (clientUuid: string): Promise<void> => {
-  const items = await readPending();
-  await writePending(items.filter((i) => i.payload.clientUuid !== clientUuid));
+  await updatePending((items) => items.filter((i) => i.payload.clientUuid !== clientUuid));
 };
 
 // Background re-send for a critical BP that failed to reach the server.
@@ -112,8 +138,9 @@ const resendCriticalInBackground = (
           await clearPending(clientUuid);
           return;
         } catch (err) {
-          if (!isNetworkOrServerError(err)) {
-            // The server answered (e.g. a validation reject): nothing to retry.
+          if (!isRetryable(err)) {
+            // The server refused it for good (e.g. validation), or a 409:
+            // a newer version is already stored. Nothing to retry.
             await clearPending(clientUuid);
             return;
           }
@@ -134,13 +161,14 @@ const resendCriticalInBackground = (
  * already being re-sent is skipped.
  */
 export const resumePendingCriticalBP = async (): Promise<void> => {
-  const items = await readPending();
-  const now = Date.now();
-  const fresh = items.filter((i) => now - Date.parse(i.queuedAt) < PENDING_MAX_AGE_MS);
-  if (fresh.length !== items.length) {
-    track("critical_bp_background_sync_expired", { count: items.length - fresh.length });
-    await writePending(fresh);
-  }
+  let expired = 0;
+  const fresh = await updatePending((items) => {
+    const now = Date.now();
+    const kept = items.filter((i) => now - Date.parse(i.queuedAt) < PENDING_MAX_AGE_MS);
+    expired = items.length - kept.length;
+    return kept;
+  });
+  if (expired > 0) track("critical_bp_background_sync_expired", { count: expired });
   for (const item of fresh)
     resendCriticalInBackground(item.payload, [0, ...CRITICAL_RETRY_BACKOFF_MS]);
 };
@@ -173,7 +201,9 @@ export const saveBPReading = async (input: SaveBPInput): Promise<SaveBPResult> =
     if (critical) await clearPending(clientUuid);
     return { kind: "synced", readingId: res.data.reading.id };
   } catch (err) {
-    if (isNetworkOrServerError(err)) {
+    // A critical BP is also kept when the session expired or the server
+    // throttled it (review W2): the family alert depends on it landing.
+    if (isNetworkOrServerError(err) || (critical && isRetryable(err))) {
       if (critical) {
         await persistPending(payload);
         resendCriticalInBackground(payload);
