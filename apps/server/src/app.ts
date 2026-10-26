@@ -33,6 +33,7 @@ import { schedulesRouter } from "./modules/schedules/schedules.routes.js";
 import { sosRouter } from "./modules/sos/sos.routes.js";
 import { chatRouter } from "./modules/chat/chat.routes.js";
 import { configRouter } from "./modules/config/config.routes.js";
+import { notificationsRouter } from "./modules/notifications/notifications.routes.js";
 import { prescriptionsRouter } from "./modules/prescriptions/prescriptions.routes.js";
 import { medicinesRouter } from "./modules/prescriptions/medicines.routes.js";
 import { doctorsRouter } from "./modules/doctors/doctors.routes.js";
@@ -152,6 +153,7 @@ export const buildApp = (): Express => {
   app.use("/api/v1/sos", sosRouter);
   app.use("/api/v1/chat", chatRouter);
   app.use("/api/v1/config", configRouter);
+  app.use("/api/v1/notifications", notificationsRouter);
   app.use("/api/v1/prescriptions", prescriptionsRouter);
   app.use("/api/v1/medicines", medicinesRouter);
   app.use("/api/v1/doctors", doctorsRouter);

@@ -81,6 +81,15 @@ export interface EventPropsMap {
     suppressed: boolean;
     suppress_reason: string | null;
   };
+  // Audit P11 / P25 — anti-fatigue inputs (CLAUDE.md "Raw Events").
+  notification_opened: {
+    trigger_type: string;
+    source: "push";
+  };
+  notification_ignored: {
+    trigger_type: string;
+    fatigue_level: number;
+  };
   // Phase 3 chat — emitted by the Claude wrapper after every upstream
   // call. `tier` distinguishes haiku-cached from sonnet-cold; cost
   // dashboards pivot on it.
