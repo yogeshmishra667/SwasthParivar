@@ -185,8 +185,10 @@ function MaintenanceToggle() {
       <CardHeader>
         <CardTitle className="text-sm">Maintenance kill switch</CardTitle>
         <CardDescription className="text-xs">
-          Forces every patient API call to return <code>MAINTENANCE_MODE</code>. Use for emergency
-          drains during incidents.
+          Forces every patient API call to return <code>MAINTENANCE_MODE</code>, except SOS and
+          signed payment webhooks, which stay up. Readings are rejected too: a critical reading
+          still alerts on the patient&apos;s phone, but the family push and SMS wait until
+          maintenance ends. Use for emergency drains during incidents.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex items-center gap-3">
@@ -220,7 +222,7 @@ function MaintenanceToggle() {
         title={confirming === "enable" ? "Enable maintenance mode?" : "Disable maintenance mode?"}
         description={
           confirming === "enable"
-            ? "Every patient API call will return MAINTENANCE_MODE until you turn this back off. Audited."
+            ? "Every patient API call will return MAINTENANCE_MODE until you turn this back off, except SOS and signed payment webhooks. Readings are rejected: a critical reading still alerts on the patient's phone, but the family push and SMS are delayed until you turn this off. Audited."
             : "Patient traffic resumes immediately."
         }
         destructive={confirming === "enable"}

@@ -84,4 +84,39 @@ describe("maintenance-mode middleware", () => {
     expect(res.status).toBe(401);
     expect(res.body.error.code).not.toBe("MAINTENANCE_MODE");
   });
+
+  // Audit D8: an emergency and a signed provider webhook can't wait for
+  // maintenance. Each request still meets its own auth / signature check.
+  it.each([
+    ["POST", "/api/v1/sos/trigger", "AUTH_UNAUTHORIZED"],
+    ["POST", "/api/v1/sos/00000000-0000-4000-8000-000000000000/cancel", "AUTH_UNAUTHORIZED"],
+    ["GET", "/api/v1/sos/active", "AUTH_UNAUTHORIZED"],
+    // Reaches the webhook's own gate (payments are off in this test).
+    ["POST", "/api/v1/webhooks/razorpay", "PAYMENT_PROVIDER_UNAVAILABLE"],
+  ] as const)("keeps %s %s reachable during maintenance", async (method, path, code) => {
+    await setFlag("maintenance_mode", true, "test");
+    resetFlagCache();
+    const res = await (method === "GET"
+      ? request(app).get(path)
+      : request(app).post(path).send({}));
+    expect(res.body.error?.code).toBe(code);
+  });
+
+  it("keeps the SOS call-status callbacks reachable during maintenance", async () => {
+    await setFlag("maintenance_mode", true, "test");
+    resetFlagCache();
+    const res = await request(app).post("/api/v1/sos/webhooks/twilio/status").send({});
+    expect(res.status).not.toBe(503);
+    expect(res.body?.error?.code).not.toBe("MAINTENANCE_MODE");
+  });
+
+  it("exempts whole path segments only", async () => {
+    await setFlag("maintenance_mode", true, "test");
+    resetFlagCache();
+    for (const path of ["/api/v1/sosx", "/api/v1/webhooksfoo"]) {
+      const res = await request(app).get(path);
+      expect(res.status).toBe(503);
+      expect(res.body.error.code).toBe("MAINTENANCE_MODE");
+    }
+  });
 });
