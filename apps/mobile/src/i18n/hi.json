@@ -227,6 +227,8 @@
     "alertBodyLow": "Abhi kuch meetha khayein — juice, glucose, mithai.",
     "alertBodyHigh": "Paani peeyein. Dawai li hai check karein.",
     "callContact": "{{name}} ko call karein",
+    "callEmergency": "112 par call karein (emergency)",
+    "autoDialHint": "Agar aap screen nahi chhoote, to 1 minute mein {{name}} ko call khulega. Rokne ke liye screen chhooyein.",
     "close": "Close",
     "waitDismiss": "Ruko {{seconds}}s...",
     "bp": {

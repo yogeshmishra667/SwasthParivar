@@ -517,8 +517,7 @@ export default function LogScreen(): JSX.Element {
           direction={criticalAlert.direction}
           {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
           {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
-          contactName="Emergency"
-          contactPhone="112"
+          userId={userId}
           onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}
         />
       </>
@@ -545,8 +544,7 @@ export default function LogScreen(): JSX.Element {
           direction={criticalAlert.direction}
           {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
           {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
-          contactName="Emergency"
-          contactPhone="112"
+          userId={userId}
           onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}
         />
       </>
@@ -689,8 +687,7 @@ export default function LogScreen(): JSX.Element {
           direction={criticalAlert.direction}
           {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
           {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
-          contactName="Emergency"
-          contactPhone="112"
+          userId={userId}
           onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}
         />
       </SafeAreaView>
