@@ -8,6 +8,8 @@ export interface ResolveInput {
   state: NotificationState;
   candidates: NotificationCandidate[];
   nowIso: string;
+  /** The id the push will carry; kept in history so its open can be matched. */
+  notificationId?: string;
 }
 
 export type ResolveResult =

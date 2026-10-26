@@ -277,6 +277,30 @@ export const raiseCriticalAlertFromPush = (
   );
 };
 
+// The habit-loop reminders (not medicine or critical pushes). A tap on one
+// is reported, so the server resets fatigue and doesn't count it as
+// ignored (audit P11).
+const OPEN_REPORTED_TYPES: ReadonlySet<string> = new Set([
+  "best_time",
+  "missed_day",
+  "re_engagement",
+  "streak_risk",
+  "welcome_back",
+  "generic_morning",
+]);
+
+export const reportNotificationOpened = (data: unknown): void => {
+  const p = data as { type?: unknown; notificationId?: unknown; targetUserId?: unknown } | null;
+  if (typeof p?.type !== "string" || !OPEN_REPORTED_TYPES.has(p.type)) return;
+  if (typeof p.notificationId !== "string") return;
+  api
+    .post("/notifications/opened", {
+      notificationId: p.notificationId,
+      ...(typeof p.targetUserId === "string" ? { targetUserId: p.targetUserId } : {}),
+    })
+    .catch((err: unknown) => logError("notifications.opened", err));
+};
+
 // Phase 3 Feature C — deep-link a tapped notification to its screen.
 // Silent Guardian alerts open AlertDetail; the daily summary opens
 // GuardianHome. Other notification types fall through (handled, if at
@@ -289,6 +313,7 @@ const routeFromNotificationData = (
   if (!payload) return;
   switchProfileFromNotificationData(data);
   raiseCriticalAlertFromPush(data, content);
+  reportNotificationOpened(data);
   if (payload.type === "guardian_alert" && typeof payload.alertId === "string") {
     router.push({
       pathname: "/guardian/alert/[alertId]",
