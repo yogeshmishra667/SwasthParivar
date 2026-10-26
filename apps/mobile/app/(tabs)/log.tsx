@@ -30,7 +30,12 @@ import {
 } from "@/components/logging/RespiratoryInput";
 import { RespiratoryConfirmationScreen } from "@/components/logging/RespiratoryConfirmationScreen";
 import { MealQuickLog } from "@/components/logging/MealQuickLog";
-import { CriticalAlert } from "@/components/logging/CriticalAlert";
+import { useCriticalAlertStore, type CriticalAlertRequest } from "@/stores/critical-alert.store";
+import {
+  cardiacAlertRequest,
+  respiratoryAlertRequest,
+  serverAlertRequest,
+} from "@/services/critical-alert-requests";
 import { UndoToast } from "@/components/shared/UndoToast";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -93,15 +98,18 @@ export default function LogScreen(): JSX.Element {
   const [lastReadingId, setLastReadingId] = useState<string | null>(null);
   const [streakDays, setStreakDays] = useState(0);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
-  const [criticalAlert, setCriticalAlert] = useState<{
-    visible: boolean;
-    value: number;
-    direction: "low" | "high";
-    category?: "glucose" | "bp";
-    valueLabel?: string;
-    /** The profile the reading was saved for: its contact is the call target. */
-    userId: string | null;
-  }>({ visible: false, value: 0, direction: "low", userId: null });
+  // The app-wide fullscreen alert (audit P3); the root layout renders it.
+  const raiseCriticalAlert = useCriticalAlertStore((s) => s.raise);
+  const raiseGlucoseAlert = (value: number, direction: "low" | "high"): void => {
+    raiseCriticalAlert({
+      audience: "patient",
+      userId,
+      category: "glucose",
+      direction,
+      valueLabel: `${value} mg/dL`,
+    });
+    track("critical_bypass_triggered", { value });
+  };
 
   // Warm the profile's critical-alert call target while online, so the
   // alert can offer it offline (audit P2).
@@ -214,13 +222,7 @@ export default function LogScreen(): JSX.Element {
         setFeedbackMsg(t(`feedback.${result.feedback.tone}`, { defaultValue: t("logging.saved") }));
         setSavedOffline(false);
         if (result.critical.isCritical && result.critical.direction) {
-          setCriticalAlert({
-            visible: true,
-            value: parsedGlucose.value,
-            direction: result.critical.direction,
-            userId,
-          });
-          track("critical_bypass_triggered", { value: parsedGlucose.value });
+          raiseGlucoseAlert(parsedGlucose.value, result.critical.direction);
         }
         setUndoVisible(true);
         setSavedSummary({
@@ -235,9 +237,7 @@ export default function LogScreen(): JSX.Element {
         setSavedOffline(true);
         setFeedbackMsg(t("logging.savedOffline"));
         if (isCriticalGlucose(parsedGlucose.value)) {
-          const dir = parsedGlucose.value < 65 ? "low" : "high";
-          setCriticalAlert({ visible: true, value: parsedGlucose.value, direction: dir, userId });
-          track("critical_bypass_triggered", { value: parsedGlucose.value });
+          raiseGlucoseAlert(parsedGlucose.value, parsedGlucose.value < 65 ? "low" : "high");
         }
         setSavedSummary({
           headline: `${parsedGlucose.value} mg/dL`,
@@ -256,9 +256,7 @@ export default function LogScreen(): JSX.Element {
         return;
       }
       if (isCriticalGlucose(parsedGlucose.value)) {
-        const dir = parsedGlucose.value < 65 ? "low" : "high";
-        setCriticalAlert({ visible: true, value: parsedGlucose.value, direction: dir, userId });
-        track("critical_bypass_triggered", { value: parsedGlucose.value });
+        raiseGlucoseAlert(parsedGlucose.value, parsedGlucose.value < 65 ? "low" : "high");
       }
       setSaveError(t("logging.saveFailed"));
     } finally {
@@ -284,12 +282,11 @@ export default function LogScreen(): JSX.Element {
     // up to its 10s timeout on a bad connection. Push/SMS is the server's job.
     const bpDirection = bpCriticalDirection(parsedBP.systolic, parsedBP.diastolic);
     if (bpDirection) {
-      setCriticalAlert({
-        visible: true,
+      raiseCriticalAlert({
+        audience: "patient",
         userId,
-        value: parsedBP.systolic,
-        direction: bpDirection,
         category: "bp",
+        direction: bpDirection,
         valueLabel: `${parsedBP.systolic}/${parsedBP.diastolic} mmHg`,
       });
       track("critical_bypass_triggered", { category: "bp", value: parsedBP.systolic });
@@ -349,6 +346,25 @@ export default function LogScreen(): JSX.Element {
     hapticSave();
     setSaveError(null);
     setSaving(true);
+    // Critical (CLAUDE.md thresholds, shared classifier) → the fullscreen
+    // alert right away, synced or offline (audit P3). Push/SMS is the server's.
+    const hrLabel = `${parsedCardiac.heartRate} ${t("cardiac.bpm")}`;
+    const raiseCardiacAlert = (req: CriticalAlertRequest): void => {
+      raiseCriticalAlert(req);
+      track("critical_bypass_triggered", { value: parsedCardiac.heartRate, surface: "cardiac" });
+    };
+    const cardiacLocal = cardiacAlertRequest(
+      {
+        heartRateBpm: parsedCardiac.heartRate,
+        rhythmStatus: parsedCardiac.rhythmStatus,
+        chestPain: parsedCardiac.chestPain,
+        painSeverity: parsedCardiac.painSeverity ?? null,
+        exerciseTolerance: parsedCardiac.exerciseTolerance,
+      },
+      userId,
+      hrLabel,
+    );
+    if (cardiacLocal) raiseCardiacAlert(cardiacLocal);
     try {
       const result = await saveCardiacLog({
         userId,
@@ -365,14 +381,10 @@ export default function LogScreen(): JSX.Element {
 
       if (result.kind === "synced") {
         setSavedOffline(false);
-        if (result.critical.isCritical) {
-          // Heart-rate-driven bypass routes through the same fullscreen
-          // alert primitive as glucose; the contact targeting is
-          // server-side (CRITICAL_ALERT job already enqueued).
-          track("critical_bypass_triggered", {
-            value: parsedCardiac.heartRate,
-            surface: "cardiac",
-          });
+        if (result.critical.isCritical && !cardiacLocal) {
+          raiseCardiacAlert(
+            serverAlertRequest("cardiac", result.critical.primaryReason, userId, hrLabel),
+          );
         }
         setSavedSummary({
           headline: `${result.heartRate} ${t("cardiac.bpm")}`,
@@ -419,6 +431,20 @@ export default function LogScreen(): JSX.Element {
     hapticSave();
     setSaveError(null);
     setSaving(true);
+    // Same as cardiac.
+    const pfLabel =
+      parsedRespiratory.peakFlow !== undefined
+        ? `${parsedRespiratory.peakFlow} ${t("respiratory.lMin")}`
+        : undefined;
+    const raiseRespiratoryAlert = (req: CriticalAlertRequest): void => {
+      raiseCriticalAlert(req);
+      track("critical_bypass_triggered", {
+        value: parsedRespiratory.peakFlow ?? 0,
+        surface: "respiratory",
+      });
+    };
+    const respiratoryLocal = respiratoryAlertRequest(parsedRespiratory, userId, pfLabel);
+    if (respiratoryLocal) raiseRespiratoryAlert(respiratoryLocal);
     try {
       const result = await saveRespiratoryLog({
         userId,
@@ -439,11 +465,10 @@ export default function LogScreen(): JSX.Element {
 
       if (result.kind === "synced") {
         setSavedOffline(false);
-        if (result.critical.isCritical) {
-          track("critical_bypass_triggered", {
-            value: parsedRespiratory.peakFlow ?? 0,
-            surface: "respiratory",
-          });
+        if (result.critical.isCritical && !respiratoryLocal) {
+          raiseRespiratoryAlert(
+            serverAlertRequest("respiratory", result.critical.primaryReason, userId, pfLabel),
+          );
         }
         setSavedSummary({ headline, detail: t("respiratory.saved") });
         setStage("saved");
@@ -511,54 +536,31 @@ export default function LogScreen(): JSX.Element {
   // ── Render ────────────────────────────────────────────────
   if (stage === "confirm" && mode === "glucose" && parsedGlucose) {
     return (
-      <>
-        <ConfirmationScreen
-          value={parsedGlucose.value}
-          type={parsedGlucose.type}
-          uncertainType={parsedGlucose.uncertain}
-          onConfirm={(type, ctx) => void saveGlucose(type, ctx)}
-          onEdit={() => {
-            setSaveError(null);
-            setStage("input");
-          }}
-        />
-        <CriticalAlert
-          visible={criticalAlert.visible}
-          value={criticalAlert.value}
-          direction={criticalAlert.direction}
-          {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
-          {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
-          userId={criticalAlert.userId}
-          onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}
-        />
-      </>
+      <ConfirmationScreen
+        value={parsedGlucose.value}
+        type={parsedGlucose.type}
+        uncertainType={parsedGlucose.uncertain}
+        onConfirm={(type, ctx) => void saveGlucose(type, ctx)}
+        onEdit={() => {
+          setSaveError(null);
+          setStage("input");
+        }}
+      />
     );
   }
 
   if (stage === "confirm" && mode === "bp" && parsedBP) {
     return (
-      <>
-        <BPConfirmationScreen
-          systolic={parsedBP.systolic}
-          diastolic={parsedBP.diastolic}
-          {...(parsedBP.pulse !== undefined ? { pulse: parsedBP.pulse } : {})}
-          onConfirm={() => void saveBP()}
-          onEdit={() => {
-            setSaveError(null);
-            setStage("input");
-          }}
-        />
-        {/* A rejected save stays on this screen — the alert must still show. */}
-        <CriticalAlert
-          visible={criticalAlert.visible}
-          value={criticalAlert.value}
-          direction={criticalAlert.direction}
-          {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
-          {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
-          userId={criticalAlert.userId}
-          onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}
-        />
-      </>
+      <BPConfirmationScreen
+        systolic={parsedBP.systolic}
+        diastolic={parsedBP.diastolic}
+        {...(parsedBP.pulse !== undefined ? { pulse: parsedBP.pulse } : {})}
+        onConfirm={() => void saveBP()}
+        onEdit={() => {
+          setSaveError(null);
+          setStage("input");
+        }}
+      />
     );
   }
 
@@ -692,15 +694,6 @@ export default function LogScreen(): JSX.Element {
             onHide={() => setUndoVisible(false)}
           />
         )}
-        <CriticalAlert
-          visible={criticalAlert.visible}
-          value={criticalAlert.value}
-          direction={criticalAlert.direction}
-          {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
-          {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
-          userId={criticalAlert.userId}
-          onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}
-        />
       </SafeAreaView>
     );
   }

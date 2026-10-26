@@ -12,7 +12,8 @@ import { logError } from "@/services/analytics";
 import { saveGlucoseReading } from "@/services/readings";
 import { useAuthStore } from "@/stores/auth.store";
 import { hapticCelebrate } from "@/utils/haptics";
-import type { GlucoseReadingType } from "@swasth/shared-types";
+import { useCriticalAlertStore } from "@/stores/critical-alert.store";
+import { isCriticalGlucose, type GlucoseReadingType } from "@swasth/shared-types";
 
 export default function FirstReadingScreen(): JSX.Element {
   const { t } = useTranslation();
@@ -22,6 +23,11 @@ export default function FirstReadingScreen(): JSX.Element {
   const [celebrated, setCelebrated] = useState(false);
   const [savedOffline, setSavedOffline] = useState(false);
   const [saving, setSaving] = useState(false);
+  // A critical first reading gets the fullscreen alert, not the trophy
+  // (audit P3). At this point there is usually no emergency contact yet,
+  // so the alert offers 112.
+  const [criticalDirection, setCriticalDirection] = useState<"low" | "high" | null>(null);
+  const raiseCriticalAlert = useCriticalAlertStore((s) => s.raise);
 
   const saveReading = async (
     type: GlucoseReadingType,
@@ -44,6 +50,16 @@ export default function FirstReadingScreen(): JSX.Element {
 
     if (result.kind === "rejected") {
       logError("onboarding/first-reading", new Error(result.message));
+      // Not saved, but the value is still critical: alert anyway.
+      if (isCriticalGlucose(value)) {
+        raiseCriticalAlert({
+          audience: "patient",
+          userId,
+          category: "glucose",
+          direction: value < 65 ? "low" : "high",
+          valueLabel: `${value} mg/dL`,
+        });
+      }
       // Stay on the confirmation; user can edit + retry. Falling
       // through would skip celebration AND advance the step.
       setSaving(false);
@@ -61,9 +77,64 @@ export default function FirstReadingScreen(): JSX.Element {
 
     setSaving(false);
     setSavedOffline(result.kind === "queued");
-    hapticCelebrate();
+    const critical =
+      result.kind === "synced" ? result.critical.isCritical : isCriticalGlucose(value);
+    if (critical) {
+      const direction =
+        result.kind === "synced" && result.critical.direction
+          ? result.critical.direction
+          : value < 65
+            ? "low"
+            : "high";
+      setCriticalDirection(direction);
+      raiseCriticalAlert({
+        audience: "patient",
+        userId,
+        category: "glucose",
+        direction,
+        valueLabel: `${value} mg/dL`,
+      });
+    } else {
+      hapticCelebrate();
+    }
     setCelebrated(true);
   };
+
+  // ── Saved, but critical: no trophy, no celebration ──
+  if (celebrated && criticalDirection) {
+    return (
+      <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
+        <View className="flex-1 items-center justify-center px-6">
+          <View className="mb-6 h-28 w-28 items-center justify-center rounded-full bg-red-50">
+            <Icon name="warning" size={64} color="#DC2626" accessibilityLabel="Warning" />
+          </View>
+          <Text className="text-3xl font-bold tracking-tight text-center text-gray-900 dark:text-gray-100">
+            {t("onboarding.firstReadingCriticalTitle")}
+          </Text>
+          <Text className="mt-3 text-center text-important text-gray-700 dark:text-gray-300">
+            {t("onboarding.firstReadingCriticalBody", {
+              level: t(
+                criticalDirection === "low" ? "onboarding.levelLow" : "onboarding.levelHigh",
+              ),
+            })}
+          </Text>
+          {savedOffline && (
+            <View className="mt-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+              <Text className="text-body text-amber-800 text-center">
+                {t("logging.savedOffline")}
+              </Text>
+            </View>
+          )}
+          <View className="mt-8 w-full">
+            <Button
+              label={t("common.next")}
+              onPress={() => router.push("/(onboarding)/medications")}
+            />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   // ── Celebration state ──
   if (celebrated) {

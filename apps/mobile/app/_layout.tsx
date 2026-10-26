@@ -23,6 +23,7 @@ import { MaintenanceBanner } from "@/components/shared/MaintenanceBanner";
 import { FontScaleProvider } from "@/components/shared/FontScaleProvider";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { ProfileSelectorModal } from "@/components/profile/ProfileSelectorModal";
+import { CriticalAlertHost } from "@/components/logging/CriticalAlertHost";
 import { isExpoGo } from "@/utils/runtime";
 import { useFeatureFlags } from "@/stores/feature-flags.store";
 import { setOnMaintenanceMode } from "@/services/api";
@@ -140,6 +141,8 @@ export default function RootLayout(): JSX.Element | null {
                 <Stack.Screen name="settings/emergency-contacts" options={{ headerShown: true }} />
                 <Stack.Screen name="sos" options={{ presentation: "fullScreenModal" }} />
               </Stack>
+              {/* The app's one fullscreen critical alert, above every screen (audit P3). */}
+              <CriticalAlertHost />
             </ThemeProvider>
           </FontScaleProvider>
         </SafeAreaProvider>

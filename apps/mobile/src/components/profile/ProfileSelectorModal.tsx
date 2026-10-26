@@ -1,6 +1,7 @@
 import { Modal, View, Text, Pressable, ScrollView } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useProfileStore } from "@/stores/profile.store";
+import { useCriticalAlertStore } from "@/stores/critical-alert.store";
 import { getFirstName } from "@/utils/getFirstName";
 import { TOUCH_TARGET_MIN } from "@/utils/constants";
 import { Icon } from "@/components/ui/Icon";
@@ -13,7 +14,10 @@ export const ProfileSelectorModal = (): JSX.Element | null => {
   const switchProfile = useProfileStore((s) => s.switchProfile);
   const dismiss = useProfileStore((s) => s.dismissSelector);
 
-  if (!visible || profiles.length === 0) return null;
+  // iOS can't show this over the fullscreen critical alert (a second
+  // Modal): the alert comes first, the selector after it closes.
+  const criticalAlertUp = useCriticalAlertStore((s) => s.current !== null);
+  if (!visible || profiles.length === 0 || criticalAlertUp) return null;
 
   return (
     <Modal transparent animationType="slide" visible={visible} onRequestClose={dismiss}>
