@@ -227,6 +227,9 @@
     "alertBodyLow": "Eat something sweet now — juice, glucose, mithai.",
     "alertBodyHigh": "Drink water. Check if you took your medicine.",
     "callContact": "Call {{name}}",
+    "callEmergency": "Call 112 (emergency)",
+    "autoDialHint": "The phone dialer opens for {{name}} in {{seconds}} seconds. Touch anywhere to stop.",
+    "autoDialOff": "Auto-dial stopped. Use a button below to call.",
     "close": "Close",
     "waitDismiss": "Wait {{seconds}}s...",
     "bp": {

@@ -38,6 +38,7 @@ import { Icon, type IconName } from "@/components/ui/Icon";
 import { api } from "@/services/api";
 import { saveGlucoseReading } from "@/services/readings";
 import { saveBPReading } from "@/services/bp";
+import { refreshPriorityContact } from "@/services/priority-contact";
 import { saveCardiacLog } from "@/services/cardiac";
 import { saveRespiratoryLog } from "@/services/respiratory";
 import { saveMealLog } from "@/services/meals";
@@ -98,7 +99,15 @@ export default function LogScreen(): JSX.Element {
     direction: "low" | "high";
     category?: "glucose" | "bp";
     valueLabel?: string;
-  }>({ visible: false, value: 0, direction: "low" });
+    /** The profile the reading was saved for: its contact is the call target. */
+    userId: string | null;
+  }>({ visible: false, value: 0, direction: "low", userId: null });
+
+  // Warm the profile's critical-alert call target while online, so the
+  // alert can offer it offline (audit P2).
+  useEffect(() => {
+    if (userId) void refreshPriorityContact(userId);
+  }, [userId]);
 
   // BP
   const [parsedBP, setParsedBP] = useState<ParsedBP | null>(null);
@@ -209,6 +218,7 @@ export default function LogScreen(): JSX.Element {
             visible: true,
             value: parsedGlucose.value,
             direction: result.critical.direction,
+            userId,
           });
           track("critical_bypass_triggered", { value: parsedGlucose.value });
         }
@@ -226,7 +236,7 @@ export default function LogScreen(): JSX.Element {
         setFeedbackMsg(t("logging.savedOffline"));
         if (isCriticalGlucose(parsedGlucose.value)) {
           const dir = parsedGlucose.value < 65 ? "low" : "high";
-          setCriticalAlert({ visible: true, value: parsedGlucose.value, direction: dir });
+          setCriticalAlert({ visible: true, value: parsedGlucose.value, direction: dir, userId });
           track("critical_bypass_triggered", { value: parsedGlucose.value });
         }
         setSavedSummary({
@@ -247,7 +257,7 @@ export default function LogScreen(): JSX.Element {
       }
       if (isCriticalGlucose(parsedGlucose.value)) {
         const dir = parsedGlucose.value < 65 ? "low" : "high";
-        setCriticalAlert({ visible: true, value: parsedGlucose.value, direction: dir });
+        setCriticalAlert({ visible: true, value: parsedGlucose.value, direction: dir, userId });
         track("critical_bypass_triggered", { value: parsedGlucose.value });
       }
       setSaveError(t("logging.saveFailed"));
@@ -276,6 +286,7 @@ export default function LogScreen(): JSX.Element {
     if (bpDirection) {
       setCriticalAlert({
         visible: true,
+        userId,
         value: parsedBP.systolic,
         direction: bpDirection,
         category: "bp",
@@ -517,8 +528,7 @@ export default function LogScreen(): JSX.Element {
           direction={criticalAlert.direction}
           {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
           {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
-          contactName="Emergency"
-          contactPhone="112"
+          userId={criticalAlert.userId}
           onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}
         />
       </>
@@ -545,8 +555,7 @@ export default function LogScreen(): JSX.Element {
           direction={criticalAlert.direction}
           {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
           {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
-          contactName="Emergency"
-          contactPhone="112"
+          userId={criticalAlert.userId}
           onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}
         />
       </>
@@ -689,8 +698,7 @@ export default function LogScreen(): JSX.Element {
           direction={criticalAlert.direction}
           {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
           {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
-          contactName="Emergency"
-          contactPhone="112"
+          userId={criticalAlert.userId}
           onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}
         />
       </SafeAreaView>
