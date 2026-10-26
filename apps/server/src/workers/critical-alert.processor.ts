@@ -5,6 +5,7 @@ import type { Language } from "@prisma/client";
 import { isTest } from "../config/env.js";
 import { createQueue, QUEUE_NAMES } from "../shared/queue.js";
 import { withTimeout } from "../shared/with-timeout.js";
+import type { CriticalBypassAutoEscalateJob } from "./critical-bypass-auto-escalate.processor.js";
 import { logger } from "../shared/logger.js";
 import { prisma } from "../shared/database.js";
 import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
@@ -493,6 +494,7 @@ const processGlucoseCriticalAlert = async (
   await scheduleCriticalBypassAutoEscalation({
     userId,
     readingId,
+    category: "glucose",
     ...(requestId !== undefined ? { requestId } : {}),
   });
 };
@@ -655,6 +657,7 @@ const processMultiCategoryCriticalAlert = async (
   await scheduleCriticalBypassAutoEscalation({
     userId,
     readingId,
+    category,
     ...(requestId !== undefined ? { requestId } : {}),
   });
 };
@@ -668,12 +671,6 @@ const autoEscalateQueue = (): Queue<CriticalBypassAutoEscalateJob> => {
   );
   return _autoEscalateQueue;
 };
-
-export interface CriticalBypassAutoEscalateJob {
-  readonly userId: string;
-  readonly readingId: string;
-  readonly requestId?: string;
-}
 
 const ESCALATION_SCHEDULE_TIMEOUT_MS = 2_000;
 
