@@ -78,23 +78,24 @@ const localKey = (req: CriticalAlertRequest): string => `${req.userId ?? "-"}:${
 let nextId = 1;
 
 /**
- * Where a new alert goes (P3 review C2). A patient alert shows at once: it
- * replaces another patient alert (the newer reading) and pushes a guardian
- * alert back into the queue. A guardian alert never covers a patient
- * alert, or another guardian alert: it waits in the queue.
+ * Where a new alert goes (P3 review C2, W8). A patient alert shows at once.
+ * It replaces the current alert only when that is the same profile's same
+ * category (a newer reading, e.g. a retry); any other alert it covers goes
+ * back to the front of the queue. A guardian alert never covers anything:
+ * it waits in the queue.
  */
 const place = (
   s: Pick<CriticalAlertState, "current" | "queue">,
   alert: ShownCriticalAlert,
 ): Pick<CriticalAlertState, "current" | "queue"> => {
-  if (s.current === null) return { current: alert, queue: s.queue };
-  if (alert.audience === "patient") {
-    return {
-      current: alert,
-      queue: s.current.audience === "guardian" ? [s.current, ...s.queue] : s.queue,
-    };
-  }
-  return { current: s.current, queue: [...s.queue, alert] };
+  const shown = s.current;
+  if (shown === null) return { current: alert, queue: s.queue };
+  if (alert.audience === "guardian") return { current: shown, queue: [...s.queue, alert] };
+  const sameReadingStream =
+    shown.audience === "patient" &&
+    shown.userId === alert.userId &&
+    shown.category === alert.category;
+  return { current: alert, queue: sameReadingStream ? s.queue : [shown, ...s.queue] };
 };
 
 export const useCriticalAlertStore = create<CriticalAlertState>((set, get) => ({

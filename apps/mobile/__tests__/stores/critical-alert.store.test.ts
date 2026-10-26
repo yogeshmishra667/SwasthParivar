@@ -90,6 +90,21 @@ describe("critical alert queue (review C2)", () => {
     expect(useCriticalAlertStore.getState().current?.audience).toBe("guardian");
   });
 
+  it("on a shared phone, Maa's alert doesn't erase Papa's: it shows after (review W8)", () => {
+    useCriticalAlertStore.getState().raise({ ...glucose, userId: "papa" });
+    useCriticalAlertStore.getState().raise({ ...glucose, userId: "maa", category: "bp" });
+    expect(useCriticalAlertStore.getState().current).toMatchObject({ userId: "maa" });
+    useCriticalAlertStore.getState().dismiss();
+    expect(useCriticalAlertStore.getState().current).toMatchObject({ userId: "papa" });
+  });
+
+  it("a newer reading of the same profile and category replaces the alert", () => {
+    useCriticalAlertStore.getState().raise({ ...glucose, valueLabel: "48 mg/dL" });
+    useCriticalAlertStore.getState().raise({ ...glucose, valueLabel: "44 mg/dL" });
+    useCriticalAlertStore.getState().dismiss();
+    expect(useCriticalAlertStore.getState().current).toBeNull();
+  });
+
   it("every alert gets a new id, so the modal starts over", () => {
     useCriticalAlertStore.getState().raise(glucose);
     const first = useCriticalAlertStore.getState().current?.id;
