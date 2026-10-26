@@ -14,6 +14,7 @@ jest.mock("@/services/api", () => ({ api: {} }));
 jest.mock("@/services/analytics", () => ({ logError: jest.fn() }));
 jest.mock("@/services/notification-dedup", () => ({ markNotificationSeen: jest.fn() }));
 jest.mock("@/stores/profile.store", () => ({ useProfileStore: { getState: jest.fn() } }));
+jest.mock("@/stores/auth.store", () => ({ useAuthStore: { getState: jest.fn() } }));
 jest.mock("@/utils/runtime", () => ({ isExpoGo: false }));
 
 import * as Notifications from "expo-notifications";

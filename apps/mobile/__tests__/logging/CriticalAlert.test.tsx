@@ -132,6 +132,17 @@ describe("CriticalAlert", () => {
       expect(logError).toHaveBeenCalledWith("criticalAlert.dial", expect.any(Error));
     });
 
+    it("a new alert (new alertKey) starts its own auto-dial, even after a touch (review C2)", () => {
+      const view = render(<CriticalAlert {...base} alertKey={1} value={48} direction="low" />);
+      fireEvent(screen.getByTestId("critical-alert-root"), "touchStart");
+      view.rerender(<CriticalAlert {...base} alertKey={2} value={45} direction="low" />);
+      expect(screen.getByText("critical.autoDialHint")).toBeTruthy();
+      act(() => {
+        jest.advanceTimersByTime(60_000);
+      });
+      expect(openURL).toHaveBeenCalledWith("tel:+919800000000");
+    });
+
     it("never auto-dials 112 when there is no contact", () => {
       mockUsePriorityContact.mockReturnValue(null);
       render(<CriticalAlert {...base} value={48} direction="low" />);
@@ -147,6 +158,58 @@ describe("CriticalAlert", () => {
         jest.advanceTimersByTime(120_000);
       });
       expect(openURL).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("every category and the guardian variant (audit P3)", () => {
+    it.each([
+      ["cardiac", "hr_low", "72 bpm"],
+      ["cardiac", "chest_pain", "80 bpm"],
+      ["respiratory", "severe_symptom", undefined],
+    ] as const)("%s / %s shows that category's copy", (category, reasonKey, valueLabel) => {
+      render(
+        <CriticalAlert
+          {...base}
+          category={category}
+          reasonKey={reasonKey}
+          {...(valueLabel ? { valueLabel } : {})}
+        />,
+      );
+      expect(screen.getByText(`critical.${category}.title.${reasonKey}`)).toBeTruthy();
+      expect(screen.getByText(`critical.${category}.body.${reasonKey}`)).toBeTruthy();
+      if (valueLabel) expect(screen.getByText(valueLabel)).toBeTruthy();
+      expect(screen.queryByText(/mg\/dL/)).toBeNull();
+    });
+
+    it("a guardian alert shows the push's own copy, opens details, and can be closed at once", () => {
+      mockUsePriorityContact.mockReturnValue(null);
+      const onOpenDetails = jest.fn();
+      const onDismiss = jest.fn();
+      render(
+        <CriticalAlert
+          visible
+          userId={null}
+          audience="guardian"
+          category="glucose"
+          title="Papa: Sugar Bahut Kam"
+          body="Sugar 48 — call now"
+          onOpenDetails={onOpenDetails}
+          onDismiss={onDismiss}
+        />,
+      );
+      expect(screen.getByText("Papa: Sugar Bahut Kam")).toBeTruthy();
+      fireEvent.press(screen.getByText("critical.openDetails"));
+      expect(onOpenDetails).toHaveBeenCalled();
+      fireEvent.press(screen.getByText("critical.close"));
+      expect(onDismiss).toHaveBeenCalled();
+      fireEvent.press(screen.getByText("critical.callEmergency"));
+      expect(openURL).toHaveBeenLastCalledWith("tel:112");
+    });
+
+    it("the patient's alert still can't be closed for 30s", () => {
+      render(<CriticalAlert {...base} value={48} direction="low" />);
+      expect(screen.queryByText("critical.close")).toBeNull();
+      expect(screen.getByText("critical.waitDismiss")).toBeTruthy();
     });
   });
 });

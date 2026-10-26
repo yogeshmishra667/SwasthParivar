@@ -45,7 +45,11 @@
     "addMedicinesLater": "Baad mein bhi kar sakte hain.",
     "conditionSubtitle": "Aapki condition chunein taaki hum sahi tracking set kar sakein.",
     "firstReadingSubtitle": "Apne glucometer se reading dekhein aur neeche type karein.",
-    "celebrateSubtitle": "Bahut acche! Aapne apni pehli reading log kar li. 🎉"
+    "celebrateSubtitle": "Bahut acche! Aapne apni pehli reading log kar li. 🎉",
+    "firstReadingCriticalTitle": "Reading save ho gayi",
+    "firstReadingCriticalBody": "Yeh reading bahut {{level}} hai. Doctor se baat karein. Zaroorat ho to 112 par call karein.",
+    "levelLow": "kam",
+    "levelHigh": "zyada"
   },
   "tabs": {
     "home": "Home",
@@ -237,7 +241,34 @@
       "alertTitleHigh": "BP bahut zyada",
       "alertBodyLow": "Let jayein aur paani peeyein. Chakkar aa rahe hain to turant call karein.",
       "alertBodyHigh": "Aaram se baithein. Seene mein dard ya kamzori ho to turant call karein."
-    }
+    },
+    "cardiac": {
+      "title": {
+        "hr_low": "Dhadkan bahut kam",
+        "hr_high": "Dhadkan bahut tez",
+        "chest_pain": "Seene mein tez dard",
+        "generic": "Dil — turant dhyan dein"
+      },
+      "body": {
+        "hr_low": "Dhadkan bahut kam — turant doctor ko call karein.",
+        "hr_high": "Dhadkan bahut tez — aaram karein, doctor ko call karein.",
+        "chest_pain": "Seene mein bahut dard — turant hospital jayein ya 108 dial karein.",
+        "generic": "Bahut zaroori — turant doctor ko call karein."
+      }
+    },
+    "respiratory": {
+      "title": {
+        "peak_flow": "Peak flow bahut kam",
+        "severe_symptom": "Saans mein bahut takleef",
+        "generic": "Saans — turant dhyan dein"
+      },
+      "body": {
+        "peak_flow": "Peak flow red zone mein — inhaler lein aur doctor ko call karein.",
+        "severe_symptom": "Saans mein bahut takleef — turant hospital jayein ya 108 dial karein.",
+        "generic": "Bahut zaroori — turant doctor ko call karein."
+      }
+    },
+    "openDetails": "Poori jaankari dekhein"
   },
   "offline": {
     "banner": "Offline mode — readings safe hain, sync baad mein hoga",
