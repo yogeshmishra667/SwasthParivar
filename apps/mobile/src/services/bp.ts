@@ -1,20 +1,21 @@
-// Phase 2 — BP reading service. Mirrors `readings.ts` but online-only:
-// BP isn't on the WatermelonDB hypertable yet (Phase 1 reserved local
-// queue space for glucose only). When the network is unavailable we
-// surface a `queued` result with no local persistence so the UI can
-// still tell the user the reading is safe, and the user can retry by
-// pulling-to-refresh once online. The plumbing for a true offline queue
-// will land alongside the meal/BP schema migration in Phase 3.
+// BP reading service. Online-only: BP has no local (WatermelonDB) queue
+// yet. A network failure is therefore reported honestly as "not saved"
+// (never "saved locally") and the caller keeps the same `clientUuid` so a
+// retry is an idempotent replay on the server, never a duplicate. A
+// CRITICAL BP is also re-sent in the background until it lands, so the
+// server-side family alert (push + SMS) still goes out once the network
+// returns (P4 review C1).
 
 import { isAxiosError } from "axios";
-import { v4 as uuidv4 } from "uuid";
-import type { ReadingContext, ReadingSource } from "@swasth/shared-types";
+import { isCriticalBP, type ReadingContext, type ReadingSource } from "@swasth/shared-types";
 
 import { api } from "@/services/api";
 import { logError, track } from "@/services/analytics";
 
 export interface SaveBPInput {
   userId: string;
+  /** Stable per reading: every retry of the same reading reuses it. */
+  clientUuid: string;
   systolic: number;
   diastolic: number;
   pulse?: number;
@@ -33,7 +34,8 @@ export interface ServerBPResponse {
 
 export type SaveBPResult =
   | { kind: "synced"; readingId: string }
-  | { kind: "queued"; clientUuid: string }
+  /** Not saved — no network / server error. `retrying`: critical BP being re-sent in the background. */
+  | { kind: "network_failed"; retrying: boolean }
   | { kind: "rejected"; status: number; code: string | null; message: string };
 
 const isNetworkOrServerError = (err: unknown): boolean => {
@@ -42,8 +44,39 @@ const isNetworkOrServerError = (err: unknown): boolean => {
   return err.response.status >= 500;
 };
 
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+// Background re-send for a critical BP that failed to reach the server.
+const CRITICAL_RETRY_BACKOFF_MS = [5_000, 15_000, 30_000, 60_000, 120_000] as const;
+const retryingInBackground = new Set<string>();
+
+const resendCriticalInBackground = (clientUuid: string, payload: object): void => {
+  if (retryingInBackground.has(clientUuid)) return;
+  retryingInBackground.add(clientUuid);
+  void (async () => {
+    try {
+      for (const [attempt, backoffMs] of CRITICAL_RETRY_BACKOFF_MS.entries()) {
+        await sleep(backoffMs);
+        try {
+          await api.post("/readings/bp", payload);
+          track("critical_bp_background_sync", { attempt: attempt + 1, delivered: true });
+          return;
+        } catch (err) {
+          if (!isNetworkOrServerError(err)) return; // the server answered — nothing to retry
+        }
+      }
+      track("critical_bp_background_sync", {
+        attempt: CRITICAL_RETRY_BACKOFF_MS.length,
+        delivered: false,
+      });
+    } finally {
+      retryingInBackground.delete(clientUuid);
+    }
+  })();
+};
+
 export const saveBPReading = async (input: SaveBPInput): Promise<SaveBPResult> => {
-  const clientUuid = uuidv4();
+  const clientUuid = input.clientUuid;
   const payload = {
     clientUuid,
     systolic: input.systolic,
@@ -68,15 +101,9 @@ export const saveBPReading = async (input: SaveBPInput): Promise<SaveBPResult> =
     return { kind: "synced", readingId: res.data.reading.id };
   } catch (err) {
     if (isNetworkOrServerError(err)) {
-      // No local persistence yet — surface as queued so the UI shows a
-      // friendly message. Recovery: user retries when online.
-      track("reading_logged", {
-        type: "bp",
-        source: input.source,
-        value: input.systolic,
-        offline: true,
-      });
-      return { kind: "queued", clientUuid };
+      const critical = isCriticalBP(input.systolic, input.diastolic);
+      if (critical) resendCriticalInBackground(clientUuid, payload);
+      return { kind: "network_failed", retrying: critical };
     }
 
     if (isAxiosError(err) && err.response) {
