@@ -15,26 +15,47 @@ Every fix below shipped as its own PR, with a `safety-reviewer` pass (re-run unt
 | **P1** | Per-contact SMS: a push to the patient's own phone no longer suppresses SMS to contacts. Household-member contacts are always texted. The push stage can't block SMS. SMS retries 3×. On-call is paged on any undelivered SMS. | ✅ #198 |
 | **P5** | Durable critical-alert hand-off: bounded enqueue with in-process fallback, replay re-ensures and revives, plan before save, escalation can't re-send, Redis calls bounded. | ✅ #202 |
 | **P6** | Prescription approval authority frozen: once a guardian is required, it never falls back to the patient. | ✅ #200 |
-| **P4** | BP critical bypass (sys < 90 / dia < 60, sys > 180 / dia > 110) through the shared chain with a per-category cooldown, plus the app's fullscreen alert. | 🔄 branch `feat/bp-critical-bypass` (rebased on main; PR after its safety review) |
+| **P4** | BP critical bypass (sys < 90 / dia < 60, sys > 180 / dia > 110) through the shared chain with a per-category cooldown, plus the app's fullscreen alert. A critical BP that didn't land is persisted and re-sent; SOS escalation is category-aware. | ✅ #207 |
+| **P2** | The critical alert calls the priority-1 contact (cached per profile for offline), keeps 112 as a second button, and auto-dials the contact at 60s unless touched. | ✅ #208 |
+| **P3** | One app-wide fullscreen alert: onboarding's first reading, cardiac/respiratory, and `critical_alert` pushes (patient alert on the household's device, guardian variant elsewhere). | ✅ #210 |
+| **D3** | Cohort/percentage flags resolved per household account at the API (logging, doctor portal, SOS). Real SOS mode for a cohort is the new `sos_real_mode_enabled`. | ✅ #209 |
+| **D8** | SOS routes and signed payment webhooks stay up during maintenance; the Ops toggle says what stays up and what waits. | ✅ #211 |
+| **P11** | Anti-fatigue works: unopened pushes count as ignored, app-reported opens reset fatigue, CLAUDE.md caps, streak-day recovery. Best-time average, variant pool and tap routing still open. | ✅ #212 |
+| **P22** | Phone numbers (and other PII keys) redacted at any depth in logs. | ✅ #213 |
 | **P10** | Android channels: the app creates every channel the server pushes to. `channelId` is typed against one shared list. | ✅ #203 |
 | **D1** | SMS success rate divides only by alerts that attempted an SMS. | ✅ #201 |
 | CI / supply chain | Third-party actions pinned to SHAs. This unblocked #85 and #86, which CodeQL review threads had blocked. | ✅ #199 |
-| Next, in order | P2 → P3 (app) · D3 → D8 · P11 (now urgent: P10 makes reminders arrive) · P22 · the rest per §7 | ⏳ |
+| Next | The rest per §7 (e.g. P7, P8, P9, X1, X2, D2), plus the follow-ups below | ⏳ |
 
 Follow-ups raised by the safety reviews (not yet filed as items):
 
 - **P5:**
   - Postgres-durable dedup/outbox; the in-process dedup is per instance, so a late-landing add duplicates.
   - The 5-minute escalation can't be scheduled during a Redis outage.
-  - The escalate processor only handles glucose.
+  - ~~The escalate processor only handles glucose.~~ Fixed in #207 (category-aware lookup).
   - Cardiac/respiratory kill-switch flags fail closed in a Redis outage.
 - **P6:**
   - The approver's identity isn't frozen, only the boolean: a new "son" link outranks a spouse. Notify existing guardians on new links.
   - No push to the guardian on upload or revoke.
   - The clarification worker can flip an approved item back. Approve reads items outside its transaction, which allows duplicate schedules.
 - **P1:**
-  - `msg91-sms.ts` logs top-level `phone` unredacted (P22).
+  - ~~`msg91-sms.ts` logs top-level `phone` unredacted (P22).~~ Fixed in #213.
   - The metric now relies on `sms_triggered`; check against real PostHog data.
+- **P4 (BP):**
+  - Clinician sign-off on the BP copy (questions listed in #207).
+  - Server-side handling of late critical readings: a reading that lands hours late (offline drain, any category) still pages the family as current and schedules SOS.
+  - A Devanagari patient name makes any alert SMS UCS-2 / multi-part; cardiac/respiratory SMS still reuse the push copy (emoji).
+  - RED 3-second confirm for a critical BP; chat and guardian dedup ignore BP critical.
+- **P2 / P3 (app alert):**
+  - "Any touch cancels" the auto-dial is literal; consider a 2–3 s grace period (product call).
+  - Offline peak-flow red zone raises no alert until sync (no cached baseline) — product sign-off.
+  - Guardian variant has no "Call Papa": patient phones never reach the guardian's device (privacy decision).
+  - Device check: iOS with the profile selector due at the same time as a cold-start critical tap.
+- **D3 / D8 (flags, maintenance):**
+  - A DB error on a cohort-flag SOS lookup is a 500, not `SOS_DISABLED`; confirm the app shows "call emergency services" for any trigger failure.
+  - A Redis outage mid-chain reads `sos_enabled` as off and stops the escalation tick.
+  - Exotel / Twilio call-status callbacks accept unsigned requests when their secret is unset (env marks them optional); the Exotel HMAC signs `JSON.stringify` of a form body. Fail closed in production.
+- **P11:** best-time from a rolling 5-day average; 5-variant pool; tap routing; medicine / critical sends still feed the 30-min throttle.
 
 ---
 

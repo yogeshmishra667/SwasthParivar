@@ -1,7 +1,7 @@
 # Audit Progress
 
 > Source plan: `~/.claude/plans/flickering-wiggling-sundae.md`
-> Last updated: 2026-10-26 (phase-audit fix wave: P1, P5, P6, P10, D1 merged; P4 on branch `feat/bp-critical-bypass`, in safety review)
+> Last updated: 2026-10-26 (phase-audit fix wave: P1, P2, P3, P4, P5, P6, P10, P11, P22, D1, D3, D8 merged)
 > Current session focus: Working through `phase-audit.md` in its §7 order, safety items first. Each fix gets its own PR, a `safety-reviewer` pass and a sabotage-checked test. **Resume at "Phase-audit fix wave" below.**
 
 ## Status Legend
@@ -59,16 +59,16 @@ Each item gets its own PR based on `main`, a `safety-reviewer` pass (re-run unti
 - [x] **P1** per-contact SMS — #198 (`9bbf95c`)
 - [x] **P6** prescription approval authority frozen — #200
 - [x] **D1** SMS success-rate denominator — #201 (`010a96b`)
-- [x] Pin third-party GitHub Actions to SHAs — #199. This unblocked #85 and #86; Dependabot should auto-close them.
+- [x] Pin third-party GitHub Actions to SHAs — #199. This unblocked #85 and #86. #86 was closed by hand on 2026-10-26 (superseded by #199).
 - [x] **P5** durable critical-alert hand-off — #202 (`f689e80`)
 - [x] **P10** Android notification channels — #203 (`8917188`). Still to confirm on an Android device: one test push per channel.
-- [~] **P4** BP critical bypass — branch `feat/bp-critical-bypass`, rebased onto main after #202 merged. Its PR opens after the `safety-reviewer` passes. All code and tests are done (local gate + safety review were running at hand-off). That covers shared-types thresholds, the domain-logic classifier, planner copy keys, `bp.service` (checkIdempotent, plan before save, hand-off, replay), processor routing, hi/en copy and the app's fullscreen alert.
-- [ ] **P2** the critical alert's Call button dials 112, not the priority-1 contact, and there's no 60-second auto-dial. App side; the decision is in `phase-audit.md` §8.6.1 (recommended: priority-1 contact, with 112 as the second button).
-- [ ] **P3** no fullscreen alert for a critical first reading (onboarding), for cardiac/respiratory, or on push receipt. App side.
-- [ ] **D3** cohort flags read as booleans: switch per-user features to `isFeatureEnabled(key, userId)`. SOS parts are safety-critical.
-- [ ] **D8** exempt SOS routes and signed provider webhooks from maintenance mode, and add warning text to the toggle. Safety-critical.
-- [ ] **P11** anti-fatigue counters never update and there is no daily cap. Urgent once P10 ships, because reminders will start arriving.
-- [ ] **P22** redact the top-level `phone` in `msg91-sms.ts` logs.
+- [x] **P4** BP critical bypass — #207 (`e47cfd8`). The safety review took 4 passes (C1 "saved locally" lie, C2 glucose-only SOS escalation; W1 in-memory re-send, W2 401/429 deleted the pending alert, W3 a critical re-measure counted as "responded"). The PR lists the clinician copy questions.
+- [x] **P2** call the priority-1 contact, keep 112, auto-dial at 60s — #208 (`61ef68a`). Safety review C1 (another profile's contact after a switch) fixed; mobile-ux contrast and layout-shift blockers fixed.
+- [x] **P3** one app-wide fullscreen alert (onboarding, cardiac/respiratory, push receipt, guardian variant) — #210 (`b059102`). Safety review C1 (cold-start tap shown as the guardian variant) and C2 (alerts overwriting each other) fixed.
+- [x] **D3** cohort / percentage flags resolved per household account at the API; new positive `sos_real_mode_enabled` (cohort/percentage only) — #209 (`c76b2a5`).
+- [x] **D8** SOS and signed payment webhooks stay up during maintenance; fuller Ops warning — #211 (`a7bf40d`).
+- [x] **P11** anti-fatigue: ignores counted, opens reported by the app (`POST /notifications/opened`), CLAUDE.md caps, streak-day recovery — #212 (`0238e0f`). Rest of P11 (best-time average, variant pool, tap routing) still open.
+- [x] **P22** top-level phone (and other PII) redacted in logs — #213 (`14d4075`).
 - [ ] Remaining items in the `phase-audit.md` §7 order.
 - [ ] Safety-review follow-ups listed in `phase-audit.md` §0.
 
@@ -126,6 +126,10 @@ Open repo housekeeping:
   - #185: schema/migration drift reconciled.
   - #176 / #177 / #178 / #180: flaky coverage, mobile bundle, phase audit, Expo-pinned packages.
   - Lockfile lesson: GitHub's update-branch text-merges `pnpm-lock.yaml` and can corrupt it. Lockfile PRs must be regenerated, not branch-updated.
+- 2026-10-26: phase-audit fix wave, part 2. Merged P4 (#207), P2 (#208), P3 (#210), D3 (#209), D8 (#211), P11 (#212), P22 (#213). Every PR had a `safety-reviewer` pass (or `domain-logic-reviewer` for P11; `mobile-ux-reviewer` for P2/P3), re-run until PASS, and every new test was sabotage-checked. Lessons:
+  - Under load, local Testcontainers runs time out on container start-up; run one integration suite at a time.
+  - `main` requires branches to be up to date and repo auto-merge is off, so merge one PR, `update-branch` the next (non-lockfile only), wait for CI, repeat.
+  - Force-push is blocked in this environment: push a rebased branch under a new name instead.
 - 2026-10-25: phase-audit fix wave.
   - **P1** (#198):
     - A push to the patient's own phone no longer suppresses SMS to emergency contacts.
