@@ -2,7 +2,7 @@
 
 > Source plan: `~/.claude/plans/flickering-wiggling-sundae.md`
 > Last updated: 2026-10-26 (phase-audit fix wave: P1, P2, P3, P4, P5, P6, P10, P11, P22, D1, D3, D8 merged)
-> Current session focus: Working through `phase-audit.md` in its §7 order, safety items first. Each fix gets its own PR, a `safety-reviewer` pass and a sabotage-checked test. **Resume at "Phase-audit fix wave" below.**
+> Current session focus: Working through `phase-audit.md` in its §7 order, safety items first. Each fix gets its own PR, a `safety-reviewer` pass and a sabotage-checked test. **Resume at "Phase-audit fix wave" below** (next: the remaining §7 items — 6 High not started: P7, P8, P9, D2, X1, X2) and the housekeeping list (#194, #195, #215, #48, code scanning).
 
 ## Status Legend
 
@@ -72,18 +72,28 @@ Each item gets its own PR based on `main`, a `safety-reviewer` pass (re-run unti
 - [ ] Remaining items in the `phase-audit.md` §7 order.
 - [ ] Safety-review follow-ups listed in `phase-audit.md` §0.
 
-Open repo housekeeping:
+Open repo housekeeping (status at 2026-10-26 hand-off):
 
 - Dependabot PRs:
-  - #194 (prod-patches) and #196 (vite) touch the lockfile. Use `@dependabot rebase`; never `update-branch`.
-  - #195 (dev-minors) needs three fixes re-applied right before merge: pin the prisma CLI to `7.8.0`, run `pnpm format` (Prettier 3.9), and add the cardiac-voice coverage test ("thakaan hai, dhadkan 95").
-  - #48 (express-rate-limit) is DIRTY.
+  - Merged on 2026-10-26 after `@dependabot rebase` and green CI: #205 (gitleaks-action v3, `35f517b`), #204 (download-artifact v8, `8be9212`; v5–v8 breaking changes don't affect the SBOM "download all" step), #196 (vite security, `5c3e3fa`).
+  - #194 (prod-patches, lockfile): next. Comment `@dependabot rebase`, wait for CI, merge. Never `update-branch` a lockfile PR.
+  - #195 (dev-minors, lockfile): after #194. Re-apply three fixes right before merge: pin the prisma CLI to `7.8.0`, run `pnpm format` (Prettier 3.9), add the cardiac-voice coverage test ("thakaan hai, dhadkan 95").
+  - #48 (express-rate-limit 8.3.2 → 8.7.1, lockfile only): Dependabot refuses to rebase because the PR was edited by someone else. Needs an owner call: `@dependabot recreate` (overwrites those edits), or close it. Note: integration logs already show express-rate-limit's `ERR_ERL_KEY_GEN_IPV6` validation warning for the custom keyGenerator; check it before bumping.
+  - #215 (admin vitest 4.1.6 → 4.1.11): opened 2026-10-26 after the vite merge; let CI finish, then merge.
+  - #86 closed (superseded by #199).
+- Code scanning (Security → Code scanning), checked 2026-10-26: 94 open alerts, all **stale**. The last analysis on main is from 2026-06-15: `codeql.yml` and `scorecard.yml` were removed in #188, and CodeQL default setup is "not configured", so nothing re-scans or closes them.
+  - 22 CodeQL `actions/unpinned-tag` + 12 `actions/missing-workflow-permissions`: fixed on main (#199 pinned third-party actions; every workflow has a top-level `permissions:`).
+  - 59 Scorecard `PinnedDependencies`: mostly fixed; first-party `actions/*` are still tag-pinned (Scorecard flags those).
+  - 1 Scorecard `Vulnerabilities` (esbuild GHSA-g7r4/-gv7w, joi GHSA-q7cg): fixed (esbuild 0.28.2, joi 17.13.8).
+  - Owner decision: turn on CodeQL default setup (free now the repo is public; it would close the stale CodeQL alerts), and dismiss the stale Scorecard alerts or restore a Scorecard workflow.
+- Issue #167 (monthly moderate audit): the 2026-09-30 refresh is an OOM crash trace (fixed since: `NODE_OPTIONS=--max-old-space-size=6144` in `audit-moderate.yml`). A local `pnpm audit --prod --audit-level=moderate` on 2026-10-26 finds 2 moderates, both mobile transitive: `decode-uri-component` ≤0.4.2 (via expo-router; fix 0.5.x is ESM-only) and `postcss-selector-parser` <7.1.6 (via gluestack; fix is a major). The 3 highs are the already-accepted ignores (node-forge, image-size ×2). Needs a decision: ignore with justification or wait for upstream.
 - Decisions waiting on the owner:
   - Orphaned PR #97 (household tier, 24 files): rescue or drop.
   - DigitalOcean runbook plus `docker-compose.prod.yml` (`a10f2a9`): rescue or drop.
   - Dismiss the accepted Dependabot alerts (node-forge, image-size ×2)?
   - `IF NOT EXISTS` in `20261020000000_reconcile_schema_drift`?
   - Chrome in the server image (PDFs need puppeteer).
+- Local dev notes (2026-10-26): no full Xcode on the dev Mac, so the iOS Simulator can't run (install Xcode, then `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`). The Android phone (`adb` 9236b2ad) has a debuggable build of `com.swasthparivar.app`; run it with `adb reverse tcp:8081 tcp:8081`, `adb reverse tcp:4000 tcp:4000`, Metro (`pnpm --filter @swasth/mobile start`) and the API (`pnpm --filter @swasth/server dev`). Admin console: `pnpm --filter @swasth/admin dev` (port 5174).
 - The repo was made **public** on 2026-10-25 after Actions billing blocked CI. The exposure check was clean: only `.env.example` placeholders, no `pull_request_target` workflows, only `GITHUB_TOKEN`, and gitleaks found 0 issues across full history.
 
 ## Resume Protocol
