@@ -62,7 +62,9 @@ filtered by `surface`.
 
 **Steps.**
 
-1. Set the flag to a one-user cohort:
+1. Set the flag to a one-user cohort. `userIds` are account (household
+   primary) ids; every profile on that phone follows its account, at the
+   API and in the app alike:
    ```bash
    curl -X PUT \
      -H "Authorization: Bearer $ADMIN_JWT" \

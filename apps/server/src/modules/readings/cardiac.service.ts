@@ -9,7 +9,7 @@ import { prisma } from "../../shared/database.js";
 import { logger } from "../../shared/logger.js";
 import { createQueue, enqueueBestEffort, QUEUE_NAMES } from "../../shared/queue.js";
 import { checkIdempotent } from "../../shared/idempotency.js";
-import { getFlag } from "../../shared/flags/index.js";
+import { isFeatureEnabledFor } from "../../shared/feature-gate.js";
 import { bypassOwner, getLastBypass, markBypassed } from "../../shared/critical-bypass-cooldown.js";
 import type { CriticalAlertMultiCategoryJob } from "../../workers/critical-alert.processor.js";
 import {
@@ -172,7 +172,7 @@ export const createCardiacLog = async (input: CreateCardiacInput): Promise<Creat
   // chest pain ≥ 7) stay alive on classifier read-paths even when the
   // write surface is disabled, so an existing CardiacLog still drives
   // bypass on its next sync if a guardian opens it later.
-  const enabled = await getFlag<boolean>("cardiac_logging_enabled", false);
+  const enabled = await isFeatureEnabledFor("cardiac_logging_enabled", input.userId);
   if (!enabled) {
     throw new DomainError(
       "CARDIAC_DISABLED",
