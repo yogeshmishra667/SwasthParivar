@@ -81,14 +81,18 @@ export interface TriggerSOSParams {
 /**
  * Real calls / SMS / IVR for this patient's SOS? Only when ops turned test
  * mode off for everyone (`sos_test_mode` exactly `false`), or rolled
- * `sos_real_mode_enabled` out to this household, e.g. a drill cohort. Any
- * other `sos_test_mode` value, a cohort included, keeps test mode (audit
- * D3). Before, a cohort object on `sos_test_mode` reached the Boolean
- * column as an object.
+ * `sos_real_mode_enabled` out to this household as a cohort or percentage,
+ * e.g. a drill cohort. Any other `sos_test_mode` value, a cohort included,
+ * keeps test mode (audit D3). Before, a cohort object on `sos_test_mode`
+ * reached the Boolean column as an object.
  */
 const resolveSOSTestMode = async (userId: string): Promise<boolean> => {
   const testMode = await getFlag<FlagValue>("sos_test_mode", true);
   if (testMode === false) return false;
+  // A plain `true` here would turn real mode on for everyone in one flip.
+  // That stays the explicit, two-reviewer `sos_test_mode=false`.
+  const realMode = await getFlag<FlagValue>("sos_real_mode_enabled", false);
+  if (typeof realMode === "boolean") return true;
   return !(await isFeatureEnabledFor("sos_real_mode_enabled", userId));
 };
 

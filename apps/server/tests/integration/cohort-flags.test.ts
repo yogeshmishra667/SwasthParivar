@@ -332,6 +332,12 @@ describe("SOS test mode (audit D3)", () => {
     expect((await trigger(other)).testMode).toBe(true);
   });
 
+  it("a plain sos_real_mode_enabled=true is ignored: real mode for everyone stays sos_test_mode=false", async () => {
+    await flag("sos_test_mode", true);
+    await flag("sos_real_mode_enabled", true);
+    expect((await trigger(await seedHousehold())).testMode).toBe(true);
+  });
+
   it("a cohort on sos_test_mode itself keeps test mode, and SOS still triggers", async () => {
     const h = await seedHousehold();
     await flag("sos_test_mode", cohortOf(h.primaryId));

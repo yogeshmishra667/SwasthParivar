@@ -12,7 +12,10 @@
 > **Cohorts.** Every SOS flag is resolved per household: a cohort lists
 > account (household primary) user ids, and a sub-profile on that phone
 > follows its account. A cohort on `sos_test_mode` itself does nothing
-> (test mode stays on); real mode for a cohort is `sos_real_mode_enabled`.
+> (test mode stays on); real mode for a cohort is `sos_real_mode_enabled`,
+> which takes only a cohort or percentage (a plain `true` is ignored).
+> `sos_test_mode=true` does NOT override it: to put everyone back in test
+> mode, set `sos_real_mode_enabled=false` as well.
 
 ---
 
