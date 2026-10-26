@@ -37,12 +37,32 @@ const openDialer = (phone: string): void => {
 
 interface CriticalAlertProps {
   visible: boolean;
-  value: number;
-  direction: "low" | "high";
+  /**
+   * Changes for every new alert while the modal stays up (e.g. a newer
+   * reading): the lock, the touch state and the auto-dial start over.
+   */
+  alertKey?: number;
+  /** Glucose mg/dL, shown as "<value> mg/dL" when there is no `valueLabel`. */
+  value?: number;
+  /** glucose / bp. */
+  direction?: "low" | "high";
   /** Picks the copy. Defaults to glucose (the Phase 1 alert). */
-  category?: "glucose" | "bp";
+  category?: "glucose" | "bp" | "cardiac" | "respiratory";
+  /** cardiac / respiratory copy, e.g. "hr_low" (see `criticalReasonKey`). */
+  reasonKey?: string;
   /** Reading as shown, e.g. "190/120 mmHg". Defaults to "<value> mg/dL". */
   valueLabel?: string;
+  /**
+   * "guardian": a family member's phone, alerted by push about their
+   * patient. No dismiss lock and no auto-dial; it can open the patient's
+   * details. Defaults to "patient".
+   */
+  audience?: "patient" | "guardian";
+  /** Overrides the copy, e.g. a push's own localised title and body. */
+  title?: string;
+  body?: string;
+  /** Guardian: opens the patient's details. */
+  onOpenDetails?: () => void;
   /**
    * The profile the reading belongs to. Its priority-1 emergency contact
    * is the call target (audit P2); 112 is always offered as well.
@@ -57,15 +77,23 @@ const HAPTIC_PULSE_MS = 4000;
 
 export const CriticalAlert = ({
   visible,
+  alertKey = 0,
   value,
-  direction,
+  direction = "low",
   category = "glucose",
+  reasonKey,
   valueLabel,
+  audience = "patient",
+  title,
+  body,
+  onOpenDetails,
   userId,
   onDismiss,
 }: CriticalAlertProps): JSX.Element => {
   const { t } = useTranslation();
-  const [secondsLeft, setSecondsLeft] = useState(LOCK_SECONDS);
+  // The patient can't dismiss for 30s; a guardian alert can be closed at once.
+  const lockSeconds = audience === "guardian" ? 0 : LOCK_SECONDS;
+  const [secondsLeft, setSecondsLeft] = useState(lockSeconds);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hapticRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const found = usePriorityContact(userId, visible);
@@ -83,11 +111,11 @@ export const CriticalAlert = ({
   // Countdown + haptic pulse lifecycle.
   useEffect(() => {
     if (!visible) {
-      setSecondsLeft(LOCK_SECONDS);
+      setSecondsLeft(lockSeconds);
       return;
     }
     hapticCritical();
-    setSecondsLeft(LOCK_SECONDS);
+    setSecondsLeft(lockSeconds);
 
     tickRef.current = setInterval(() => {
       setSecondsLeft((s) => (s > 0 ? s - 1 : 0));
@@ -100,7 +128,12 @@ export const CriticalAlert = ({
       tickRef.current = null;
       hapticRef.current = null;
     };
-  }, [visible]);
+  }, [visible, lockSeconds, alertKey]);
+
+  // A new alert starts untouched, so its own auto-dial runs.
+  useEffect(() => {
+    setTouched(false);
+  }, [alertKey]);
 
   // CLAUDE.md Edge Case #1: 60s without a tap → open the dialer to the
   // priority-1 contact. Opening the dialer places no call by itself.
@@ -117,7 +150,7 @@ export const CriticalAlert = ({
       openDialer(target.phone);
     }, CRITICAL_AUTO_DIAL_MS);
     return () => clearTimeout(timer);
-  }, [visible, touched]);
+  }, [visible, touched, alertKey]);
 
   const dismissible = secondsLeft === 0;
 
@@ -132,8 +165,20 @@ export const CriticalAlert = ({
     return () => sub.remove();
   }, [visible, dismissible, onDismiss]);
 
-  const copyPrefix = category === "bp" ? "critical.bp" : "critical";
-  const copySuffix = direction === "low" ? "Low" : "High";
+  const copy = ((): { title: string; body: string } => {
+    if (title !== undefined && body !== undefined) return { title, body };
+    if (category === "cardiac" || category === "respiratory") {
+      const key = reasonKey ?? "generic";
+      return {
+        title: t(`critical.${category}.title.${key}`),
+        body: t(`critical.${category}.body.${key}`),
+      };
+    }
+    const prefix = category === "bp" ? "critical.bp" : "critical";
+    const suffix = direction === "low" ? "Low" : "High";
+    return { title: t(`${prefix}.alertTitle${suffix}`), body: t(`${prefix}.alertBody${suffix}`) };
+  })();
+  const shownValue = valueLabel ?? (value !== undefined ? `${value} mg/dL` : null);
 
   return (
     <Modal
@@ -151,13 +196,11 @@ export const CriticalAlert = ({
           className="px-6"
         >
           <Icon name="warning" size={72} color="#FFFFFF" accessibilityLabel="Critical alert" />
-          <Text className="mt-4 text-hero font-bold text-white text-center">
-            {t(`${copyPrefix}.alertTitle${copySuffix}`)}
-          </Text>
-          <Text className="mt-2 text-hero text-white">{valueLabel ?? `${value} mg/dL`}</Text>
-          <Text className="mt-4 text-center text-important text-white">
-            {t(`${copyPrefix}.alertBody${copySuffix}`)}
-          </Text>
+          <Text className="mt-4 text-hero font-bold text-white text-center">{copy.title}</Text>
+          {shownValue !== null ? (
+            <Text className="mt-2 text-hero text-white">{shownValue}</Text>
+          ) : null}
+          <Text className="mt-4 text-center text-important text-white">{copy.body}</Text>
           <View className="mt-4 w-full justify-center" style={contact ? HINT_AREA : undefined}>
             {contact ? (
               <View className="rounded-xl px-4 py-2" style={{ backgroundColor: DARK_RED }}>
@@ -173,6 +216,14 @@ export const CriticalAlert = ({
             ) : null}
           </View>
           <View className="mt-4 w-full gap-3">
+            {onOpenDetails ? (
+              <Button
+                label={t("critical.openDetails")}
+                style={FILLED}
+                textStyle={FILLED_TEXT}
+                onPress={onOpenDetails}
+              />
+            ) : null}
             {contact ? (
               <Button
                 label={t("critical.callContact", { name: contact.name })}
@@ -183,8 +234,8 @@ export const CriticalAlert = ({
             ) : null}
             <Button
               label={t("critical.callEmergency")}
-              style={contact ? OUTLINED : FILLED}
-              textStyle={contact ? OUTLINED_TEXT : FILLED_TEXT}
+              style={contact || onOpenDetails ? OUTLINED : FILLED}
+              textStyle={contact || onOpenDetails ? OUTLINED_TEXT : FILLED_TEXT}
               onPress={() => openDialer(EMERGENCY_NUMBER)}
             />
             <Button

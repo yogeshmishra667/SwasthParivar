@@ -236,9 +236,15 @@ describe("BP critical bypass (audit P4)", () => {
 
     // The worker sends the BP copy — both readings inline — to push + SMS.
     await processCriticalAlert({ id: jobs[0]!.id!, data: (jobs[0] as { data: unknown }).data });
-    const pushed = sendExpoPushMock.mock.calls[0]![0] as { title: string; body: string }[];
+    const pushed = sendExpoPushMock.mock.calls[0]![0] as {
+      title: string;
+      body: string;
+      data: { valueLabel?: string };
+    }[];
     expect(pushed[0]!.title).toContain(dir === "high" ? "BP Bahut Zyada" : "BP Bahut Kam");
     expect(pushed[0]!.body).toContain(`${sys}/${dia}`);
+    // The app raises its fullscreen alert from this push, with the value (P3).
+    expect(pushed[0]!.data.valueLabel).toBe(`${sys}/${dia} mmHg`);
     const sms = sendSmsBatchMock.mock.calls[0]![0] as { phone: string; message: string }[];
     expect(sms[0]!.phone).toBe(seed.contactPhone);
     expect(sms[0]!.message).toContain(`${sys}/${dia}`);
