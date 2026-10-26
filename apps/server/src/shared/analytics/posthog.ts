@@ -52,7 +52,7 @@ export interface EventPropsMap {
     // categories without per-category branches.
     value_mg_dl?: number;
     severity?: "low" | "high";
-    category?: "glucose" | "cardiac" | "respiratory";
+    category?: "glucose" | "bp" | "cardiac" | "respiratory";
     copy_key?: string;
     push_targets: number;
     push_success: boolean;
@@ -369,7 +369,7 @@ export interface EventPropsMap {
     // same `critical_alert` surface; the category disambiguates which
     // chain ran. Optional so the historical glucose-only emission
     // shape continues to validate unchanged.
-    category?: "glucose" | "cardiac" | "respiratory";
+    category?: "glucose" | "bp" | "cardiac" | "respiratory";
     household_size: number;
   };
   // Emitted by the admin "Send test push" endpoint. distinctId is the

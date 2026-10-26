@@ -5,10 +5,11 @@
 // they don't need.
 
 import { useCallback, useEffect, useState } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { View, Text, ScrollView, Pressable, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { isCriticalGlucose } from "@swasth/shared-types";
+import { bpCriticalDirection, isCriticalGlucose } from "@swasth/shared-types";
 import type { GlucoseReadingType, MealCategory, MealType } from "@swasth/shared-types";
 import type { NumericVoiceParseResult, VoiceParseResult } from "@swasth/domain-logic";
 import { useTranslation } from "react-i18next";
@@ -95,10 +96,13 @@ export default function LogScreen(): JSX.Element {
     visible: boolean;
     value: number;
     direction: "low" | "high";
+    category?: "glucose" | "bp";
+    valueLabel?: string;
   }>({ visible: false, value: 0, direction: "low" });
 
   // BP
   const [parsedBP, setParsedBP] = useState<ParsedBP | null>(null);
+  const [bpClientUuid, setBPClientUuid] = useState<string | null>(null);
 
   // Cardiac + Respiratory (Phase 4 Feature E, flag-gated below)
   const cardiacEnabled = useFeatureEnabled("cardiac_logging");
@@ -255,17 +259,34 @@ export default function LogScreen(): JSX.Element {
   // ── BP ─────────────────────────────────────────────────────
   const handleBPSubmit = (params: ParsedBP): void => {
     setParsedBP(params);
+    // One id per entered reading: every retry of it is an idempotent replay.
+    setBPClientUuid(uuidv4());
     setStage("confirm");
   };
 
   const saveBP = async (): Promise<void> => {
-    if (!parsedBP || !userId) return;
+    if (!parsedBP || !userId || !bpClientUuid) return;
     hapticSave();
     setSaveError(null);
     setSaving(true);
+    // Critical BP (CLAUDE.md thresholds, shared with the server) raises the
+    // fullscreen alert right away — before the network call, which can take
+    // up to its 10s timeout on a bad connection. Push/SMS is the server's job.
+    const bpDirection = bpCriticalDirection(parsedBP.systolic, parsedBP.diastolic);
+    if (bpDirection) {
+      setCriticalAlert({
+        visible: true,
+        value: parsedBP.systolic,
+        direction: bpDirection,
+        category: "bp",
+        valueLabel: `${parsedBP.systolic}/${parsedBP.diastolic} mmHg`,
+      });
+      track("critical_bypass_triggered", { category: "bp", value: parsedBP.systolic });
+    }
     try {
       const result = await saveBPReading({
         userId,
+        clientUuid: bpClientUuid,
         systolic: parsedBP.systolic,
         diastolic: parsedBP.diastolic,
         ...(parsedBP.pulse !== undefined ? { pulse: parsedBP.pulse } : {}),
@@ -282,13 +303,12 @@ export default function LogScreen(): JSX.Element {
         setStage("saved");
         return;
       }
-      if (result.kind === "queued") {
-        setSavedOffline(true);
-        setSavedSummary({
-          headline: `${parsedBP.systolic}/${parsedBP.diastolic} mmHg`,
-          detail: t("bp.savedOffline"),
-        });
-        setStage("saved");
+      if (result.kind === "network_failed") {
+        // BP has no local queue: say so, and keep the same reading on screen
+        // so "Save" retries it (same id → no duplicate).
+        setSaveError(
+          result.retrying ? t("bp.saveFailedCriticalRetrying") : t("bp.saveFailedNetwork"),
+        );
         return;
       }
       setSaveError(t("bp.saveFailed"));
@@ -495,6 +515,8 @@ export default function LogScreen(): JSX.Element {
           visible={criticalAlert.visible}
           value={criticalAlert.value}
           direction={criticalAlert.direction}
+          {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
+          {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
           contactName="Emergency"
           contactPhone="112"
           onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}
@@ -505,16 +527,29 @@ export default function LogScreen(): JSX.Element {
 
   if (stage === "confirm" && mode === "bp" && parsedBP) {
     return (
-      <BPConfirmationScreen
-        systolic={parsedBP.systolic}
-        diastolic={parsedBP.diastolic}
-        {...(parsedBP.pulse !== undefined ? { pulse: parsedBP.pulse } : {})}
-        onConfirm={() => void saveBP()}
-        onEdit={() => {
-          setSaveError(null);
-          setStage("input");
-        }}
-      />
+      <>
+        <BPConfirmationScreen
+          systolic={parsedBP.systolic}
+          diastolic={parsedBP.diastolic}
+          {...(parsedBP.pulse !== undefined ? { pulse: parsedBP.pulse } : {})}
+          onConfirm={() => void saveBP()}
+          onEdit={() => {
+            setSaveError(null);
+            setStage("input");
+          }}
+        />
+        {/* A rejected save stays on this screen — the alert must still show. */}
+        <CriticalAlert
+          visible={criticalAlert.visible}
+          value={criticalAlert.value}
+          direction={criticalAlert.direction}
+          {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
+          {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
+          contactName="Emergency"
+          contactPhone="112"
+          onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}
+        />
+      </>
     );
   }
 
@@ -652,6 +687,8 @@ export default function LogScreen(): JSX.Element {
           visible={criticalAlert.visible}
           value={criticalAlert.value}
           direction={criticalAlert.direction}
+          {...(criticalAlert.category ? { category: criticalAlert.category } : {})}
+          {...(criticalAlert.valueLabel ? { valueLabel: criticalAlert.valueLabel } : {})}
           contactName="Emergency"
           contactPhone="112"
           onDismiss={() => setCriticalAlert((c) => ({ ...c, visible: false }))}

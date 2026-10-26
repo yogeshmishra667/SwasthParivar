@@ -1,20 +1,23 @@
-// Phase 2 — BP reading service. Mirrors `readings.ts` but online-only:
-// BP isn't on the WatermelonDB hypertable yet (Phase 1 reserved local
-// queue space for glucose only). When the network is unavailable we
-// surface a `queued` result with no local persistence so the UI can
-// still tell the user the reading is safe, and the user can retry by
-// pulling-to-refresh once online. The plumbing for a true offline queue
-// will land alongside the meal/BP schema migration in Phase 3.
+// BP reading service. Online-only: BP has no local (WatermelonDB) queue
+// yet. A network failure is therefore reported honestly as "not saved"
+// (never "saved locally") and the caller keeps the same `clientUuid` so a
+// retry is an idempotent replay on the server, never a duplicate. A
+// CRITICAL BP is also re-sent in the background until it lands, so the
+// server-side family alert (push + SMS) still goes out once the network
+// returns (P4 review C1). It is persisted, so an app kill or restart
+// doesn't drop it: `resumePendingCriticalBP` picks it up again (W1).
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { isAxiosError } from "axios";
-import { v4 as uuidv4 } from "uuid";
-import type { ReadingContext, ReadingSource } from "@swasth/shared-types";
+import { isCriticalBP, type ReadingContext, type ReadingSource } from "@swasth/shared-types";
 
 import { api } from "@/services/api";
 import { logError, track } from "@/services/analytics";
 
 export interface SaveBPInput {
   userId: string;
+  /** Stable per reading: every retry of the same reading reuses it. */
+  clientUuid: string;
   systolic: number;
   diastolic: number;
   pulse?: number;
@@ -33,7 +36,8 @@ export interface ServerBPResponse {
 
 export type SaveBPResult =
   | { kind: "synced"; readingId: string }
-  | { kind: "queued"; clientUuid: string }
+  /** Not saved — no network / server error. `retrying`: critical BP being re-sent in the background. */
+  | { kind: "network_failed"; retrying: boolean }
   | { kind: "rejected"; status: number; code: string | null; message: string };
 
 const isNetworkOrServerError = (err: unknown): boolean => {
@@ -42,9 +46,137 @@ const isNetworkOrServerError = (err: unknown): boolean => {
   return err.response.status >= 500;
 };
 
+// Answers after which the server may still accept the same reading later:
+// an expired session (401), a timeout (408) or a rate limit (429).
+const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([401, 408, 429]);
+
+/** True when a critical BP must stay pending: the server hasn't accepted or refused it for good. */
+const isRetryable = (err: unknown): boolean =>
+  isNetworkOrServerError(err) ||
+  (isAxiosError(err) && err.response !== undefined && RETRYABLE_STATUSES.has(err.response.status));
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+interface BPPayload {
+  clientUuid: string;
+  [field: string]: unknown;
+}
+
+// Critical BPs not yet on the server, persisted across app restarts.
+const PENDING_KEY = "swasth.pendingCriticalBP.v1";
+// Past this age a re-send is dropped: the server would page the family
+// "BP very high" for a reading hours old.
+const PENDING_MAX_AGE_MS = 2 * 60 * 60_000;
+
+interface PendingCriticalBP {
+  payload: BPPayload;
+  queuedAt: string;
+}
+
+const readPending = async (): Promise<PendingCriticalBP[]> => {
+  try {
+    const raw = await AsyncStorage.getItem(PENDING_KEY);
+    return raw ? (JSON.parse(raw) as PendingCriticalBP[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const writePending = async (items: readonly PendingCriticalBP[]): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(items));
+  } catch (err) {
+    logError("pendingCriticalBP", err);
+  }
+};
+
+// Every read-modify-write of the queue runs one at a time, so a clear
+// for one reading can't drop another reading's concurrent persist.
+let pendingQueueTail: Promise<unknown> = Promise.resolve();
+const updatePending = (
+  update: (items: PendingCriticalBP[]) => PendingCriticalBP[],
+): Promise<PendingCriticalBP[]> => {
+  const run = pendingQueueTail.then(async () => {
+    const next = update(await readPending());
+    await writePending(next);
+    return next;
+  });
+  pendingQueueTail = run.catch(() => undefined);
+  return run;
+};
+
+const persistPending = async (payload: BPPayload): Promise<void> => {
+  await updatePending((items) =>
+    items.some((i) => i.payload.clientUuid === payload.clientUuid)
+      ? items
+      : [...items, { payload, queuedAt: new Date().toISOString() }],
+  );
+};
+
+const clearPending = async (clientUuid: string): Promise<void> => {
+  await updatePending((items) => items.filter((i) => i.payload.clientUuid !== clientUuid));
+};
+
+// Background re-send for a critical BP that failed to reach the server.
+const CRITICAL_RETRY_BACKOFF_MS = [5_000, 15_000, 30_000, 60_000, 120_000] as const;
+const retryingInBackground = new Set<string>();
+
+const resendCriticalInBackground = (
+  payload: BPPayload,
+  backoffMs: readonly number[] = CRITICAL_RETRY_BACKOFF_MS,
+): void => {
+  const { clientUuid } = payload;
+  if (retryingInBackground.has(clientUuid)) return;
+  retryingInBackground.add(clientUuid);
+  void (async () => {
+    try {
+      for (const [attempt, delayMs] of backoffMs.entries()) {
+        await sleep(delayMs);
+        try {
+          await api.post("/readings/bp", payload);
+          track("critical_bp_background_sync", { attempt: attempt + 1, delivered: true });
+          await clearPending(clientUuid);
+          return;
+        } catch (err) {
+          if (!isRetryable(err)) {
+            // The server refused it for good (e.g. validation), or a 409:
+            // a newer version is already stored. Nothing to retry.
+            await clearPending(clientUuid);
+            return;
+          }
+        }
+      }
+      // Still pending: the next resume (reconnect, app start, 60s sync tick)
+      // tries again.
+      track("critical_bp_background_sync", { attempt: backoffMs.length, delivered: false });
+    } finally {
+      retryingInBackground.delete(clientUuid);
+    }
+  })();
+};
+
+/**
+ * Re-sends every persisted critical BP not yet on the server. Called by
+ * the sync drain on app start, on reconnect and every 60s; a reading
+ * already being re-sent is skipped.
+ */
+export const resumePendingCriticalBP = async (): Promise<void> => {
+  let expired = 0;
+  const fresh = await updatePending((items) => {
+    const now = Date.now();
+    const kept = items.filter((i) => now - Date.parse(i.queuedAt) < PENDING_MAX_AGE_MS);
+    expired = items.length - kept.length;
+    return kept;
+  });
+  if (expired > 0) track("critical_bp_background_sync_expired", { count: expired });
+  for (const item of fresh)
+    resendCriticalInBackground(item.payload, [0, ...CRITICAL_RETRY_BACKOFF_MS]);
+};
+
 export const saveBPReading = async (input: SaveBPInput): Promise<SaveBPResult> => {
-  const clientUuid = uuidv4();
-  const payload = {
+  const clientUuid = input.clientUuid;
+  const critical = isCriticalBP(input.systolic, input.diastolic);
+  const payload: BPPayload = {
     clientUuid,
     systolic: input.systolic,
     diastolic: input.diastolic,
@@ -55,7 +187,7 @@ export const saveBPReading = async (input: SaveBPInput): Promise<SaveBPResult> =
     measuredAt: input.measuredAtIso,
     version: 1,
     targetUserId: input.userId,
-  } as const;
+  };
 
   try {
     const res = await api.post<ServerBPResponse>("/readings/bp", payload);
@@ -65,21 +197,22 @@ export const saveBPReading = async (input: SaveBPInput): Promise<SaveBPResult> =
       value: input.systolic,
       offline: false,
     });
+    // A manual retry that lands supersedes any background re-send.
+    if (critical) await clearPending(clientUuid);
     return { kind: "synced", readingId: res.data.reading.id };
   } catch (err) {
-    if (isNetworkOrServerError(err)) {
-      // No local persistence yet — surface as queued so the UI shows a
-      // friendly message. Recovery: user retries when online.
-      track("reading_logged", {
-        type: "bp",
-        source: input.source,
-        value: input.systolic,
-        offline: true,
-      });
-      return { kind: "queued", clientUuid };
+    // A critical BP is also kept when the session expired or the server
+    // throttled it (review W2): the family alert depends on it landing.
+    if (isNetworkOrServerError(err) || (critical && isRetryable(err))) {
+      if (critical) {
+        await persistPending(payload);
+        resendCriticalInBackground(payload);
+      }
+      return { kind: "network_failed", retrying: critical };
     }
 
     if (isAxiosError(err) && err.response) {
+      if (critical) await clearPending(clientUuid);
       const data = err.response.data as { error?: { code?: string; message?: string } } | undefined;
       return {
         kind: "rejected",

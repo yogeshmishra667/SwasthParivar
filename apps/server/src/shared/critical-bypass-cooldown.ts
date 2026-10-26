@@ -28,7 +28,7 @@ const REDIS_TIMEOUT_MS = 500;
 
 const bounded = <T>(p: Promise<T>): Promise<T> => withTimeout(p, REDIS_TIMEOUT_MS, "redis");
 
-type Category = "cardiac" | "respiratory";
+type Category = "bp" | "cardiac" | "respiratory";
 
 const key = (category: Category, userId: string): string =>
   `critical_bypass:cooldown:${category}:${userId}`;
