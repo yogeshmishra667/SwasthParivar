@@ -19,6 +19,9 @@
  *                             change; a 503 only delays them into the
  *                             provider's retry window (audit D8).
  *
+ * So SOS keeps writing SOSEvent rows during maintenance: a migration of
+ * the SOS tables is not quiesced by this toggle.
+ *
  * Fail-safe: `getFlag` returns the default `false` if Redis is down, so
  * a flag-store outage never traps the API in maintenance mode.
  *
@@ -31,12 +34,10 @@ import { DomainError } from "@swasth/shared-types";
 import { getFlag } from "../flags/index.js";
 
 // Whole path segments only: /api/v1/sos and /api/v1/sos/..., never /api/v1/sosfoo.
-const EXEMPT_ROUTERS = ["/api/v1/sos", "/api/v1/webhooks"] as const;
+const EXEMPT_PREFIXES = ["/health", "/admin", "/api/v1/sos", "/api/v1/webhooks"] as const;
 
 const isExempt = (path: string): boolean =>
-  path.startsWith("/health") ||
-  path.startsWith("/admin") ||
-  EXEMPT_ROUTERS.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+  EXEMPT_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 
 export const maintenanceMode = async (
   req: Request,
