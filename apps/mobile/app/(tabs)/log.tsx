@@ -78,6 +78,11 @@ interface ParsedBP {
   pulse?: number;
 }
 
+const newEntry = (): { clientUuid: string; takenAtIso: string } => ({
+  clientUuid: uuidv4(),
+  takenAtIso: new Date().toISOString(),
+});
+
 export default function LogScreen(): JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
@@ -119,9 +124,14 @@ export default function LogScreen(): JSX.Element {
     if (userId) void refreshPriorityContact(userId);
   }, [userId]);
 
+  // A new profile is a new entry: never replay one profile's reading id
+  // for another (the server would answer with the first profile's row).
+  useEffect(() => {
+    setEntry(newEntry());
+  }, [userId]);
+
   // BP
   const [parsedBP, setParsedBP] = useState<ParsedBP | null>(null);
-  const [bpClientUuid, setBPClientUuid] = useState<string | null>(null);
 
   // Cardiac + Respiratory (Phase 4 Feature E, flag-gated below)
   const cardiacEnabled = useFeatureEnabled("cardiac_logging");
@@ -145,7 +155,10 @@ export default function LogScreen(): JSX.Element {
   // Shared post-save state
   const [undoVisible, setUndoVisible] = useState(false);
   const [savedOffline, setSavedOffline] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  // `critical`: the failed entry is critical and the family wasn't alerted,
+  // so the confirm screen offers the call (audit P8 safety review W2).
+  const [saveError, setSaveError] = useState<{ message: string; critical: boolean } | null>(null);
+  const failSave = (message: string, critical = false): void => setSaveError({ message, critical });
   // Glucose daily-cap state. Persists for the session so a switch
   // away to BP/Meal and back still shows the cap card — the server
   // counter doesn't reset until the next 3 AM IST boundary.
@@ -157,9 +170,10 @@ export default function LogScreen(): JSX.Element {
   const [saving, setSaving] = useState(false);
   // A critical log stored offline: the saved screen offers the call.
   const [savedOfflineCritical, setSavedOfflineCritical] = useState(false);
-  // One id per entered glucose / cardiac / respiratory log, like BP's: a
-  // retry after a failed save is an idempotent replay, never a duplicate.
-  const [entryClientUuid, setEntryClientUuid] = useState<string>(() => uuidv4());
+  // One id and one taken-at time per entered glucose / BP / cardiac /
+  // respiratory reading. A retry after a failed save is an idempotent replay
+  // with the same measuredAt, never a duplicate row.
+  const [entry, setEntry] = useState(newEntry);
 
   const resetForNext = useCallback(
     (nextMode?: LogMode): void => {
@@ -204,13 +218,13 @@ export default function LogScreen(): JSX.Element {
       type: result.readingType,
       uncertain: result.requiresTypeConfirmation,
     });
-    setEntryClientUuid(uuidv4());
+    setEntry(newEntry());
     setStage("confirm");
   };
 
   const handleNumpad = (value: number): void => {
     setParsedGlucose({ value, type: "fasting", uncertain: true });
-    setEntryClientUuid(uuidv4());
+    setEntry(newEntry());
     setStage("confirm");
   };
 
@@ -225,12 +239,12 @@ export default function LogScreen(): JSX.Element {
     try {
       const result = await saveGlucoseReading({
         userId,
-        clientUuid: entryClientUuid,
+        clientUuid: entry.clientUuid,
         valueMgDl: parsedGlucose.value,
         readingType: type,
         context,
         source: inputMethod === "voice" ? "voice" : "manual",
-        measuredAtIso: new Date().toISOString(),
+        measuredAtIso: entry.takenAtIso,
       });
 
       if (result.kind === "synced") {
@@ -282,7 +296,11 @@ export default function LogScreen(): JSX.Element {
         track("rate_limit_hit", { surface: "readings", value: parsedGlucose.value });
         return;
       }
-      setSaveError(
+      if (isCriticalGlucose(parsedGlucose.value)) {
+        failSave(t("logging.saveFailedCritical"), true);
+        return;
+      }
+      failSave(
         result.code === "OFFLINE_QUEUE_UNAVAILABLE"
           ? t("logging.saveFailedNetwork")
           : t("logging.saveFailed"),
@@ -295,13 +313,12 @@ export default function LogScreen(): JSX.Element {
   // ── BP ─────────────────────────────────────────────────────
   const handleBPSubmit = (params: ParsedBP): void => {
     setParsedBP(params);
-    // One id per entered reading: every retry of it is an idempotent replay.
-    setBPClientUuid(uuidv4());
+    setEntry(newEntry());
     setStage("confirm");
   };
 
   const saveBP = async (): Promise<void> => {
-    if (!parsedBP || !userId || !bpClientUuid) return;
+    if (!parsedBP || !userId) return;
     setSaveError(null);
     setSaving(true);
     // Critical BP (CLAUDE.md thresholds, shared with the server) raises the
@@ -321,12 +338,12 @@ export default function LogScreen(): JSX.Element {
     try {
       const result = await saveBPReading({
         userId,
-        clientUuid: bpClientUuid,
+        clientUuid: entry.clientUuid,
         systolic: parsedBP.systolic,
         diastolic: parsedBP.diastolic,
         ...(parsedBP.pulse !== undefined ? { pulse: parsedBP.pulse } : {}),
         source: "manual",
-        measuredAtIso: new Date().toISOString(),
+        measuredAtIso: entry.takenAtIso,
       });
 
       if (result.kind === "synced") {
@@ -351,12 +368,16 @@ export default function LogScreen(): JSX.Element {
       if (result.kind === "network_failed") {
         // Not stored on the phone either: say so, and keep the same reading
         // on screen so "Save" retries it (same id → no duplicate).
-        setSaveError(
+        failSave(
           result.retrying ? t("bp.saveFailedCriticalRetrying") : t("bp.saveFailedNetwork"),
+          bpDirection !== null,
         );
         return;
       }
-      setSaveError(t("bp.saveFailed"));
+      failSave(
+        bpDirection ? t("logging.saveFailedCritical") : t("bp.saveFailed"),
+        bpDirection !== null,
+      );
     } finally {
       setSaving(false);
     }
@@ -365,7 +386,7 @@ export default function LogScreen(): JSX.Element {
   // ── Cardiac (Phase 4 Feature E) ────────────────────────────
   const handleCardiacSubmit = (params: ParsedCardiacInput): void => {
     setParsedCardiac(params);
-    setEntryClientUuid(uuidv4());
+    setEntry(newEntry());
     setStage("confirm");
   };
 
@@ -405,7 +426,7 @@ export default function LogScreen(): JSX.Element {
     try {
       const result = await saveCardiacLog({
         userId,
-        clientUuid: entryClientUuid,
+        clientUuid: entry.clientUuid,
         heartRate: parsedCardiac.heartRate,
         rhythmStatus: parsedCardiac.rhythmStatus,
         chestPain: parsedCardiac.chestPain,
@@ -414,7 +435,7 @@ export default function LogScreen(): JSX.Element {
           : {}),
         exerciseTolerance: parsedCardiac.exerciseTolerance,
         source: "manual",
-        measuredAtIso: new Date().toISOString(),
+        measuredAtIso: entry.takenAtIso,
       });
 
       if (result.kind === "synced") {
@@ -441,15 +462,22 @@ export default function LogScreen(): JSX.Element {
         showSaved();
         return;
       }
+      const cardiacCritical = cardiacLocal !== null;
       if (result.kind === "network_failed") {
-        setSaveError(t("logging.saveFailedNetwork"));
+        failSave(
+          t(cardiacCritical ? "logging.saveFailedCritical" : "logging.saveFailedNetwork"),
+          cardiacCritical,
+        );
         return;
       }
       if (result.code === "CARDIAC_DISABLED") {
-        setSaveError(t("cardiac.disabled"));
+        failSave(t("cardiac.disabled"), cardiacCritical);
         return;
       }
-      setSaveError(t("cardiac.saveFailed"));
+      failSave(
+        t(cardiacCritical ? "logging.saveFailedCritical" : "cardiac.saveFailed"),
+        cardiacCritical,
+      );
     } finally {
       setSaving(false);
     }
@@ -458,7 +486,7 @@ export default function LogScreen(): JSX.Element {
   // ── Respiratory (Phase 4 Feature E) ────────────────────────
   const handleRespiratorySubmit = (params: ParsedRespiratoryInput): void => {
     setParsedRespiratory(params);
-    setEntryClientUuid(uuidv4());
+    setEntry(newEntry());
     setStage("confirm");
   };
 
@@ -491,7 +519,7 @@ export default function LogScreen(): JSX.Element {
     try {
       const result = await saveRespiratoryLog({
         userId,
-        clientUuid: entryClientUuid,
+        clientUuid: entry.clientUuid,
         ...(parsedRespiratory.peakFlow !== undefined
           ? { peakFlow: parsedRespiratory.peakFlow }
           : {}),
@@ -499,7 +527,7 @@ export default function LogScreen(): JSX.Element {
         ...(parsedRespiratory.puffs !== undefined ? { puffs: parsedRespiratory.puffs } : {}),
         symptomSeverity: parsedRespiratory.symptomSeverity,
         source: "manual",
-        measuredAtIso: new Date().toISOString(),
+        measuredAtIso: entry.takenAtIso,
       });
 
       const headline =
@@ -528,15 +556,22 @@ export default function LogScreen(): JSX.Element {
         showSaved();
         return;
       }
+      const respiratoryCritical = respiratoryLocal !== null;
       if (result.kind === "network_failed") {
-        setSaveError(t("logging.saveFailedNetwork"));
+        failSave(
+          t(respiratoryCritical ? "logging.saveFailedCritical" : "logging.saveFailedNetwork"),
+          respiratoryCritical,
+        );
         return;
       }
       if (result.code === "RESPIRATORY_DISABLED") {
-        setSaveError(t("respiratory.disabled"));
+        failSave(t("respiratory.disabled"), respiratoryCritical);
         return;
       }
-      setSaveError(t("respiratory.saveFailed"));
+      failSave(
+        t(respiratoryCritical ? "logging.saveFailedCritical" : "respiratory.saveFailed"),
+        respiratoryCritical,
+      );
     } finally {
       setSaving(false);
     }
@@ -579,10 +614,10 @@ export default function LogScreen(): JSX.Element {
         return;
       }
       if (result.kind === "network_failed") {
-        setSaveError(t("logging.saveFailedNetwork"));
+        failSave(t("logging.saveFailedNetwork"));
         return;
       }
-      setSaveError(t("meals.saveFailed"));
+      failSave(t("meals.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -592,7 +627,10 @@ export default function LogScreen(): JSX.Element {
   if (stage === "confirm" && mode === "glucose" && parsedGlucose) {
     return (
       <ConfirmationScreen
-        errorMessage={saveError}
+        errorMessage={saveError?.message ?? null}
+        errorAction={
+          saveError?.critical === true ? <OfflineCriticalCallButton userId={userId} /> : null
+        }
         saving={saving}
         value={parsedGlucose.value}
         type={parsedGlucose.type}
@@ -609,7 +647,10 @@ export default function LogScreen(): JSX.Element {
   if (stage === "confirm" && mode === "bp" && parsedBP) {
     return (
       <BPConfirmationScreen
-        errorMessage={saveError}
+        errorMessage={saveError?.message ?? null}
+        errorAction={
+          saveError?.critical === true ? <OfflineCriticalCallButton userId={userId} /> : null
+        }
         saving={saving}
         systolic={parsedBP.systolic}
         diastolic={parsedBP.diastolic}
@@ -626,7 +667,10 @@ export default function LogScreen(): JSX.Element {
   if (stage === "confirm" && mode === "cardiac" && parsedCardiac) {
     return (
       <CardiacConfirmationScreen
-        errorMessage={saveError}
+        errorMessage={saveError?.message ?? null}
+        errorAction={
+          saveError?.critical === true ? <OfflineCriticalCallButton userId={userId} /> : null
+        }
         saving={saving}
         heartRate={parsedCardiac.heartRate}
         rhythmStatus={parsedCardiac.rhythmStatus}
@@ -647,7 +691,10 @@ export default function LogScreen(): JSX.Element {
   if (stage === "confirm" && mode === "respiratory" && parsedRespiratory) {
     return (
       <RespiratoryConfirmationScreen
-        errorMessage={saveError}
+        errorMessage={saveError?.message ?? null}
+        errorAction={
+          saveError?.critical === true ? <OfflineCriticalCallButton userId={userId} /> : null
+        }
         saving={saving}
         {...(parsedRespiratory.peakFlow !== undefined
           ? { peakFlow: parsedRespiratory.peakFlow }
@@ -1000,7 +1047,7 @@ export default function LogScreen(): JSX.Element {
               )}
             </View>
             {inputToggle}
-            {saveError !== null && <SaveErrorNotice message={saveError} />}
+            {saveError !== null && <SaveErrorNotice message={saveError.message} />}
           </View>
         )}
       </SafeAreaView>
@@ -1036,7 +1083,7 @@ export default function LogScreen(): JSX.Element {
             )}
           </View>
           {inputToggle}
-          {saveError !== null && <SaveErrorNotice message={saveError} />}
+          {saveError !== null && <SaveErrorNotice message={saveError.message} />}
         </View>
       </SafeAreaView>
     );
@@ -1075,7 +1122,7 @@ export default function LogScreen(): JSX.Element {
 
         {(mode === "cardiac" || mode === "respiratory") && inputToggle}
 
-        {saveError !== null && <SaveErrorNotice message={saveError} />}
+        {saveError !== null && <SaveErrorNotice message={saveError.message} />}
       </ScrollView>
     </SafeAreaView>
   );

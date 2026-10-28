@@ -92,6 +92,7 @@
     "savedOfflineCritical": "Saved on this phone. Your family hasn't been alerted yet — don't wait, call now.",
     "saveFailed": "Could not save — try again.",
     "saveFailedNetwork": "Couldn't save — please try again in a little while.",
+    "saveFailedCritical": "Couldn't save, and your family hasn't been alerted. Don't wait — call now.",
     "rateLimited": {
       "title": "Daily limit reached",
       "body": "You've reached today's reading limit. You can log again tomorrow morning. Critical-low and critical-high readings always go through.",

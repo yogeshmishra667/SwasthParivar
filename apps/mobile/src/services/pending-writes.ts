@@ -153,7 +153,9 @@ const reportHold = (row: PendingWriteModel, reason: string, err?: unknown): void
   if (reportedHolds.has(row.clientUuid)) return;
   reportedHolds.add(row.clientUuid);
   if (err !== undefined) logError("drainPendingWrites.hold", err);
-  if (row.critical) {
+  // A critical log that will never alert anyone, or a row we can't read
+  // (a bug): Sentry, once per row per app session.
+  if (row.critical || reason === "unreadable") {
     captureError(err ?? new Error(`critical ${row.kind} log held: ${reason}`), {
       where: "drainPendingWrites.holdCritical",
       kind: row.kind,
@@ -203,19 +205,23 @@ export const drainPendingWrites = async (): Promise<{
     };
 
     for (const row of ordered) {
+      // A critical log queued meanwhile: stop before the non-critical tail
+      // so the rerun (critical first) sends it now.
+      if (rerunRequested && !row.critical) break;
       if (failingKinds.has(row.kind)) {
         held++;
         continue;
       }
       let body: unknown;
+      let parseErr: unknown;
       try {
         body = JSON.parse(row.payloadJson);
-      } catch (parseErr) {
-        captureError(parseErr, { where: "drainPendingWrites.parse", kind: row.kind });
+      } catch (err) {
+        parseErr = err;
       }
       if (body === undefined || !isPendingWriteKind(row.kind)) {
         // Never delete what we can't read: keep it for a later app version.
-        reportHold(row, "unreadable");
+        reportHold(row, "unreadable", parseErr);
         held++;
         continue;
       }
@@ -236,7 +242,10 @@ export const drainPendingWrites = async (): Promise<{
           continue;
         }
         if (code !== null && FEATURE_OFF_CODES.has(code)) {
+          // The rest of this kind would get the same answer: don't spend
+          // the shared per-minute limit on them.
           reportHold(row, "feature_off");
+          failingKinds.add(row.kind);
           held++;
           continue;
         }

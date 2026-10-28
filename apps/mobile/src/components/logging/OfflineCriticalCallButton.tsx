@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Linking } from "react-native";
+import { Linking, View } from "react-native";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
@@ -16,14 +16,22 @@ const openDialer = (phone: string): void => {
 };
 
 /**
- * On the saved screen of a critical log stored offline (audit P8): the
- * family alert waits for sync and the fullscreen alert can be closed after
- * 30s, so calling stays one tap here. The profile's priority-1 contact,
- * cached when the alert opened; 112 when there is none.
+ * For a critical log the family hasn't been alerted about yet (stored
+ * offline, or not saved at all; audit P8): the fullscreen alert can be closed
+ * after 30s, so calling stays one tap here. The profile's priority-1
+ * contact, cached when the alert opened, and 112 — like the alert. Nothing
+ * renders until the cache is read, so no button moves under the finger.
  */
-export const OfflineCriticalCallButton = ({ userId }: { userId: string | null }): JSX.Element => {
+export const OfflineCriticalCallButton = ({
+  userId,
+}: {
+  userId: string | null;
+}): JSX.Element | null => {
   const { t } = useTranslation();
-  const [contact, setContact] = useState<CallTarget | null>(null);
+  // undefined until the cache has been read.
+  const [contact, setContact] = useState<CallTarget | null | undefined>(
+    userId === null ? null : undefined,
+  );
 
   useEffect(() => {
     if (userId === null) return;
@@ -36,17 +44,21 @@ export const OfflineCriticalCallButton = ({ userId }: { userId: string | null })
     };
   }, [userId]);
 
-  return contact ? (
-    <Button
-      label={t("critical.callContact", { name: contact.name })}
-      variant="critical"
-      onPress={() => openDialer(contact.phone)}
-    />
-  ) : (
-    <Button
-      label={t("critical.callEmergency")}
-      variant="critical"
-      onPress={() => openDialer(EMERGENCY_NUMBER)}
-    />
+  if (contact === undefined) return null;
+  return (
+    <View className="gap-2">
+      {contact && (
+        <Button
+          label={t("critical.callContact", { name: contact.name })}
+          variant="critical"
+          onPress={() => openDialer(contact.phone)}
+        />
+      )}
+      <Button
+        label={t("critical.callEmergency")}
+        variant={contact ? "secondary" : "critical"}
+        onPress={() => openDialer(EMERGENCY_NUMBER)}
+      />
+    </View>
   );
 };

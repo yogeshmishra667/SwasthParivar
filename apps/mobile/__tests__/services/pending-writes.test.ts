@@ -264,12 +264,14 @@ describe("drainPendingWrites", () => {
     },
   );
 
-  it("a disabled feature (503) keeps its row and lets the rows behind it through", async () => {
+  it("a disabled feature (503) keeps its rows, without a request each, and lets others through", async () => {
     queue("c1", "cardiac", "2026-10-26T08:00:00Z");
+    queue("c2", "cardiac", "2026-10-26T08:00:30Z");
     queue("b1", "bp", "2026-10-26T08:01:00Z");
     post.mockRejectedValueOnce(coded(503, "CARDIAC_DISABLED")).mockResolvedValueOnce({ data: {} });
-    await expect(drainPendingWrites()).resolves.toEqual({ pushed: 1, failed: 0, held: 1 });
-    expect(queuedUuids()).toEqual(["c1"]);
+    await expect(drainPendingWrites()).resolves.toEqual({ pushed: 1, failed: 0, held: 2 });
+    expect(sentUuids()).toEqual(["c1", "b1"]);
+    expect(queuedUuids()).toEqual(["c1", "c2"]);
   });
 
   it("deletes a row the server refused for good, and reports it to Sentry", async () => {
@@ -345,8 +347,11 @@ describe("drainPendingWrites", () => {
     });
     queue("future", "glucose_v2" as PendingWriteKind, "2026-10-26T08:00:00Z");
     await expect(drainPendingWrites()).resolves.toEqual({ pushed: 0, failed: 0, held: 2 });
+    await drainPendingWrites();
     expect(post).not.toHaveBeenCalled();
     expect(queuedUuids().sort()).toEqual(["bad", "future"]);
+    // Reported once per row, not on every drain.
+    expect(captureError).toHaveBeenCalledTimes(2);
   });
 
   it("a drain asked for while one runs doesn't run alongside it, but right after", async () => {
@@ -365,6 +370,22 @@ describe("drainPendingWrites", () => {
     await jest.advanceTimersByTimeAsync(0);
     expect(sentUuids()).toEqual(["b1", "crit-late"]);
     expect(queuedUuids()).toEqual([]);
+  });
+
+  it("a critical log queued mid-drain goes before that drain's non-critical tail", async () => {
+    queue("n1", "meal", "2026-10-26T07:00:00Z");
+    queue("n2", "meal", "2026-10-26T07:30:00Z");
+    let land: (v: unknown) => void = () => undefined;
+    post.mockReturnValueOnce(new Promise((resolve) => (land = resolve)));
+    const first = drainPendingWrites();
+    await jest.advanceTimersByTimeAsync(0);
+    queue("crit", "bp", "2026-10-26T08:00:00Z", true);
+    await drainPendingWrites(); // asks the running drain to go round again
+    post.mockResolvedValue({ data: {} });
+    land({ data: {} });
+    await first;
+    await jest.advanceTimersByTimeAsync(0);
+    expect(sentUuids()).toEqual(["n1", "crit", "n2"]);
   });
 
   it("a local failure doesn't leave the queue stuck: the next drain runs", async () => {

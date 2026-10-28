@@ -92,6 +92,7 @@
     "savedOfflineCritical": "Locally save ho gaya. Family ko abhi tak alert nahi gaya — intezaar na karein, abhi call karein.",
     "saveFailed": "Save nahi ho paya — dobara try karein.",
     "saveFailedNetwork": "Save nahi ho paya — thodi der baad dobara try karein.",
+    "saveFailedCritical": "Save nahi ho paya, aur family ko alert nahi gaya. Intezaar na karein — abhi call karein.",
     "rateLimited": {
       "title": "Aaj ka limit poori ho gayi",
       "body": "Aap aaj ki reading limit poori kar chuke hain. Kal subah firse log kar sakte hain. Bahut kam ya bahut zyada (critical) readings hamesha save hoti hain.",

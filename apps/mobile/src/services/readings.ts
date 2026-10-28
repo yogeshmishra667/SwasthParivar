@@ -211,7 +211,9 @@ export const saveGlucoseReading = async (input: SaveReadingInput): Promise<SaveR
       track("fail_safe_triggered", { scenario: "reading_save_offline" });
       return { kind: "queued", clientUuid };
     } catch (queueErr) {
+      // Not on the server and not on the phone: Sentry, not just analytics.
       logError("saveGlucoseReading.queue", queueErr);
+      captureError(queueErr, { where: "saveGlucoseReading.queue" });
       // No local DB AND no network — best we can do is reject loudly.
       return {
         kind: "rejected",

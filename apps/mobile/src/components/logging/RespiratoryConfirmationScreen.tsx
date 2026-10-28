@@ -2,6 +2,7 @@
 // CardiacConfirmationScreen: runs the pure classifier locally so the
 // patient sees red-zone severity BEFORE the server round-trip.
 
+import type { ReactNode } from "react";
 import { View, Text, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
@@ -25,7 +26,12 @@ interface RespiratoryConfirmationProps {
   onEdit: () => void;
   /** Shown above the buttons when the last save didn't go through. */
   errorMessage?: string | null;
-  /** A save is in flight: the confirm button is disabled (no double save). */
+  /** Under the message, e.g. the call button when a critical entry failed. */
+  errorAction?: ReactNode;
+  /**
+   * A save is in flight: confirm and edit are disabled, so neither a double
+   * save nor an edit can be overtaken by the first save's result.
+   */
   saving?: boolean;
 }
 
@@ -38,6 +44,7 @@ export const RespiratoryConfirmationScreen = ({
   onConfirm,
   onEdit,
   errorMessage = null,
+  errorAction = null,
   saving = false,
 }: RespiratoryConfirmationProps): JSX.Element => {
   const { t } = useTranslation();
@@ -157,10 +164,11 @@ export const RespiratoryConfirmationScreen = ({
           </Card>
 
           {errorMessage ? <SaveErrorNotice message={errorMessage} /> : null}
+          {errorMessage && errorAction ? <View className="mt-3">{errorAction}</View> : null}
 
           <View className="flex-row gap-3">
             <View className="flex-1">
-              <Button label={t("common.edit")} variant="ghost" onPress={onEdit} />
+              <Button label={t("common.edit")} variant="ghost" disabled={saving} onPress={onEdit} />
             </View>
             <View className="flex-[2]">
               <Button
