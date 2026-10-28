@@ -44,6 +44,8 @@ import { api } from "@/services/api";
 import { saveGlucoseReading } from "@/services/readings";
 import { saveBPReading } from "@/services/bp";
 import { refreshPriorityContact } from "@/services/priority-contact";
+import { OfflineCriticalCallButton } from "@/components/logging/OfflineCriticalCallButton";
+import { SaveErrorNotice } from "@/components/shared/SaveErrorNotice";
 import { saveCardiacLog } from "@/services/cardiac";
 import { saveRespiratoryLog } from "@/services/respiratory";
 import { saveMealLog } from "@/services/meals";
@@ -153,6 +155,11 @@ export default function LogScreen(): JSX.Element {
     detail?: string;
   } | null>(null);
   const [saving, setSaving] = useState(false);
+  // A critical log stored offline: the saved screen offers the call.
+  const [savedOfflineCritical, setSavedOfflineCritical] = useState(false);
+  // One id per entered glucose / cardiac / respiratory log, like BP's: a
+  // retry after a failed save is an idempotent replay, never a duplicate.
+  const [entryClientUuid, setEntryClientUuid] = useState<string>(() => uuidv4());
 
   const resetForNext = useCallback(
     (nextMode?: LogMode): void => {
@@ -170,10 +177,18 @@ export default function LogScreen(): JSX.Element {
       setSavedSummary(null);
       setUndoVisible(false);
       setSavedOffline(false);
+      setSavedOfflineCritical(false);
       setSaveError(null);
     },
     [mode],
   );
+
+  // The save haptic only once the log is synced or stored on the phone: a
+  // buzz on a save that failed reads as "saved" (audit P8 UX review).
+  const showSaved = (): void => {
+    hapticSave();
+    setStage("saved");
+  };
 
   const switchMode = (next: LogMode): void => {
     if (next === mode) return;
@@ -189,11 +204,13 @@ export default function LogScreen(): JSX.Element {
       type: result.readingType,
       uncertain: result.requiresTypeConfirmation,
     });
+    setEntryClientUuid(uuidv4());
     setStage("confirm");
   };
 
   const handleNumpad = (value: number): void => {
     setParsedGlucose({ value, type: "fasting", uncertain: true });
+    setEntryClientUuid(uuidv4());
     setStage("confirm");
   };
 
@@ -202,13 +219,13 @@ export default function LogScreen(): JSX.Element {
     context: "normal" | "festive",
   ): Promise<void> => {
     if (!parsedGlucose || !userId) return;
-    hapticSave();
     setSaveError(null);
     setSaving(true);
 
     try {
       const result = await saveGlucoseReading({
         userId,
+        clientUuid: entryClientUuid,
         valueMgDl: parsedGlucose.value,
         readingType: type,
         context,
@@ -229,21 +246,26 @@ export default function LogScreen(): JSX.Element {
           headline: `${parsedGlucose.value} mg/dL`,
           detail: t(`feedback.${result.feedback.tone}`, { defaultValue: t("logging.saved") }),
         });
-        setStage("saved");
+        showSaved();
         return;
       }
 
       if (result.kind === "queued") {
+        const critical = isCriticalGlucose(parsedGlucose.value);
+        // Offline, the family alert waits for sync: say so (audit P8).
+        const offlineDetail = t(critical ? "logging.savedOfflineCritical" : "logging.savedOffline");
         setSavedOffline(true);
-        setFeedbackMsg(t("logging.savedOffline"));
-        if (isCriticalGlucose(parsedGlucose.value)) {
+        setSavedOfflineCritical(critical);
+        // Shown once, in the summary below the value.
+        setFeedbackMsg(null);
+        if (critical) {
           raiseGlucoseAlert(parsedGlucose.value, parsedGlucose.value < 65 ? "low" : "high");
         }
         setSavedSummary({
           headline: `${parsedGlucose.value} mg/dL`,
-          detail: t("logging.savedOffline"),
+          detail: offlineDetail,
         });
-        setStage("saved");
+        showSaved();
         return;
       }
 
@@ -260,7 +282,11 @@ export default function LogScreen(): JSX.Element {
         track("rate_limit_hit", { surface: "readings", value: parsedGlucose.value });
         return;
       }
-      setSaveError(t("logging.saveFailed"));
+      setSaveError(
+        result.code === "OFFLINE_QUEUE_UNAVAILABLE"
+          ? t("logging.saveFailedNetwork")
+          : t("logging.saveFailed"),
+      );
     } finally {
       setSaving(false);
     }
@@ -276,7 +302,6 @@ export default function LogScreen(): JSX.Element {
 
   const saveBP = async (): Promise<void> => {
     if (!parsedBP || !userId || !bpClientUuid) return;
-    hapticSave();
     setSaveError(null);
     setSaving(true);
     // Critical BP (CLAUDE.md thresholds, shared with the server) raises the
@@ -310,12 +335,22 @@ export default function LogScreen(): JSX.Element {
           headline: `${parsedBP.systolic}/${parsedBP.diastolic} mmHg`,
           detail: t("bp.saved"),
         });
-        setStage("saved");
+        showSaved();
+        return;
+      }
+      if (result.kind === "queued") {
+        setSavedOffline(true);
+        setSavedOfflineCritical(bpDirection !== null);
+        setSavedSummary({
+          headline: `${parsedBP.systolic}/${parsedBP.diastolic} mmHg`,
+          detail: t(bpDirection ? "logging.savedOfflineCritical" : "bp.savedOffline"),
+        });
+        showSaved();
         return;
       }
       if (result.kind === "network_failed") {
-        // BP has no local queue: say so, and keep the same reading on screen
-        // so "Save" retries it (same id → no duplicate).
+        // Not stored on the phone either: say so, and keep the same reading
+        // on screen so "Save" retries it (same id → no duplicate).
         setSaveError(
           result.retrying ? t("bp.saveFailedCriticalRetrying") : t("bp.saveFailedNetwork"),
         );
@@ -330,6 +365,7 @@ export default function LogScreen(): JSX.Element {
   // ── Cardiac (Phase 4 Feature E) ────────────────────────────
   const handleCardiacSubmit = (params: ParsedCardiacInput): void => {
     setParsedCardiac(params);
+    setEntryClientUuid(uuidv4());
     setStage("confirm");
   };
 
@@ -345,7 +381,6 @@ export default function LogScreen(): JSX.Element {
 
   const saveCardiac = async (): Promise<void> => {
     if (!parsedCardiac || !userId) return;
-    hapticSave();
     setSaveError(null);
     setSaving(true);
     // Critical (CLAUDE.md thresholds, shared classifier) → the fullscreen
@@ -370,6 +405,7 @@ export default function LogScreen(): JSX.Element {
     try {
       const result = await saveCardiacLog({
         userId,
+        clientUuid: entryClientUuid,
         heartRate: parsedCardiac.heartRate,
         rhythmStatus: parsedCardiac.rhythmStatus,
         chestPain: parsedCardiac.chestPain,
@@ -392,16 +428,21 @@ export default function LogScreen(): JSX.Element {
           headline: `${result.heartRate} ${t("cardiac.bpm")}`,
           detail: t("cardiac.saved"),
         });
-        setStage("saved");
+        showSaved();
         return;
       }
       if (result.kind === "queued") {
         setSavedOffline(true);
+        setSavedOfflineCritical(cardiacLocal !== null);
         setSavedSummary({
           headline: `${parsedCardiac.heartRate} ${t("cardiac.bpm")}`,
-          detail: t("cardiac.savedOffline"),
+          detail: t(cardiacLocal ? "logging.savedOfflineCritical" : "cardiac.savedOffline"),
         });
-        setStage("saved");
+        showSaved();
+        return;
+      }
+      if (result.kind === "network_failed") {
+        setSaveError(t("logging.saveFailedNetwork"));
         return;
       }
       if (result.code === "CARDIAC_DISABLED") {
@@ -417,6 +458,7 @@ export default function LogScreen(): JSX.Element {
   // ── Respiratory (Phase 4 Feature E) ────────────────────────
   const handleRespiratorySubmit = (params: ParsedRespiratoryInput): void => {
     setParsedRespiratory(params);
+    setEntryClientUuid(uuidv4());
     setStage("confirm");
   };
 
@@ -430,7 +472,6 @@ export default function LogScreen(): JSX.Element {
 
   const saveRespiratory = async (): Promise<void> => {
     if (!parsedRespiratory || !userId) return;
-    hapticSave();
     setSaveError(null);
     setSaving(true);
     // Same as cardiac.
@@ -450,6 +491,7 @@ export default function LogScreen(): JSX.Element {
     try {
       const result = await saveRespiratoryLog({
         userId,
+        clientUuid: entryClientUuid,
         ...(parsedRespiratory.peakFlow !== undefined
           ? { peakFlow: parsedRespiratory.peakFlow }
           : {}),
@@ -473,13 +515,21 @@ export default function LogScreen(): JSX.Element {
           );
         }
         setSavedSummary({ headline, detail: t("respiratory.saved") });
-        setStage("saved");
+        showSaved();
         return;
       }
       if (result.kind === "queued") {
         setSavedOffline(true);
-        setSavedSummary({ headline, detail: t("respiratory.savedOffline") });
-        setStage("saved");
+        setSavedOfflineCritical(respiratoryLocal !== null);
+        setSavedSummary({
+          headline,
+          detail: t(respiratoryLocal ? "logging.savedOfflineCritical" : "respiratory.savedOffline"),
+        });
+        showSaved();
+        return;
+      }
+      if (result.kind === "network_failed") {
+        setSaveError(t("logging.saveFailedNetwork"));
         return;
       }
       if (result.code === "RESPIRATORY_DISABLED") {
@@ -498,7 +548,6 @@ export default function LogScreen(): JSX.Element {
     mealCategory: MealCategory;
   }): Promise<void> => {
     if (!userId) return;
-    hapticSave();
     setSaveError(null);
     setSaving(true);
     try {
@@ -520,13 +569,17 @@ export default function LogScreen(): JSX.Element {
       if (result.kind === "synced") {
         setSavedOffline(false);
         setSavedSummary({ headline: t("meals.saved"), detail });
-        setStage("saved");
+        showSaved();
         return;
       }
       if (result.kind === "queued") {
         setSavedOffline(true);
         setSavedSummary({ headline: t("meals.saved"), detail: t("logging.savedOffline") });
-        setStage("saved");
+        showSaved();
+        return;
+      }
+      if (result.kind === "network_failed") {
+        setSaveError(t("logging.saveFailedNetwork"));
         return;
       }
       setSaveError(t("meals.saveFailed"));
@@ -539,6 +592,8 @@ export default function LogScreen(): JSX.Element {
   if (stage === "confirm" && mode === "glucose" && parsedGlucose) {
     return (
       <ConfirmationScreen
+        errorMessage={saveError}
+        saving={saving}
         value={parsedGlucose.value}
         type={parsedGlucose.type}
         uncertainType={parsedGlucose.uncertain}
@@ -554,6 +609,8 @@ export default function LogScreen(): JSX.Element {
   if (stage === "confirm" && mode === "bp" && parsedBP) {
     return (
       <BPConfirmationScreen
+        errorMessage={saveError}
+        saving={saving}
         systolic={parsedBP.systolic}
         diastolic={parsedBP.diastolic}
         {...(parsedBP.pulse !== undefined ? { pulse: parsedBP.pulse } : {})}
@@ -569,6 +626,8 @@ export default function LogScreen(): JSX.Element {
   if (stage === "confirm" && mode === "cardiac" && parsedCardiac) {
     return (
       <CardiacConfirmationScreen
+        errorMessage={saveError}
+        saving={saving}
         heartRate={parsedCardiac.heartRate}
         rhythmStatus={parsedCardiac.rhythmStatus}
         chestPain={parsedCardiac.chestPain}
@@ -588,6 +647,8 @@ export default function LogScreen(): JSX.Element {
   if (stage === "confirm" && mode === "respiratory" && parsedRespiratory) {
     return (
       <RespiratoryConfirmationScreen
+        errorMessage={saveError}
+        saving={saving}
         {...(parsedRespiratory.peakFlow !== undefined
           ? { peakFlow: parsedRespiratory.peakFlow }
           : {})}
@@ -620,7 +681,7 @@ export default function LogScreen(): JSX.Element {
                 name={savedOffline ? "cloud-offline" : "checkmark-circle"}
                 size={64}
                 color={savedOffline ? "#D97706" : "#16A34A"}
-                accessibilityLabel={savedOffline ? "Saved locally" : "Saved"}
+                accessibilityLabel={savedOffline ? t("common.savedLocally") : t("logging.saved")}
               />
               {savedSummary && (
                 <>
@@ -657,13 +718,18 @@ export default function LogScreen(): JSX.Element {
           <NextCheckReminderCard />
 
           <View className="gap-2">
+            {savedOffline && savedOfflineCritical && <OfflineCriticalCallButton userId={userId} />}
             <Button
               label={
                 mode === "glucose"
                   ? t("logging.logAnother")
                   : mode === "bp"
                     ? t("bp.title")
-                    : t("meals.logMore")
+                    : mode === "cardiac"
+                      ? t("cardiac.title")
+                      : mode === "respiratory"
+                        ? t("respiratory.title")
+                        : t("meals.logMore")
               }
               onPress={() => resetForNext()}
             />
@@ -934,27 +1000,7 @@ export default function LogScreen(): JSX.Element {
               )}
             </View>
             {inputToggle}
-            {saveError !== null && (
-              <View
-                style={{
-                  marginTop: 12,
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
-                  borderRadius: 12,
-                  backgroundColor: isDark ? "#7F1D1D" : "#FEF2F2",
-                }}
-              >
-                <Text
-                  style={{
-                    color: isDark ? "#FCA5A5" : "#DC2626",
-                    fontSize: 14,
-                    textAlign: "center",
-                  }}
-                >
-                  {saveError}
-                </Text>
-              </View>
-            )}
+            {saveError !== null && <SaveErrorNotice message={saveError} />}
           </View>
         )}
       </SafeAreaView>
@@ -990,23 +1036,7 @@ export default function LogScreen(): JSX.Element {
             )}
           </View>
           {inputToggle}
-          {saveError !== null && (
-            <View
-              style={{
-                marginTop: 12,
-                paddingHorizontal: 16,
-                paddingVertical: 10,
-                borderRadius: 12,
-                backgroundColor: isDark ? "#7F1D1D" : "#FEF2F2",
-              }}
-            >
-              <Text
-                style={{ color: isDark ? "#FCA5A5" : "#DC2626", fontSize: 14, textAlign: "center" }}
-              >
-                {saveError}
-              </Text>
-            </View>
-          )}
+          {saveError !== null && <SaveErrorNotice message={saveError} />}
         </View>
       </SafeAreaView>
     );
@@ -1045,23 +1075,7 @@ export default function LogScreen(): JSX.Element {
 
         {(mode === "cardiac" || mode === "respiratory") && inputToggle}
 
-        {saveError !== null && (
-          <View
-            style={{
-              marginTop: 12,
-              paddingHorizontal: 16,
-              paddingVertical: 10,
-              borderRadius: 12,
-              backgroundColor: isDark ? "#7F1D1D" : "#FEF2F2",
-            }}
-          >
-            <Text
-              style={{ color: isDark ? "#FCA5A5" : "#DC2626", fontSize: 14, textAlign: "center" }}
-            >
-              {saveError}
-            </Text>
-          </View>
-        )}
+        {saveError !== null && <SaveErrorNotice message={saveError} />}
       </ScrollView>
     </SafeAreaView>
   );

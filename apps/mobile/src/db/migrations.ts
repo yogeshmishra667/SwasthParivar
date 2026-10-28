@@ -11,6 +11,10 @@ import { schemaMigrations, createTable } from "@nozbe/watermelondb/Schema/migrat
  * `createTable` is purely additive — it never touches the existing
  * `glucose_readings` / `medication_*` / `user_streaks` tables, so a
  * patient's logged readings survive the upgrade intact.
+ *
+ * v2 → v3 (audit P8 offline queue): one `createTable` (`pending_writes`),
+ * additive like v2. Columns are copied, not shared with `schema.ts`: a
+ * migration is history and must not change when the schema does.
  */
 export const dbMigrations = schemaMigrations({
   migrations: [
@@ -39,6 +43,23 @@ export const dbMigrations = schemaMigrations({
             { name: "user_id", type: "string", isIndexed: true },
             { name: "message", type: "string" },
             { name: "queued_at", type: "number", isIndexed: true },
+          ],
+        }),
+      ],
+    },
+    {
+      toVersion: 3,
+      steps: [
+        createTable({
+          name: "pending_writes",
+          columns: [
+            { name: "client_uuid", type: "string", isIndexed: true },
+            { name: "user_id", type: "string", isIndexed: true },
+            { name: "kind", type: "string" },
+            { name: "payload_json", type: "string" },
+            { name: "critical", type: "boolean" },
+            { name: "taken_at", type: "number", isIndexed: true },
+            { name: "queued_at", type: "number" },
           ],
         }),
       ],

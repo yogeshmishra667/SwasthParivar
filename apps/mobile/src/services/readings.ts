@@ -3,6 +3,7 @@ import { isAxiosError } from "axios";
 import { v4 as uuidv4 } from "uuid";
 import { api } from "@/services/api";
 import { logError, track } from "@/services/analytics";
+import { classifyDrainFailure } from "@/services/drain-policy";
 import { captureError } from "@/services/sentry";
 import { getDatabase } from "@/db/database";
 import type { GlucoseReadingModel } from "@/db/models/GlucoseReading";
@@ -28,7 +29,7 @@ import { useSyncStore } from "@/stores/sync.store";
  * values first then `measured_at` order, and marks `synced_at` on success.
  * It deletes a row only when the server refuses it for good (invalid, or a
  * newer version is stored), and never a critical one — see
- * `classifyDrainFailure` (audit P9). Triggered on app boot, NetInfo
+ * `classifyDrainFailure` in `drain-policy.ts` (audit P9). Triggered on app boot, NetInfo
  * connect, and a 60s defensive interval — see `useSyncDrain`.
  */
 
@@ -36,6 +37,8 @@ import { isCriticalGlucose, type GlucoseReadingType } from "@swasth/shared-types
 
 export interface SaveReadingInput {
   userId: string;
+  /** Stable per entered reading, so a retry is an idempotent replay. New when omitted. */
+  clientUuid?: string;
   valueMgDl: number;
   readingType: GlucoseReadingType;
   context: "normal" | "festive";
@@ -94,47 +97,6 @@ const recordPayload = (
   targetUserId: input.userId,
 });
 
-// The server refused this row for good: invalid (400) or a newer version
-// is already stored (409). Matched by code, not status — a 409 from an
-// unrelated constraint race must not delete a reading the server never
-// stored.
-const DROP_CODES: ReadonlySet<string> = new Set([
-  "VALIDATION_ERROR",
-  "READING_INVALID_VALUE",
-  "READING_STALE_VERSION",
-]);
-// Answers about the session or the connection, not the row: an expired
-// session (401, after the api client's refresh also failed) or a timeout
-// (408). Every row behind this one would get the same answer.
-const RETRY_LATER_STATUSES: ReadonlySet<number> = new Set([401, 408]);
-
-const errorCode = (data: unknown): string | null =>
-  (data as { error?: { code?: string } } | null | undefined)?.error?.code ?? null;
-
-/**
- * What the drain does with a row the server didn't accept (audit P9 —
- * it used to delete the row on ANY 4xx, so a 401 after a long offline
- * spell or a 429 while draining a backlog deleted medical readings):
- *   - `drop`  — the server refused it for good. Delete it.
- *   - `skip`  — keep it, try the next row: the daily cap, which answers
- *               429 with a JSON `RATE_LIMITED` body (only that day is
- *               full), or a 4xx we don't recognise (e.g. 403 for one
- *               profile). Never delete what we don't understand.
- *   - `abort` — keep it and stop; the next trigger retries everything:
- *               network failure, 5xx, 401, 408, and the per-minute 429
- *               (express-rate-limit's plain-text body).
- */
-export const classifyDrainFailure = (err: unknown): "drop" | "skip" | "abort" => {
-  if (!isAxiosError(err) || !err.response) return "abort"; // unknown or network
-  const status = err.response.status;
-  const code = errorCode(err.response.data);
-  if (status >= 500) return "abort";
-  if (code !== null && DROP_CODES.has(code)) return "drop";
-  if (status === 429) return code === "RATE_LIMITED" ? "skip" : "abort";
-  if (RETRY_LATER_STATUSES.has(status)) return "abort";
-  return "skip";
-};
-
 // The server counts the daily cap per profile per UTC day, and the drain
 // sends every profile's rows on a shared phone.
 const capKey = (row: GlucoseReadingModel): string =>
@@ -148,9 +110,9 @@ const writeLocalReading = async (
   input: SaveReadingInput,
   clientUuid: string,
   syncedAt: number | null,
-): Promise<void> => {
+): Promise<boolean> => {
   const db = getDatabase();
-  if (!db) return; // local-DB unavailable; queue is a no-op in this runtime
+  if (!db) return false; // local DB unavailable in this runtime: nothing stored
   const collection = db.collections.get<GlucoseReadingModel>(TABLE);
   await db.write(async () => {
     await collection.create((row) => {
@@ -167,6 +129,7 @@ const writeLocalReading = async (
       if (syncedAt !== null) row.syncedAt = syncedAt;
     });
   });
+  return true;
 };
 
 /**
@@ -178,7 +141,7 @@ const writeLocalReading = async (
  * responsibility (different screens have different copy).
  */
 export const saveGlucoseReading = async (input: SaveReadingInput): Promise<SaveReadingResult> => {
-  const clientUuid = uuidv4();
+  const clientUuid = input.clientUuid ?? uuidv4();
   const payload = recordPayload(input, clientUuid);
 
   try {
@@ -232,7 +195,10 @@ export const saveGlucoseReading = async (input: SaveReadingInput): Promise<SaveR
 
     // Network, 5xx, 401, 408 or the per-minute 429 — persist for the drain loop.
     try {
-      await writeLocalReading(input, clientUuid, null);
+      // Nothing stored (no local DB) must not read "saved locally" (audit P8).
+      if (!(await writeLocalReading(input, clientUuid, null))) {
+        throw new Error("local DB unavailable");
+      }
       // Update sync-store pending count for the UI badge.
       const next = useSyncStore.getState().pendingCount + 1;
       useSyncStore.setState({ pendingCount: next });
@@ -288,9 +254,11 @@ export const drainPendingReadings = async (): Promise<{
       .fetch();
     // Critical readings first: the server's critical chain (family push,
     // SMS, IVR) runs on arrival, so they must not wait behind a backlog or
-    // a per-minute 429 that the rows ahead of them used up.
+    // a per-minute 429 that the rows ahead of them used up. Newest first:
+    // the 30-min cooldown lets only the first one alert, so it should be
+    // the reading closest to now (audit P8 safety review W2).
     const ordered = [
-      ...pending.filter((r) => isCriticalGlucose(r.valueMgDl)),
+      ...pending.filter((r) => isCriticalGlucose(r.valueMgDl)).reverse(),
       ...pending.filter((r) => !isCriticalGlucose(r.valueMgDl)),
     ];
 
@@ -352,6 +320,8 @@ export const drainPendingReadings = async (): Promise<{
           if (!reportedHolds.has(row.clientUuid)) {
             reportedHolds.add(row.clientUuid);
             if (status !== 429) logError("drainPendingReadings.hold", err);
+            // A refused critical reading will never alert anyone.
+            if (critical) captureError(err, { where: "drainPendingReadings.holdCritical", status });
             track("fail_safe_triggered", { scenario: `sync_hold_${status}` });
           }
           held++;

@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 import { isCriticalGlucose } from "@swasth/shared-types";
 import type { GlucoseReadingType } from "@swasth/shared-types";
+import { SaveErrorNotice } from "@/components/shared/SaveErrorNotice";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
@@ -21,6 +22,10 @@ interface ConfirmationProps {
   uncertainType: boolean;
   onConfirm: (type: GlucoseReadingType, context: ReadingContext) => void;
   onEdit: () => void;
+  /** Shown above the buttons when the last save didn't go through. */
+  errorMessage?: string | null;
+  /** A save is in flight: the confirm button is disabled (no double save). */
+  saving?: boolean;
 }
 
 const TYPE_OPTIONS: readonly GlucoseReadingType[] = ["fasting", "post_meal", "random"] as const;
@@ -52,6 +57,8 @@ export const ConfirmationScreen = ({
   uncertainType,
   onConfirm,
   onEdit,
+  errorMessage = null,
+  saving = false,
 }: ConfirmationProps): JSX.Element => {
   const { t } = useTranslation();
   const profile = useActiveProfile();
@@ -241,6 +248,8 @@ export const ConfirmationScreen = ({
             </Card>
           )}
 
+          {errorMessage ? <SaveErrorNotice message={errorMessage} /> : null}
+
           <View className="flex-row gap-3">
             <View className="flex-1">
               <Button label={t("common.edit")} variant="ghost" onPress={onEdit} />
@@ -248,14 +257,16 @@ export const ConfirmationScreen = ({
             <View className="flex-[2]">
               <Button
                 label={
-                  confirmReady
-                    ? t("logging.confirmYes")
-                    : t("logging.confirmWait", {
-                        seconds: secondsLeft,
-                      })
+                  saving
+                    ? t("common.loading")
+                    : confirmReady
+                      ? t("logging.confirmYes")
+                      : t("logging.confirmWait", {
+                          seconds: secondsLeft,
+                        })
                 }
                 variant={isCritical ? "critical" : "primary"}
-                disabled={!confirmReady}
+                disabled={!confirmReady || saving}
                 onPress={handleConfirm}
               />
             </View>

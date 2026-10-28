@@ -218,6 +218,18 @@ endpoint affected.
 
 ---
 
+## 6. Mobile app: roll forward only past a local-schema bump
+
+**Never ship an app build (store build or OTA bundle) whose WatermelonDB
+schema version is lower than one already on users' phones.** WatermelonDB
+resets the local database when the phone's schema is newer than the app's.
+That deletes every glucose reading not yet synced and every queued BP,
+cardiac, respiratory and meal log (`apps/mobile/src/db/schema.ts`; v3 added
+the offline queue, audit P8). Fix a bad build with a new build on the same
+or a higher schema version.
+
+---
+
 ## DR drill — quarterly
 
 Run this once a quarter. **The drill is the only thing that turns the

@@ -7,6 +7,7 @@ import { View, Text, ScrollView, KeyboardAvoidingView, Platform } from "react-na
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
+import { SaveErrorNotice } from "@/components/shared/SaveErrorNotice";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
@@ -19,6 +20,10 @@ interface BPConfirmationProps {
   pulse?: number;
   onConfirm: () => void;
   onEdit: () => void;
+  /** Shown above the buttons when the last save didn't go through. */
+  errorMessage?: string | null;
+  /** A save is in flight: the confirm button is disabled (no double save). */
+  saving?: boolean;
 }
 
 const HIGH_SYS = 140;
@@ -30,6 +35,8 @@ export const BPConfirmationScreen = ({
   pulse,
   onConfirm,
   onEdit,
+  errorMessage = null,
+  saving = false,
 }: BPConfirmationProps): JSX.Element => {
   const { t } = useTranslation();
   const profile = useActiveProfile();
@@ -92,14 +99,17 @@ export const BPConfirmationScreen = ({
             )}
           </Card>
 
+          {errorMessage ? <SaveErrorNotice message={errorMessage} /> : null}
+
           <View className="flex-row gap-3">
             <View className="flex-1">
               <Button label={t("common.edit")} variant="ghost" onPress={onEdit} />
             </View>
             <View className="flex-[2]">
               <Button
-                label={t("common.confirm")}
+                label={saving ? t("common.loading") : t("common.confirm")}
                 variant={elevated ? "secondary" : "primary"}
+                disabled={saving}
                 onPress={onConfirm}
               />
             </View>

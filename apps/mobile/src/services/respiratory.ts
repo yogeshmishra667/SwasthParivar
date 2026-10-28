@@ -1,22 +1,27 @@
-// Phase 4 Feature E — Respiratory log mobile service. Online-first with
-// a `queued` fallback, mirroring `services/bp.ts` + `services/cardiac.ts`.
-// WatermelonDB queue is deferred to Feature I alongside wearables —
-// manual respiratory entry is rare enough that an in-memory queued
-// result + next-pull resync is acceptable for the initial cohort.
+// Phase 4 Feature E — Respiratory log mobile service. Online-first; a log
+// the server didn't answer for (network, 5xx, expired session) is stored in
+// the offline queue (`services/pending-writes.ts`, audit P8) and sent later.
+// Before P8 it returned `queued` without storing anything.
 //
 // Server kill-switch `respiratory_logging_enabled` returns 503 with code
-// `RESPIRATORY_DISABLED` — surfaced as a typed `rejected` result.
+// `RESPIRATORY_DISABLED` — surfaced as a typed `rejected` result. Not
+// queued: the feature is off, not the network.
 
 import { isAxiosError } from "axios";
 import { v4 as uuidv4 } from "uuid";
+import { classifyRespiratoryReading } from "@swasth/domain-logic";
 import type { ReadingSource, SymptomSeverity } from "@swasth/shared-types";
 
 import { api } from "@/services/api";
 import { logError, track } from "@/services/analytics";
+import { enqueuePendingWrite } from "@/services/pending-writes";
+import { classifyDrainFailure } from "@/services/drain-policy";
 
 export interface SaveRespiratoryInput {
   /** Profile to log against (shared phone — see CLAUDE.md "Shared Phone Profile Switcher"). */
   userId: string;
+  /** Stable per entered log, so a retry is an idempotent replay. New when omitted. */
+  clientUuid?: string;
   peakFlow?: number;
   baselinePeakFlow?: number;
   inhalerUsed?: boolean;
@@ -55,22 +60,21 @@ export type SaveRespiratoryResult =
       baselinePeakFlow: number | null;
       critical: { isCritical: boolean; primaryReason: string; withinCooldown: boolean };
     }
+  /** Stored on the phone; sent when the server answers again. */
   | { kind: "queued"; clientUuid: string }
+  /** No answer from the server AND it couldn't be stored on the phone. */
+  | { kind: "network_failed" }
   | { kind: "rejected"; status: number; code: string | null; message: string };
 
-const isNetworkOrServerError = (err: unknown): boolean => {
-  if (!isAxiosError(err)) return true;
-  if (!err.response) return true;
-  // 503 with a typed kill-switch code is a server-issued "feature off" —
-  // do NOT bucket as a transient network error or the UI will pretend
-  // the row was queued safely.
-  return err.response.status >= 500 && err.response.status !== 503;
-};
+const errorCode = (err: unknown): string | null =>
+  isAxiosError(err)
+    ? ((err.response?.data as { error?: { code?: string } } | undefined)?.error?.code ?? null)
+    : null;
 
 export const saveRespiratoryLog = async (
   input: SaveRespiratoryInput,
 ): Promise<SaveRespiratoryResult> => {
-  const clientUuid = uuidv4();
+  const clientUuid = input.clientUuid ?? uuidv4();
   const payload = {
     clientUuid,
     ...(input.peakFlow !== undefined ? { peakFlow: input.peakFlow } : {}),
@@ -85,7 +89,7 @@ export const saveRespiratoryLog = async (
     measuredAt: input.measuredAtIso,
     version: 1,
     targetUserId: input.userId,
-  } as const;
+  };
 
   try {
     const res = await api.post<ServerRespiratoryResponse>("/readings/respiratory", payload);
@@ -103,14 +107,30 @@ export const saveRespiratoryLog = async (
       critical: res.data.critical,
     };
   } catch (err) {
-    if (isNetworkOrServerError(err)) {
+    if (errorCode(err) !== "RESPIRATORY_DISABLED" && classifyDrainFailure(err) === "abort") {
+      // Without the personal-best baseline only severe symptoms (or a
+      // supplied baseline) classify as critical here.
+      const critical =
+        classifyRespiratoryReading({
+          peakFlow: input.peakFlow ?? null,
+          baselinePeakFlow: input.baselinePeakFlow ?? null,
+          inhalerUsed: input.inhalerUsed ?? false,
+          symptomSeverity: input.symptomSeverity ?? "none",
+        }).severity === "critical_bypass";
+      const stored = await enqueuePendingWrite({
+        kind: "respiratory",
+        payload,
+        critical,
+        takenAtIso: input.measuredAtIso,
+      });
       track("reading_logged", {
         type: "respiratory",
         source: input.source,
         value: input.peakFlow ?? 0,
         offline: true,
+        stored,
       });
-      return { kind: "queued", clientUuid };
+      return stored ? { kind: "queued", clientUuid } : { kind: "network_failed" };
     }
 
     if (isAxiosError(err) && err.response) {

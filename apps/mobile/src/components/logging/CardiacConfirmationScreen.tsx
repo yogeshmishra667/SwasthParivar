@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import { classifyCardiacReading } from "@swasth/domain-logic";
 import type { ExerciseTolerance, RhythmStatus } from "@swasth/shared-types";
 
+import { SaveErrorNotice } from "@/components/shared/SaveErrorNotice";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
@@ -24,6 +25,10 @@ interface CardiacConfirmationProps {
   exerciseTolerance: ExerciseTolerance;
   onConfirm: () => void;
   onEdit: () => void;
+  /** Shown above the buttons when the last save didn't go through. */
+  errorMessage?: string | null;
+  /** A save is in flight: the confirm button is disabled (no double save). */
+  saving?: boolean;
 }
 
 export const CardiacConfirmationScreen = ({
@@ -34,6 +39,8 @@ export const CardiacConfirmationScreen = ({
   exerciseTolerance,
   onConfirm,
   onEdit,
+  errorMessage = null,
+  saving = false,
 }: CardiacConfirmationProps): JSX.Element => {
   const { t } = useTranslation();
   const profile = useActiveProfile();
@@ -144,14 +151,17 @@ export const CardiacConfirmationScreen = ({
             )}
           </Card>
 
+          {errorMessage ? <SaveErrorNotice message={errorMessage} /> : null}
+
           <View className="flex-row gap-3">
             <View className="flex-1">
               <Button label={t("common.edit")} variant="ghost" onPress={onEdit} />
             </View>
             <View className="flex-[2]">
               <Button
-                label={t("common.confirm")}
+                label={saving ? t("common.loading") : t("common.confirm")}
                 variant={isCritical ? "secondary" : isWarn ? "secondary" : "primary"}
+                disabled={saving}
                 onPress={onConfirm}
               />
             </View>

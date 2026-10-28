@@ -10,20 +10,26 @@ import { create } from "zustand";
 export type SyncPhase = "idle" | "draining" | "synced" | "error";
 
 interface SyncState {
+  /** Glucose readings not yet on the server. */
   pendingCount: number;
+  /** BP, cardiac, respiratory and meal logs not yet on the server (audit P8). */
+  outboxCount: number;
   phase: SyncPhase;
   lastSyncedAt: number | null;
   lastError: string | null;
   setPendingCount: (n: number) => void;
+  setOutboxCount: (n: number) => void;
   setPhase: (phase: SyncPhase, error?: string | null) => void;
 }
 
 export const useSyncStore = create<SyncState>((set) => ({
   pendingCount: 0,
+  outboxCount: 0,
   phase: "idle",
   lastSyncedAt: null,
   lastError: null,
   setPendingCount: (pendingCount) => set({ pendingCount }),
+  setOutboxCount: (outboxCount) => set({ outboxCount }),
   setPhase: (phase, error = null) =>
     set((s) => ({
       phase,
