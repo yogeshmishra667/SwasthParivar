@@ -16,7 +16,11 @@ const pushSchema = z.object({
           valueMgDl: z.number().int(),
           readingType: z.enum(["fasting", "pre_meal", "post_meal", "random", "bedtime"]),
           context: z.enum(["normal", "festive"]).default("normal"),
-          notes: z.string().optional(),
+          // `null` too — WatermelonDB stores an unset optional column as null.
+          notes: z
+            .string()
+            .nullish()
+            .transform((v) => v ?? undefined),
           source: z.enum(["manual", "voice", "device"]),
           measuredAt: z.string().datetime(),
           version: z.number().int().positive(),

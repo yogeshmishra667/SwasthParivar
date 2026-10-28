@@ -457,7 +457,11 @@ describe("POST /api/v1/readings/glucose — daily rate limit (rate_limit.reading
     return { token, userId: u.id };
   };
 
-  const postGlucose = async (token: string, valueMgDl: number): Promise<request.Response> => {
+  const postGlucose = async (
+    token: string,
+    valueMgDl: number,
+    measuredAt: Date = new Date(),
+  ): Promise<request.Response> => {
     return await request(app)
       .post("/api/v1/readings/glucose")
       .set("Authorization", `Bearer ${token}`)
@@ -467,10 +471,108 @@ describe("POST /api/v1/readings/glucose — daily rate limit (rate_limit.reading
         readingType: "fasting",
         context: "normal",
         source: "manual",
-        measuredAt: new Date().toISOString(),
+        measuredAt: measuredAt.toISOString(),
         version: 1,
       });
   };
+
+  // Audit P9: the cap counts the day a reading was TAKEN on. Before the
+  // fix it counted the day it reached the server, so a phone draining a
+  // week-long offline backlog hit 429 on today's cap and the app deleted
+  // the rest of the backlog.
+  it("an offline backlog counts against the days it was taken on, not today", async () => {
+    const flagsModule = await import("../../src/shared/flags/index.js");
+    await flagsModule.setFlag("rate_limit.readings.free", 1, "test");
+    flagsModule.__resetFlagCache();
+
+    const { token } = await setupFreshUser(flagsModule);
+    const now = Date.now();
+    const twoDaysAgo = new Date(now - 48 * 3_600_000);
+    const yesterday = new Date(now - 24 * 3_600_000);
+
+    // A backlog synced today: one reading for each past day, then today's.
+    expect((await postGlucose(token, 110, twoDaysAgo)).status).toBe(201);
+    expect((await postGlucose(token, 112, yesterday)).status).toBe(201);
+    expect((await postGlucose(token, 114)).status).toBe(201);
+
+    // Each day still holds to the ceiling.
+    const secondYesterday = await postGlucose(token, 116, yesterday);
+    expect(secondYesterday.status).toBe(429);
+    expect(secondYesterday.body.error.code).toBe("RATE_LIMITED");
+
+    await flagsModule.setFlag("rate_limit.readings.free", 20, "test");
+    flagsModule.__resetFlagCache();
+  });
+
+  // Audit P9 review C1: WatermelonDB stores an unset optional column as
+  // null, so every reading the app queued offline drained with
+  // `"notes": null`. That 400'd, and app builds before P9 delete a queued
+  // row on any 4xx — every offline reading, critical ones included.
+  it("accepts the offline queue's `notes: null` body (and stores no note)", async () => {
+    const flagsModule = await import("../../src/shared/flags/index.js");
+    const { token } = await setupFreshUser(flagsModule);
+
+    const res = await request(app)
+      .post("/api/v1/readings/glucose")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        clientUuid: randomUUID(),
+        valueMgDl: 52,
+        readingType: "fasting",
+        context: "normal",
+        notes: null,
+        source: "manual",
+        measuredAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+        version: 1,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.critical.isCritical).toBe(true);
+    const stored = await prisma.glucoseReading.findFirst({
+      where: { id: res.body.data.reading.id },
+    });
+    expect(stored?.notes).toBeNull();
+  });
+
+  // The app tells the two 429s apart by body: the daily cap is JSON
+  // `RATE_LIMITED` (keep the row, try the next one), the per-minute limiter
+  // is express-rate-limit's plain text (stop the drain, retry later). If the
+  // limiter ever gets the JSON envelope, the app would treat it as the cap.
+  it("the per-minute limiter's 429 is not the daily cap's RATE_LIMITED body", async () => {
+    const flagsModule = await import("../../src/shared/flags/index.js");
+    const { token } = await setupFreshUser(flagsModule);
+    await flagsModule.setFlag("rate_limit.default.free", 1, "test");
+    flagsModule.__resetFlagCache();
+
+    try {
+      await request(app).get("/api/v1/streaks/current").set("Authorization", `Bearer ${token}`);
+      const limited = await request(app)
+        .get("/api/v1/streaks/current")
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(limited.status).toBe(429);
+      expect(limited.body?.error?.code).not.toBe("RATE_LIMITED");
+    } finally {
+      await flagsModule.setFlag("rate_limit.default.free", 100, "test");
+      flagsModule.__resetFlagCache();
+    }
+  });
+
+  it("a reading dated in the future counts against today, not a fresh day", async () => {
+    const flagsModule = await import("../../src/shared/flags/index.js");
+    await flagsModule.setFlag("rate_limit.readings.free", 1, "test");
+    flagsModule.__resetFlagCache();
+
+    const { token } = await setupFreshUser(flagsModule);
+
+    expect((await postGlucose(token, 110)).status).toBe(201);
+    const future = await postGlucose(token, 120, new Date(Date.now() + 30 * 3_600_000));
+    expect(future.status).toBe(429);
+    expect(future.body.error.code).toBe("RATE_LIMITED");
+
+    await flagsModule.setFlag("rate_limit.readings.free", 20, "test");
+    flagsModule.__resetFlagCache();
+  });
 
   it("free-tier patient — second save trips RATE_LIMITED when admin sets ceiling=1", async () => {
     const flagsModule = await import("../../src/shared/flags/index.js");

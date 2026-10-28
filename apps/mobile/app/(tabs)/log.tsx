@@ -247,16 +247,18 @@ export default function LogScreen(): JSX.Element {
         return;
       }
 
-      // result.kind === "rejected" — branch on code so the user gets
+      // result.kind === "rejected" — the critical alert comes first, before
+      // any early return: the fullscreen alert must fire for a critical
+      // value whatever the server said. Then branch on code so the user gets
       // the right copy. Rate-limit gets its own full-screen card; other
       // rejections fall through to the generic inline warning.
+      if (isCriticalGlucose(parsedGlucose.value)) {
+        raiseGlucoseAlert(parsedGlucose.value, parsedGlucose.value < 65 ? "low" : "high");
+      }
       if (result.kind === "rejected" && result.code === "RATE_LIMITED") {
         setRateLimited(true);
         track("rate_limit_hit", { surface: "readings", value: parsedGlucose.value });
         return;
-      }
-      if (isCriticalGlucose(parsedGlucose.value)) {
-        raiseGlucoseAlert(parsedGlucose.value, parsedGlucose.value < 65 ? "low" : "high");
       }
       setSaveError(t("logging.saveFailed"));
     } finally {

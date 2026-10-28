@@ -6,7 +6,15 @@ export const glucoseCreateSchema = z.object({
   valueMgDl: z.number().int().min(GLUCOSE_VALID_MIN).max(GLUCOSE_VALID_MAX),
   readingType: z.enum(["fasting", "pre_meal", "post_meal", "random", "bedtime"]),
   context: z.enum(["normal", "festive"]).default("normal"),
-  notes: z.string().max(500).optional(),
+  // `null` too: the app's offline queue (WatermelonDB) stores an unset
+  // optional column as null, and app builds before audit P9 send it as
+  // `"notes": null`. Rejecting that 400'd every queued reading, and those
+  // builds delete a row on any 4xx — critical readings included.
+  notes: z
+    .string()
+    .max(500)
+    .nullish()
+    .transform((v) => v ?? undefined),
   source: z.enum(["manual", "voice", "device"]),
   measuredAt: z.string().datetime(),
   version: z.number().int().positive().default(1),

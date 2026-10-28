@@ -8,8 +8,10 @@ export class GlucoseReadingModel extends Model {
   @field("user_id") userId!: string;
   @field("value_mg_dl") valueMgDl!: number;
   @field("reading_type") readingType!: string;
-  @field("context") context?: string;
-  @field("notes") notes?: string;
+  // Optional columns read back as `null` when unset, never `undefined`
+  // (WatermelonDB normalises them) — check with `!= null` / typeof.
+  @field("context") context!: string | null;
+  @field("notes") notes!: string | null;
   @field("source") source!: string;
   @field("measured_at") measuredAt!: number;
   @field("streak_credited_to") streakCreditedTo!: string;
