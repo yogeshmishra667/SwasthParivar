@@ -10,10 +10,14 @@ import { logger } from "../../shared/logger.js";
 import { createQueue, enqueueBestEffort, QUEUE_NAMES } from "../../shared/queue.js";
 import { checkIdempotent } from "../../shared/idempotency.js";
 import { bypassOwner, getLastBypass, markBypassed } from "../../shared/critical-bypass-cooldown.js";
-import type { CriticalAlertMultiCategoryJob } from "../../workers/critical-alert.processor.js";
+import type {
+  CriticalAlertMultiCategoryJob,
+  LateCriticalReading,
+} from "../../workers/critical-alert.processor.js";
 import {
   enqueueCriticalAlert,
   isFreshForReplayDispatch,
+  lateCriticalOf,
 } from "../../workers/critical-alert.enqueue.js";
 import type { AnalyzeReadingJob } from "../../workers/analyze-reading.processor.js";
 
@@ -29,6 +33,8 @@ interface CreateBPInput {
   notes?: string | undefined;
   source: "manual" | "voice" | "device";
   measuredAt: string;
+  /** When the device sent it (device clock), for the late-reading check (P33). */
+  sentAt?: string | undefined;
   version: number;
   requestId?: string;
 }
@@ -84,6 +90,8 @@ const handOffBPBypass = async (
   dispatch: MultiCategoryBypassDispatch,
   requestId: string | undefined,
   stamp: boolean,
+  /** Audit P33: taken > 2h before it reached us — a late notice, no cooldown. */
+  late: LateCriticalReading | null,
 ): Promise<void> => {
   if (dispatch.withinCooldown) return;
   const job: CriticalAlertMultiCategoryJob = {
@@ -93,9 +101,12 @@ const handOffBPBypass = async (
     dispatch,
     copyParams: { systolic: reading.systolic, diastolic: reading.diastolic },
     ...(requestId ? { requestId } : {}),
+    ...(late ? { late } : {}),
   };
   await enqueueCriticalAlert(job, reading.version);
-  if (stamp) {
+  // A late reading doesn't start the cooldown: a real critical reading
+  // soon after must still reach the family (audit P33).
+  if (stamp && !late) {
     await markBypassed(
       "bp",
       reading.userId,
@@ -137,12 +148,19 @@ const buildReplayResult = async (
       reading.updatedAt.toISOString(),
       bypassOwner(reading.id, reading.version),
     );
-    await handOffBPBypass(reading, dispatch, requestId, false);
+    await handOffBPBypass(
+      reading,
+      dispatch,
+      requestId,
+      false,
+      lateCriticalOf({ measuredAt: reading.measuredAt, receivedAt: reading.updatedAt }),
+    );
   }
   return { reading, critical: criticalView(reading, false) };
 };
 
 export const createBPReading = async (input: CreateBPInput): Promise<CreateBPResult> => {
+  const receivedAt = new Date();
   // Scoped to the caller: a clientUuid owned by another user is never
   // replayed back or updated (P4 review W5).
   const idem = await checkIdempotent(
@@ -232,7 +250,15 @@ export const createBPReading = async (input: CreateBPInput): Promise<CreateBPRes
     }
   }
 
-  if (plannedBypass) await handOffBPBypass(reading, plannedBypass, input.requestId, true);
+  if (plannedBypass) {
+    await handOffBPBypass(
+      reading,
+      plannedBypass,
+      input.requestId,
+      true,
+      lateCriticalOf({ measuredAt: input.measuredAt, sentAt: input.sentAt, receivedAt }),
+    );
+  }
 
   // Phase 4 §E follow-up — enqueue category-aware ANALYZE_READING so
   // the cross-condition detector fires when BP arrives, not only when

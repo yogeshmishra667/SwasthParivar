@@ -72,6 +72,21 @@ afterEach(() => {
 });
 
 describe("saveBPReading with the offline queue (audit P8)", () => {
+  it("says when it was sent, on the save and on every background re-send (audit P33)", async () => {
+    post
+      .mockRejectedValueOnce(networkError())
+      .mockResolvedValueOnce({ data: { reading: { id: "r1" } } });
+    await saveBPReading(bpInput("uuid-sent", 195, 120));
+    await jest.advanceTimersByTimeAsync(5_000);
+    expect(post).toHaveBeenCalledTimes(2);
+    for (const call of post.mock.calls as [string, { sentAt?: string }][]) {
+      expect(typeof call[1].sentAt).toBe("string");
+    }
+    // The stored copy doesn't carry a stale send time.
+    const stored = (enqueue.mock.calls[0] as [{ payload: object }])[0].payload;
+    expect(stored).not.toHaveProperty("sentAt");
+  });
+
   it("a network failure is stored in the queue and reads 'saved locally'", async () => {
     enqueue.mockResolvedValue(true);
     post.mockRejectedValue(networkError());

@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { api } from "@/services/api";
 import { logError, track } from "@/services/analytics";
 import { classifyDrainFailure } from "@/services/drain-policy";
+import { withSentAt } from "@/services/sent-at";
 import { captureError } from "@/services/sentry";
 import { getDatabase } from "@/db/database";
 import type { GlucoseReadingModel } from "@/db/models/GlucoseReading";
@@ -145,7 +146,7 @@ export const saveGlucoseReading = async (input: SaveReadingInput): Promise<SaveR
   const payload = recordPayload(input, clientUuid);
 
   try {
-    const res = await api.post<ServerSaveResponse>("/readings/glucose", payload);
+    const res = await api.post<ServerSaveResponse>("/readings/glucose", withSentAt(payload));
     track("reading_logged", {
       type: input.readingType,
       source: input.source,
@@ -292,7 +293,7 @@ export const drainPendingReadings = async (): Promise<{
         targetUserId: row.userId,
       };
       try {
-        await api.post<ServerSaveResponse>("/readings/glucose", body);
+        await api.post<ServerSaveResponse>("/readings/glucose", withSentAt(body));
         await db.write(async () => {
           await row.update((r) => {
             r.syncedAt = Date.now();

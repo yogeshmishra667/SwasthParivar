@@ -89,6 +89,9 @@ enum FeedbackType {
   post_log_compare
   streak_milestone
   critical_warn
+  /// Audit P33: a critical glucose reading that arrived > 2h late. Not a
+  /// cooldown / active-emergency marker, unlike `critical_warn`.
+  critical_warn_late
   festive
 }
 

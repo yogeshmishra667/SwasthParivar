@@ -65,6 +65,17 @@ export interface EventPropsMap {
     sms_success: boolean;
     within_cooldown: boolean;
   };
+  // Audit P33 — a critical reading that synced > 2h after it was taken:
+  // the family got a late notice, not a live alert. Kept out of
+  // `critical_bypass_triggered` so the live-alert SMS rate isn't skewed.
+  critical_reading_late_notified: {
+    category: "glucose" | "bp" | "cardiac" | "respiratory";
+    minutes_late: number;
+    push_success: boolean;
+    contacts_reached_by_push: number;
+    sms_contacts: number;
+    sms_success: boolean;
+  };
   // CLAUDE.md edge case #22 — one event per emergency contact texted by a
   // critical-bypass dispatch, so SMS delivery can be tracked per contact.
   critical_sms_per_contact: {

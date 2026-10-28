@@ -32,6 +32,13 @@ const hi = {
     title: `⚠️ ${p.patientName}: Sugar Bahut Zyada`,
     body: `Sugar ${p.valueMgDl} mg/dL hai. Pani peeyein. Dawai check karein. Call karein.`,
   }),
+  // Audit P33: a critical reading that synced > 2h after it was taken. Not
+  // an emergency alert: says when it was taken and asks to check in.
+  // `reading` is a short label, e.g. "Sugar 52 mg/dL" or "BP 190/120".
+  critical_late: (p: { patientName: string; reading: string; takenAt: string }): NotifContent => ({
+    title: `${p.patientName}: purani reading critical thi`,
+    body: `${p.takenAt} baje ki reading: ${p.reading}. Abhi sync hui. Call karke haal poochh lein.`,
+  }),
   med_reminder: (p: { medicine: string }): NotifContent => ({
     title: "Dawai ka time",
     body: `${p.medicine} lene ka time ho gaya. Pani ke saath lein 🙏`,
@@ -180,6 +187,10 @@ const en: Bundle = {
   critical_bypass_high: (p): NotifContent => ({
     title: `⚠️ ${p.patientName}: Sugar Very High`,
     body: `Sugar is ${p.valueMgDl} mg/dL. Drink water. Check medication. Call.`,
+  }),
+  critical_late: (p): NotifContent => ({
+    title: `${p.patientName}: an earlier reading was critical`,
+    body: `Reading from ${p.takenAt}: ${p.reading}. It synced just now. Call to check on them.`,
   }),
   med_reminder: (p): NotifContent => ({
     title: "Medicine time",

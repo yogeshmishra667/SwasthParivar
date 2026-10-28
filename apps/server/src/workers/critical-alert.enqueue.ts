@@ -20,14 +20,18 @@
 // goes out twice. A duplicate alert is the safe direction; a lost one is
 // not.
 
-import { CRITICAL_COOLDOWN_MINUTES } from "@swasth/domain-logic";
+import { CRITICAL_COOLDOWN_MINUTES, isLateCriticalReading } from "@swasth/domain-logic";
 import type { Queue } from "bullmq";
 import { isTest } from "../config/env.js";
 import { createQueue, QUEUE_NAMES } from "../shared/queue.js";
 import { withTimeout } from "../shared/with-timeout.js";
 import { logger } from "../shared/logger.js";
 import { captureUnhandled } from "../shared/observability/sentry.js";
-import { processCriticalAlert, type CriticalAlertJob } from "./critical-alert.processor.js";
+import {
+  processCriticalAlert,
+  type CriticalAlertJob,
+  type LateCriticalReading,
+} from "./critical-alert.processor.js";
 
 const ENQUEUE_TIMEOUT_MS = 2_000;
 const MS_PER_MIN = 60_000;
@@ -53,6 +57,30 @@ export const criticalAlertJobId = (job: CriticalAlertJob, version: number): stri
  */
 export const isFreshForReplayDispatch = (savedAt: Date, now: Date = new Date()): boolean =>
   now.getTime() - savedAt.getTime() < COOLDOWN_MS;
+
+/**
+ * Audit P33: the late marker for a critical reading taken more than 2h
+ * before it was sent (an offline queue drained later), or null when it is
+ * current. A late one alerts the family with the time it was taken, but
+ * doesn't start the cooldown, re-alert the patient's phone or escalate.
+ * `sentAt` is the device's own send time (newer app builds); without it the
+ * server's receive time stands in.
+ */
+export const lateCriticalOf = (input: {
+  measuredAt: Date | string;
+  sentAt?: string | null | undefined;
+  receivedAt: Date;
+}): LateCriticalReading | null => {
+  const measuredAtIso =
+    typeof input.measuredAt === "string" ? input.measuredAt : input.measuredAt.toISOString();
+  return isLateCriticalReading({
+    measuredAtIso,
+    sentAtIso: input.sentAt ?? null,
+    receivedAtIso: input.receivedAt.toISOString(),
+  })
+    ? { measuredAtIso }
+    : null;
+};
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 

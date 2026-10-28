@@ -232,13 +232,24 @@ describe("drainPendingWrites", () => {
       "/readings/respiratory",
       "/meals",
     ]);
+    // The stored body, plus when it was sent (audit P33) — meals excepted.
     expect(post.mock.calls[0][1]).toEqual({
       clientUuid: "b1",
       targetUserId: "user-1",
       version: 1,
+      sentAt: expect.any(String),
     });
+    expect(post.mock.calls[3][1]).not.toHaveProperty("sentAt");
     expect(queuedUuids()).toEqual([]);
     expect(useSyncStore.getState().outboxCount).toBe(0);
+  });
+
+  it("stamps sentAt when sending, not when queueing: a late sync reads as late", async () => {
+    jest.setSystemTime(new Date("2026-10-27T07:00:00.000Z"));
+    queue("night", "bp", "2026-10-26T22:00:00.000Z", true);
+    post.mockResolvedValue({ data: {} });
+    await drainPendingWrites();
+    expect(post.mock.calls[0][1]).toMatchObject({ sentAt: "2026-10-27T07:00:00.000Z" });
   });
 
   it("sends critical logs first, newest first, then the rest oldest first", async () => {

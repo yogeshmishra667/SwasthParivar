@@ -11,10 +11,14 @@ import { createQueue, enqueueBestEffort, QUEUE_NAMES } from "../../shared/queue.
 import { checkIdempotent } from "../../shared/idempotency.js";
 import { isFeatureEnabledFor } from "../../shared/feature-gate.js";
 import { bypassOwner, getLastBypass, markBypassed } from "../../shared/critical-bypass-cooldown.js";
-import type { CriticalAlertMultiCategoryJob } from "../../workers/critical-alert.processor.js";
+import type {
+  CriticalAlertMultiCategoryJob,
+  LateCriticalReading,
+} from "../../workers/critical-alert.processor.js";
 import {
   enqueueCriticalAlert,
   isFreshForReplayDispatch,
+  lateCriticalOf,
 } from "../../workers/critical-alert.enqueue.js";
 import type { AnalyzeReadingJob } from "../../workers/analyze-reading.processor.js";
 
@@ -31,6 +35,8 @@ interface CreateCardiacInput {
   notes?: string | undefined;
   source: "manual" | "voice" | "device";
   measuredAt: string;
+  /** When the device sent it (device clock), for the late-reading check (P33). */
+  sentAt?: string | undefined;
   version: number;
   requestId?: string;
 }
@@ -96,6 +102,8 @@ const handOffCardiacBypass = async (
   dispatch: MultiCategoryBypassDispatch,
   requestId: string | undefined,
   stamp: boolean,
+  /** Audit P33: taken > 2h before it reached us — a late notice, no cooldown. */
+  late: LateCriticalReading | null,
 ): Promise<void> => {
   if (dispatch.withinCooldown) return;
   const job: CriticalAlertMultiCategoryJob = {
@@ -108,11 +116,14 @@ const handOffCardiacBypass = async (
       ...(reading.painSeverity !== null ? { painSeverity: reading.painSeverity } : {}),
     },
     ...(requestId ? { requestId } : {}),
+    ...(late ? { late } : {}),
   };
   await enqueueCriticalAlert(job, reading.version);
   // Stamp the Redis cooldown AFTER the hand-off — a Redis outage before it
   // would silence the dispatch, which is the opposite of safety-first.
-  if (stamp) {
+  // A late reading doesn't start the cooldown: a real critical reading
+  // soon after must still reach the family (audit P33).
+  if (stamp && !late) {
     await markBypassed(
       "cardiac",
       reading.userId,
@@ -154,7 +165,13 @@ const buildReplayResult = async (
       reading.updatedAt.toISOString(),
       bypassOwner(reading.id, reading.version),
     );
-    await handOffCardiacBypass(reading, dispatch, requestId, false);
+    await handOffCardiacBypass(
+      reading,
+      dispatch,
+      requestId,
+      false,
+      lateCriticalOf({ measuredAt: reading.measuredAt, receivedAt: reading.updatedAt }),
+    );
   }
   return {
     reading,
@@ -167,6 +184,7 @@ const buildReplayResult = async (
 };
 
 export const createCardiacLog = async (input: CreateCardiacInput): Promise<CreateCardiacResult> => {
+  const receivedAt = new Date();
   // Kill-switch (default off — set by ops once cohort-ramping per
   // phase4-progress.md). Hardcoded medical thresholds (HR < 40, > 150,
   // chest pain ≥ 7) stay alive on classifier read-paths even when the
@@ -180,7 +198,14 @@ export const createCardiacLog = async (input: CreateCardiacInput): Promise<Creat
     );
   }
 
-  const idem = await checkIdempotent(prisma.cardiacLog, input.clientUuid, input.version);
+  // Scoped to the caller: a clientUuid owned by another profile is never
+  // replayed back or updated (as BP, P4 review W5; P8 safety review W3).
+  const idem = await checkIdempotent(
+    prisma.cardiacLog,
+    input.clientUuid,
+    input.version,
+    input.userId,
+  );
   if (idem.kind === "stale") {
     throw new DomainError("READING_STALE_VERSION", "incoming version not newer than stored");
   }
@@ -249,7 +274,7 @@ export const createCardiacLog = async (input: CreateCardiacInput): Promise<Creat
       // sees a deterministic 200 instead of a 500 on legitimate retries.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         const winner = await prisma.cardiacLog.findFirst({
-          where: { clientUuid: input.clientUuid },
+          where: { clientUuid: input.clientUuid, userId: input.userId },
         });
         if (winner) {
           logger.info(
@@ -263,7 +288,15 @@ export const createCardiacLog = async (input: CreateCardiacInput): Promise<Creat
     }
   }
 
-  if (plannedBypass) await handOffCardiacBypass(reading, plannedBypass, input.requestId, true);
+  if (plannedBypass) {
+    await handOffCardiacBypass(
+      reading,
+      plannedBypass,
+      input.requestId,
+      true,
+      lateCriticalOf({ measuredAt: input.measuredAt, sentAt: input.sentAt, receivedAt }),
+    );
+  }
   const withinCooldown = plannedBypass?.withinCooldown ?? false;
 
   // Phase 4 §E follow-up — ANALYZE_READING enqueue parity with glucose.

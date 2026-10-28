@@ -5,6 +5,7 @@ import type { PendingWriteModel } from "@/db/models/PendingWrite";
 import { api } from "@/services/api";
 import { logError, track } from "@/services/analytics";
 import { classifyDrainFailure } from "@/services/drain-policy";
+import { withSentAt } from "@/services/sent-at";
 import { captureError } from "@/services/sentry";
 import { useSyncStore } from "@/stores/sync.store";
 
@@ -227,7 +228,12 @@ export const drainPendingWrites = async (): Promise<{
       }
 
       try {
-        await api.post(ENDPOINTS[row.kind], body);
+        // Readings say when they're sent, so the server can tell one synced
+        // hours late from a current one (audit P33). Meals have no alert.
+        await api.post(
+          ENDPOINTS[row.kind],
+          row.kind === "meal" ? body : withSentAt(body as PendingWritePayload),
+        );
         await remove(row);
         pushed++;
         continue;
