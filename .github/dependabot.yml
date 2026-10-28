@@ -62,10 +62,22 @@ updates:
         update-types: [version-update:semver-minor]
       - dependency-name: "@react-native-*/*"
         update-types: [version-update:semver-minor]
+      # Except the ones the SDK pins to an exact version
+      # (expo/bundledNativeModules.json): CI's `expo install --check` fails on
+      # any other version, a patch included (#194: flash-list 2.0.3, skia
+      # 2.2.21, worklets 0.5.2). Re-check this list on every SDK upgrade.
       - dependency-name: "@shopify/react-native-skia"
-        update-types: [version-update:semver-minor]
+        update-types: [version-update:semver-minor, version-update:semver-patch]
       - dependency-name: "@shopify/flash-list"
-        update-types: [version-update:semver-minor]
+        update-types: [version-update:semver-minor, version-update:semver-patch]
+      - dependency-name: "react-native-worklets"
+        update-types: [version-update:semver-minor, version-update:semver-patch]
+      - dependency-name: "react-native-svg"
+        update-types: [version-update:semver-minor, version-update:semver-patch]
+      - dependency-name: "@react-native-async-storage/async-storage"
+        update-types: [version-update:semver-minor, version-update:semver-patch]
+      - dependency-name: "@react-native-community/netinfo"
+        update-types: [version-update:semver-minor, version-update:semver-patch]
 
   - package-ecosystem: github-actions
     directory: /
