@@ -1,4 +1,4 @@
-import { DomainError } from "@swasth/shared-types";
+import { DomainError, isCriticalGlucose } from "@swasth/shared-types";
 import {
   CRITICAL_COOLDOWN_MINUTES,
   computeFeedback,
@@ -37,23 +37,29 @@ const SERVER_TIME_FALLBACK_THRESHOLD_HOURS = 2;
 const TIME_ANOMALY_TRIGGER_COUNT = 2;
 const MS_PER_HOUR = 3_600_000;
 
-// Hardcoded medical-safety thresholds (CLAUDE.md "Critical-Low/High Bypass").
-// Glucose readings outside this band bypass the daily rate limit so a patient
-// in crisis can always log — even at the admin-imposed ceiling of "1/day".
-const GLUCOSE_CRITICAL_LOW = 65;
-const GLUCOSE_CRITICAL_HIGH = 315;
-
 // Daily reading counter — per user, per UTC calendar day. Mirrors
 // `incrementDailyRateCounter` in chat.service.ts for symmetry. TTL is 36h
 // so the key self-expires across the day boundary without a cron sweep.
+//
+// The day is the one the reading was TAKEN on, not the day it reaches the
+// server (audit P9): a phone offline for a week drains its backlog without
+// tripping today's cap, and each past day still holds to the ceiling. A
+// reading dated in the future counts against today, so a wrong device
+// clock can't open up fresh days. A past day's key gets its own 36h TTL
+// from its first increment, so its ceiling holds for 36h after a drain;
+// that expiry is also what eventually lets the app's held (capped) rows
+// through.
 //
 // Fails OPEN, bounded: during a Redis outage `incr` would hang (the client
 // runs `maxRetriesPerRequest: null`) and stall `/sync/push`, which saves
 // items in order — a critical reading queued behind a normal one would
 // wait on Redis (P5 review N5). A rate limit must never block logging.
 const RATE_COUNTER_TIMEOUT_MS = 500;
-const incrementDailyReadingsCounter = async (userId: string): Promise<number> => {
-  const key = `readings:rate:${userId}:${new Date().toISOString().slice(0, 10)}`;
+const readingsCapDay = (measuredAt: Date, serverNow: Date): string =>
+  (measuredAt < serverNow ? measuredAt : serverNow).toISOString().slice(0, 10);
+
+const incrementDailyReadingsCounter = async (userId: string, capDay: string): Promise<number> => {
+  const key = `readings:rate:${userId}:${capDay}`;
   try {
     const count = await withTimeout(redis.incr(key), RATE_COUNTER_TIMEOUT_MS, "readings counter");
     if (count === 1)
@@ -195,12 +201,11 @@ export const createGlucoseReading = async (
   // `rate_limit.readings.free` flag (see admin OpsPage). Replays + stale-
   // version paths already exited above, so we only count fresh inserts and
   // version-bump updates. Critical-bypass values (< 65 or > 315) always
-  // pass — medical safety overrides the cap.
-  const isCriticalValue =
-    input.valueMgDl < GLUCOSE_CRITICAL_LOW || input.valueMgDl > GLUCOSE_CRITICAL_HIGH;
-  if (user.tier === "free" && !isCriticalValue) {
+  // pass — medical safety overrides the cap. Thresholds come from the one
+  // shared definition (CLAUDE.md "Critical-Low/High Bypass", hardcoded).
+  if (user.tier === "free" && !isCriticalGlucose(input.valueMgDl)) {
     const [dailyCount, dailyLimit] = await Promise.all([
-      incrementDailyReadingsCounter(input.userId),
+      incrementDailyReadingsCounter(input.userId, readingsCapDay(measuredAtDate, serverNow)),
       getReadingsDailyLimit(),
     ]);
     if (dailyCount > dailyLimit) {
