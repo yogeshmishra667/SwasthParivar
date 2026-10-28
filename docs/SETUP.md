@@ -10,13 +10,13 @@ Last updated: 2026-05-14 (after the audit landed).
 
 ## P0 — required to deploy at all
 
-| #   | Item                                                                       | Where           | Notes                                                                                         |
-| --- | -------------------------------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------------- |
-| 1   | Generate `ADMIN_API_TOKEN` (≥32 chars)                                     | deploy host env | Guards `/admin/*` routes (flag service). Random base64: `openssl rand -base64 48`.            |
-| 2   | Generate `JWT_SECRET`, `JWT_REFRESH_SECRET`, `OTP_SECRET` (each ≥32 chars) | deploy host env | All three required by `apps/server/src/config/env.ts`.                                        |
-| 3   | Provision managed Postgres + Redis                                         | provider        | Free tiers fine for dev. TimescaleDB required (we use the hypertable for `glucose_readings`). |
-| 4   | Set `DATABASE_URL` + `REDIS_URL`                                           | deploy host env | Fail-fast at startup if missing.                                                              |
-| 5   | Run `pnpm --filter @swasth/server prisma:deploy` once                      | deploy host     | Applies the 8 committed migrations. Idempotent.                                               |
+| #   | Item                                                                                                                             | Where           | Notes                                                                                                                                                                                                                                                                                                          |
+| --- | -------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Generate `ADMIN_JWT_SECRET`, `ADMIN_JWT_REFRESH_SECRET`, `ADMIN_CSRF_SECRET` (each ≥32 chars), then create the first super-admin | deploy host env | Admin console + `/admin/*` auth (email + password + 2FA); production refuses to boot without all three. Random base64: `openssl rand -base64 48`. First account: `ADMIN_BOOTSTRAP_EMAIL=… ADMIN_BOOTSTRAP_PASSWORD=… pnpm --filter @swasth/server admin:seed`, then sign in to the console once to set up 2FA. |
+| 2   | Generate `JWT_SECRET`, `JWT_REFRESH_SECRET`, `OTP_SECRET` (each ≥32 chars)                                                       | deploy host env | All three required by `apps/server/src/config/env.ts`.                                                                                                                                                                                                                                                         |
+| 3   | Provision managed Postgres + Redis                                                                                               | provider        | Free tiers fine for dev. TimescaleDB required (we use the hypertable for `glucose_readings`).                                                                                                                                                                                                                  |
+| 4   | Set `DATABASE_URL` + `REDIS_URL`                                                                                                 | deploy host env | Fail-fast at startup if missing.                                                                                                                                                                                                                                                                               |
+| 5   | Run `pnpm --filter @swasth/server prisma:deploy` once                                                                            | deploy host     | Applies the 8 committed migrations. Idempotent.                                                                                                                                                                                                                                                                |
 
 ## P1 — required for the audit's observability to actually work
 
@@ -325,9 +325,11 @@ curl https://api.swasthparivar.com/health
 curl https://api.swasthparivar.com/health/deep
 # → {"status":"ok", ...} when DB + Redis are reachable; 503 otherwise
 
-# Admin flag service works (requires ADMIN_API_TOKEN):
+# Admin login + flag service work (super_admin/ops account with 2FA set up):
+export ADMIN_JWT=$(node scripts/admin-token.mjs --api https://api.swasthparivar.com)
 curl -X PUT https://api.swasthparivar.com/admin/flags/probe_test \
-  -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
   -d '{"value": true}'
 # → 200 with {"key":"probe_test", ...}
 

@@ -61,17 +61,20 @@ errors.
 
 **Steps.**
 
-1. **Stop new writes.** Set the maintenance flag — see
-   `apps/server/src/shared/flags/`:
+1. **Stop new writes.** Turn maintenance mode on, from the admin
+   console's Ops page or with curl (admin token: `docs/HOWTO.md` →
+   "Get an admin token for curl"; needs `super_admin` or `ops`):
    ```
+   export ADMIN_JWT=$(node scripts/admin-token.mjs --api https://api.swasthparivar.com)
    curl -X PUT https://api.swasthparivar.com/admin/flags/maintenance_mode \
-     -H "Authorization: Bearer $ADMIN_API_TOKEN" \
-     -H "X-Admin-Actor: $(whoami)" \
+     -H "Authorization: Bearer $ADMIN_JWT" \
+     -H "Content-Type: application/json" \
      -d '{"value": true}'
    ```
-   Then in `apps/server/src/app.ts` add a maintenance-mode guard that
-   reads this flag and returns 503 for write routes. (TODO: this guard
-   is not yet implemented — add it the first time this step is needed.)
+   The guard (`apps/server/src/shared/middleware/maintenance-mode.ts`)
+   then answers 503 `MAINTENANCE_MODE` to every request except `/health`,
+   `/admin/*`, `/api/v1/sos/*` and the signed payment webhooks. SOS keeps
+   writing `SOSEvent` rows, so this does not quiesce the SOS tables.
 2. **Determine if the migration is _recoverable_ or _destructive_.**
    - Recoverable: added a column, added an index, created a new table.
      The old code ignores the new state. → Skip to step 4.
@@ -92,10 +95,12 @@ errors.
 5. **Clear the maintenance flag:**
    ```
    curl -X PUT https://api.swasthparivar.com/admin/flags/maintenance_mode \
-     -H "Authorization: Bearer $ADMIN_API_TOKEN" \
-     -H "X-Admin-Actor: $(whoami)" \
+     -H "Authorization: Bearer $ADMIN_JWT" \
+     -H "Content-Type: application/json" \
      -d '{"value": false}'
    ```
+   The token lasts 15 minutes; if this returns 401, re-run
+   `scripts/admin-token.mjs` first.
 
 **Safety asserts.**
 
@@ -116,17 +121,21 @@ down. The product is otherwise healthy.
 
 **Steps.**
 
-1. Set the relevant flag via the admin API. Example: MSG91 SMS is
+1. Set the relevant flag from the admin console's Flags page, or via
+   the admin API (admin token: `docs/HOWTO.md` → "Get an admin token
+   for curl"; needs `super_admin` or `ops`). Example: MSG91 SMS is
    broken, route OTPs through WhatsApp only:
    ```
+   export ADMIN_JWT=$(node scripts/admin-token.mjs --api https://api.swasthparivar.com)
    curl -X PUT https://api.swasthparivar.com/admin/flags/sms_msg91_enabled \
-     -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+     -H "Authorization: Bearer $ADMIN_JWT" \
+     -H "Content-Type: application/json" \
      -d '{"value": false}'
    ```
 2. Read the flag back to confirm:
    ```
    curl https://api.swasthparivar.com/admin/flags/sms_msg91_enabled \
-     -H "Authorization: Bearer $ADMIN_API_TOKEN"
+     -H "Authorization: Bearer $ADMIN_JWT"
    ```
 3. Wait up to 30 seconds for in-process flag caches across replicas to
    invalidate (pubsub does this — see `apps/server/src/shared/flags/flags.ts`).
@@ -135,7 +144,7 @@ down. The product is otherwise healthy.
    log captures who toggled what — review via:
    ```
    curl https://api.swasthparivar.com/admin/flags/sms_msg91_enabled/audit \
-     -H "Authorization: Bearer $ADMIN_API_TOKEN"
+     -H "Authorization: Bearer $ADMIN_JWT"
    ```
 
 **Safety asserts.**

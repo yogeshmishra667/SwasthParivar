@@ -8,6 +8,12 @@
 >
 > Two reviewers required for any flag flip that widens the cohort or
 > crosses a percentage threshold. Append a row to §4 for every flip.
+>
+> `$ADMIN_JWT` below is a 15-minute admin access token from a
+> `super_admin` or `ops` account:
+> `export ADMIN_JWT=$(node scripts/admin-token.mjs --api https://api.swasthparivar.com)`
+> (see `docs/HOWTO.md` → "Get an admin token for curl"). Re-run it when a
+> call returns 401.
 
 ---
 

@@ -11,24 +11,29 @@
 
 ### Toggle a flag at runtime (no redeploy)
 
+The admin console's Flags page does this with no curl. From a terminal, first get a 15-minute admin token (see "Get an admin token for curl" below); writes need the `super_admin` or `ops` role:
+
 ```bash
+export ADMIN_JWT=$(node scripts/admin-token.mjs --api https://api.swasthparivar.com)
+
 # Set
 curl -X PUT https://api.swasthparivar.com/admin/flags/sms_msg91_enabled \
-  -H "Authorization: Bearer $ADMIN_API_TOKEN" \
-  -H "X-Admin-Actor: $(whoami)" \
+  -H "Authorization: Bearer $ADMIN_JWT" \
   -H "Content-Type: application/json" \
   -d '{"value": false}'
 
 # Read
 curl https://api.swasthparivar.com/admin/flags/sms_msg91_enabled \
-  -H "Authorization: Bearer $ADMIN_API_TOKEN"
+  -H "Authorization: Bearer $ADMIN_JWT"
 # → { "success": true, "data": { "key": "sms_msg91_enabled", "value": false } }
 
 # Audit
 curl https://api.swasthparivar.com/admin/flags/sms_msg91_enabled/audit \
-  -H "Authorization: Bearer $ADMIN_API_TOKEN"
+  -H "Authorization: Bearer $ADMIN_JWT"
 # → last 20 changes, newest first
 ```
+
+The audit entry records the admin account the token belongs to.
 
 Cache propagates across replicas via Redis pub/sub in under 30s.
 
@@ -170,23 +175,27 @@ For destructive migrations: see `docs/runbooks/rollback.md` Section 2 — write 
 `docs/runbooks/rollback.md` Section 3 is the source of truth. Quick version:
 
 ```bash
+export ADMIN_JWT=$(node scripts/admin-token.mjs --api https://api.swasthparivar.com)
+
 # MSG91 is rate-limited — force push-only:
 curl -X PUT https://api.swasthparivar.com/admin/flags/sms_msg91_enabled \
-  -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
   -d '{"value": false}'
 
 # Read it back to confirm:
 curl https://api.swasthparivar.com/admin/flags/sms_msg91_enabled \
-  -H "Authorization: Bearer $ADMIN_API_TOKEN"
+  -H "Authorization: Bearer $ADMIN_JWT"
 
 # When provider recovers:
 curl -X PUT https://api.swasthparivar.com/admin/flags/sms_msg91_enabled \
-  -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
   -d '{"value": true}'
 
 # Audit log:
 curl https://api.swasthparivar.com/admin/flags/sms_msg91_enabled/audit \
-  -H "Authorization: Bearer $ADMIN_API_TOKEN"
+  -H "Authorization: Bearer $ADMIN_JWT"
 ```
 
 For prod incidents that aren't a third-party outage, see `docs/runbooks/rollback.md` Sections 1 (image revert), 2 (migration revert), 4 (PITR), 5 (full outage).
@@ -209,9 +218,10 @@ Default is `log` (kept the dev bypass alive so we never silently
 
 ```bash
 # Via admin endpoint (production):
+export ADMIN_JWT=$(node scripts/admin-token.mjs --api https://api.swasthparivar.com)
 curl -X PUT https://api.swasthparivar.com/admin/flags/auth.otp.provider \
-  -H "Authorization: Bearer $ADMIN_API_TOKEN" \
-  -H "X-Admin-Actor: $(whoami)" \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
   -d '{"value": "firebase"}'
 
 # Or directly via Redis (local/dev):
@@ -447,16 +457,27 @@ If you find yourself writing "this works in production today but could break sil
 
 ---
 
-## Generate an admin API token
+## Get an admin token for curl
+
+There is no shared admin token any more (`ADMIN_API_TOKEN` was removed in admin M0-T5). Every admin call is made as a named admin account, signed in with email + password + 2FA. For curl, mint a short-lived access token with the checked-in script:
 
 ```bash
-openssl rand -base64 48
-# → ~64 chars of random base64
+export ADMIN_JWT=$(node scripts/admin-token.mjs --api https://api.swasthparivar.com)
+# Admin email: you@example.com
+# Password:              (not echoed)
+# 6-digit 2FA code: 123456
+
+curl https://api.swasthparivar.com/admin/auth/me -H "Authorization: Bearer $ADMIN_JWT"
 ```
 
-Drop into the deploy host's env as `ADMIN_API_TOKEN`. The env schema requires ≥32 chars; the constant-time check in the middleware is length-agnostic but won't run unless the token is set.
+- The token lasts **15 minutes**. When a call returns 401, run the script again.
+- Only the token goes to stdout; prompts go to stderr, so `$(...)` captures just the token. Set `ADMIN_EMAIL` to skip the email prompt. The password is never read from the environment.
+- `--api` defaults to `$SWASTH_API_URL`, then `http://localhost:4000`.
+- The account needs 2FA set up already. A new account enrols by signing in to the admin console once.
+- Flag writes need the `super_admin` or `ops` role. `analyst` and `support` can read.
+- No account yet? The first super-admin is created with `pnpm --filter @swasth/server admin:seed` (`ADMIN_BOOTSTRAP_EMAIL` + `ADMIN_BOOTSTRAP_PASSWORD`); later ones from the console's Admins page.
 
-Rotate by setting a new value + redeploying. There's no in-flight rotation — all admin clients need to update simultaneously.
+The script is covered by `apps/server/tests/integration/admin-token-script.test.ts`, so it breaks loudly if the login flow changes.
 
 ---
 
