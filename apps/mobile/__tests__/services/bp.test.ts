@@ -1,8 +1,10 @@
-// Audit P4 review C1 — BP has no local queue, so a network failure must
-// read "not saved" (never "saved locally"). A CRITICAL BP is re-sent in
-// the background with the SAME clientUuid, so the server sees an
-// idempotent replay and the family alert still goes out. W1: the pending
-// critical BP is persisted, so an app restart doesn't drop it.
+// Audit P8 — a BP the server didn't answer for goes to the offline queue
+// ("saved locally"). When the queue can't store it, the P4 rules below
+// still hold: review C1 — the failure reads "not saved" (never "saved
+// locally"), and a CRITICAL BP is re-sent in the background with the SAME
+// clientUuid, so the server sees an idempotent replay and the family alert
+// still goes out. W1: that pending critical BP is persisted, so an app
+// restart doesn't drop it.
 const mockStorage = new Map<string, string>();
 jest.mock("@react-native-async-storage/async-storage", () => ({
   __esModule: true,
@@ -13,24 +15,28 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 }));
 jest.mock("@/services/api", () => ({ api: { post: jest.fn(), get: jest.fn() } }));
 jest.mock("@/services/analytics", () => ({ track: jest.fn(), logError: jest.fn() }));
+jest.mock("@/services/sentry", () => ({ captureError: jest.fn() }));
+jest.mock("@/services/pending-writes", () => ({ enqueuePendingWrite: jest.fn() }));
 
 import { AxiosError, AxiosHeaders, type InternalAxiosRequestConfig } from "axios";
 
 import { api } from "@/services/api";
 import { saveBPReading, type SaveBPInput } from "@/services/bp";
+import { enqueuePendingWrite } from "@/services/pending-writes";
 
 const post = api.post as jest.Mock;
+const enqueue = enqueuePendingWrite as jest.Mock;
 
 const networkError = (): AxiosError => new AxiosError("Network Error", "ERR_NETWORK");
 
-const httpError = (status: number): AxiosError => {
+const httpError = (status: number, code = "READING_INVALID_VALUE"): AxiosError => {
   const config = { headers: new AxiosHeaders() } as InternalAxiosRequestConfig;
   return new AxiosError("Request failed", "ERR_BAD_RESPONSE", config, null, {
     status,
     statusText: "",
     headers: {},
     config,
-    data: { error: { code: "READING_INVALID_VALUE", message: "bad" } },
+    data: { error: { code, message: "bad" } },
   });
 };
 
@@ -56,6 +62,8 @@ const pendingUuids = (): string[] =>
 beforeEach(() => {
   jest.useFakeTimers();
   post.mockReset();
+  // The queue can't store it unless a test says so: the P4 fallback.
+  enqueue.mockReset().mockResolvedValue(false);
   mockStorage.clear();
 });
 
@@ -63,7 +71,71 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-describe("saveBPReading", () => {
+describe("saveBPReading with the offline queue (audit P8)", () => {
+  it("a network failure is stored in the queue and reads 'saved locally'", async () => {
+    enqueue.mockResolvedValue(true);
+    post.mockRejectedValue(networkError());
+    await expect(saveBPReading(bpInput("uuid-q", 128, 82))).resolves.toEqual({
+      kind: "queued",
+      clientUuid: "uuid-q",
+    });
+    expect(enqueue).toHaveBeenCalledWith({
+      kind: "bp",
+      payload: expect.objectContaining({
+        clientUuid: "uuid-q",
+        systolic: 128,
+        diastolic: 82,
+        version: 1,
+        targetUserId: "user-1",
+      }),
+      critical: false,
+      takenAtIso: "2026-10-26T08:00:00.000Z",
+    });
+    // The queue's drain sends it; no background re-send from here.
+    await jest.advanceTimersByTimeAsync(10 * 60_000);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it("a critical BP goes to the queue as critical, with no fallback copy", async () => {
+    enqueue.mockResolvedValue(true);
+    post.mockRejectedValue(networkError());
+    await expect(saveBPReading(bpInput("uuid-qc", 195, 120))).resolves.toMatchObject({
+      kind: "queued",
+    });
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ critical: true }));
+    expect(pendingUuids()).toEqual([]);
+  });
+
+  it("a retry that is queued clears the fallback copy left by an earlier failure", async () => {
+    post.mockRejectedValue(networkError());
+    await saveBPReading(bpInput("uuid-retry", 195, 120));
+    expect(pendingUuids()).toEqual(["uuid-retry"]);
+    enqueue.mockResolvedValue(true);
+    await expect(saveBPReading(bpInput("uuid-retry", 195, 120))).resolves.toMatchObject({
+      kind: "queued",
+    });
+    expect(pendingUuids()).toEqual([]);
+  });
+
+  it("an expired session (401) on a normal BP is queued, not lost", async () => {
+    enqueue.mockResolvedValue(true);
+    post.mockRejectedValue(httpError(401, "AUTH_TOKEN_EXPIRED"));
+    await expect(saveBPReading(bpInput("uuid-401", 128, 82))).resolves.toMatchObject({
+      kind: "queued",
+    });
+  });
+
+  it("a BP the server refused is not queued", async () => {
+    enqueue.mockResolvedValue(true);
+    post.mockRejectedValue(httpError(400));
+    await expect(saveBPReading(bpInput("uuid-bad", 128, 82))).resolves.toMatchObject({
+      kind: "rejected",
+    });
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe("saveBPReading when the queue can't store it", () => {
   it("a network failure on a normal BP is 'not saved', with no background re-send", async () => {
     post.mockRejectedValue(networkError());
     await expect(saveBPReading(bpInput("uuid-normal", 128, 82))).resolves.toEqual({

@@ -9,6 +9,7 @@ import type * as MedicationLogModule from "./models/MedicationLog";
 import type * as UserStreakModule from "./models/UserStreak";
 import type * as ChatMessageModule from "./models/ChatMessage";
 import type * as ChatPendingSendModule from "./models/ChatPendingSend";
+import type * as PendingWriteModule from "./models/PendingWrite";
 import { logError } from "@/services/analytics";
 
 /**
@@ -59,6 +60,7 @@ export const getDatabase = (): Database | null => {
     const { ChatMessageModel } = require("./models/ChatMessage") as typeof ChatMessageModule;
     const { ChatPendingSendModel } =
       require("./models/ChatPendingSend") as typeof ChatPendingSendModule;
+    const { PendingWriteModel } = require("./models/PendingWrite") as typeof PendingWriteModule;
     /* eslint-enable @typescript-eslint/no-require-imports */
 
     const adapter = new SQLiteAdapter({
@@ -80,6 +82,7 @@ export const getDatabase = (): Database | null => {
         UserStreakModel,
         ChatMessageModel,
         ChatPendingSendModel,
+        PendingWriteModel,
       ],
     });
     return cached;

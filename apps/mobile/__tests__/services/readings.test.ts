@@ -33,50 +33,53 @@ interface MockRow {
 
 const mockRows: MockRow[] = [];
 const mockPendingRows = (): MockRow[] => mockRows.filter((r) => r.syncedAt === null && !r.deleted);
-const mockDb = { failQuery: false };
+const mockDb = { failQuery: false, unavailable: false };
 
 jest.mock("@/db/database", () => ({
-  getDatabase: () => ({
-    write: async (fn: () => Promise<void>) => await fn(),
-    collections: {
-      get: () => ({
-        query: () => ({
-          fetch: () =>
-            mockDb.failQuery
-              ? Promise.reject(new Error("SQLite busy"))
-              : Promise.resolve(mockPendingRows()),
-          fetchCount: () => Promise.resolve(mockPendingRows().length),
-        }),
-        create: (fn: (r: Partial<MockRow>) => void) => {
-          const r: Partial<MockRow> = {
-            syncedAt: null,
-            deleted: false,
-            notes: null,
-            context: null,
-          };
-          fn(r);
-          r.update = (change) => {
-            change(r as MockRow);
-            return Promise.resolve();
-          };
-          r.markAsDeleted = () => {
-            r.deleted = true;
-            return Promise.resolve();
-          };
-          mockRows.push(r as MockRow);
-          return Promise.resolve();
+  getDatabase: () =>
+    mockDb.unavailable
+      ? null
+      : {
+          write: async (fn: () => Promise<void>) => await fn(),
+          collections: {
+            get: () => ({
+              query: () => ({
+                fetch: () =>
+                  mockDb.failQuery
+                    ? Promise.reject(new Error("SQLite busy"))
+                    : Promise.resolve(mockPendingRows()),
+                fetchCount: () => Promise.resolve(mockPendingRows().length),
+              }),
+              create: (fn: (r: Partial<MockRow>) => void) => {
+                const r: Partial<MockRow> = {
+                  syncedAt: null,
+                  deleted: false,
+                  notes: null,
+                  context: null,
+                };
+                fn(r);
+                r.update = (change) => {
+                  change(r as MockRow);
+                  return Promise.resolve();
+                };
+                r.markAsDeleted = () => {
+                  r.deleted = true;
+                  return Promise.resolve();
+                };
+                mockRows.push(r as MockRow);
+                return Promise.resolve();
+              },
+            }),
+          },
         },
-      }),
-    },
-  }),
 }));
 
 import { AxiosError, AxiosHeaders, type InternalAxiosRequestConfig } from "axios";
 
 import { api } from "@/services/api";
 import { captureError } from "@/services/sentry";
+import { classifyDrainFailure } from "@/services/drain-policy";
 import {
-  classifyDrainFailure,
   drainPendingReadings,
   saveGlucoseReading,
   type SaveReadingInput,
@@ -155,6 +158,7 @@ beforeEach(() => {
   (captureError as jest.Mock).mockReset();
   mockRows.length = 0;
   mockDb.failQuery = false;
+  mockDb.unavailable = false;
   useSyncStore.setState({ phase: "idle", pendingCount: 0 });
 });
 
@@ -205,14 +209,17 @@ describe("drainPendingReadings", () => {
     expect((post.mock.calls[0]?.[1] as { notes?: string }).notes).toBe("khana ke baad");
   });
 
-  it("sends critical readings first, ahead of an older backlog", async () => {
+  it("sends critical readings first, newest first, ahead of an older backlog", async () => {
+    // The 30-min cooldown lets only the first critical alert: it must be
+    // the reading closest to now.
     addPendingRow("uuid-old-normal", "2026-10-20T08:00:00.000Z", 120);
+    addPendingRow("uuid-critical-old", "2026-10-21T22:00:00.000Z", 340);
     addPendingRow("uuid-critical", "2026-10-22T08:00:00.000Z", 52);
     post.mockResolvedValue({ data: {} });
 
     await drainPendingReadings();
 
-    expect(postedUuids()).toEqual(["uuid-critical", "uuid-old-normal"]);
+    expect(postedUuids()).toEqual(["uuid-critical", "uuid-critical-old", "uuid-old-normal"]);
   });
 
   it("a daily-cap 429 keeps that reading and still syncs the rest of the backlog", async () => {
@@ -282,13 +289,18 @@ describe("drainPendingReadings", () => {
   });
 
   it("never deletes a critical reading, even when the server refuses it", async () => {
-    const critical = addPendingRow("uuid-critical", "2026-10-20T08:00:00.000Z", 52);
+    const critical = addPendingRow("uuid-critical-refused", "2026-10-20T08:00:00.000Z", 52);
     post.mockRejectedValueOnce(invalid());
 
     await expect(drainPendingReadings()).resolves.toEqual({ pushed: 0, failed: 0, held: 1 });
 
     expect(critical.deleted).toBe(false);
     expect(critical.syncedAt).toBeNull();
+    // It will never alert anyone: Sentry, not just analytics.
+    expect(captureError).toHaveBeenCalledWith(
+      expect.any(AxiosError),
+      expect.objectContaining({ where: "drainPendingReadings.holdCritical" }),
+    );
   });
 
   it("a local failure doesn't leave the phase stuck on 'draining'", async () => {
@@ -317,6 +329,28 @@ describe("saveGlucoseReading", () => {
     expect(result.kind).toBe("queued");
     expect(mockPendingRows()).toHaveLength(1);
     expect(mockPendingRows()[0]?.valueMgDl).toBe(130);
+  });
+
+  it("with no local DB it says 'not saved' instead of 'saved locally' (audit P8)", async () => {
+    mockDb.unavailable = true;
+    post.mockRejectedValueOnce(networkError());
+
+    await expect(saveGlucoseReading(input)).resolves.toMatchObject({
+      kind: "rejected",
+      code: "OFFLINE_QUEUE_UNAVAILABLE",
+    });
+    expect(useSyncStore.getState().pendingCount).toBe(0);
+  });
+
+  it("uses the caller's clientUuid, so a retry of the same entry is a replay", async () => {
+    post.mockRejectedValueOnce(networkError());
+
+    await expect(saveGlucoseReading({ ...input, clientUuid: "entry-1" })).resolves.toEqual({
+      kind: "queued",
+      clientUuid: "entry-1",
+    });
+    expect((post.mock.calls[0]?.[1] as { clientUuid: string }).clientUuid).toBe("entry-1");
+    expect(mockPendingRows()[0]?.clientUuid).toBe("entry-1");
   });
 
   it("the daily cap is a rejection the log screen shows (not queued)", async () => {

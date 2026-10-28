@@ -1,11 +1,16 @@
-// BP reading service. Online-only: BP has no local (WatermelonDB) queue
-// yet. A network failure is therefore reported honestly as "not saved"
-// (never "saved locally") and the caller keeps the same `clientUuid` so a
-// retry is an idempotent replay on the server, never a duplicate. A
-// CRITICAL BP is also re-sent in the background until it lands, so the
-// server-side family alert (push + SMS) still goes out once the network
-// returns (P4 review C1). It is persisted, so an app kill or restart
-// doesn't drop it: `resumePendingCriticalBP` picks it up again (W1).
+// BP reading service. Online-first; a BP the server didn't answer for
+// (network, 5xx, expired session, the per-minute limit) is stored in the
+// offline queue (`services/pending-writes.ts`, audit P8) and sent later,
+// critical ones first.
+//
+// Fallback when the queue can't store it (no local DB, or the write
+// failed): the failure is reported honestly as "not saved" and the caller
+// keeps the same `clientUuid`, so a retry is an idempotent replay on the
+// server, never a duplicate. A CRITICAL BP is then still re-sent in the
+// background until it lands, so the server-side family alert (push + SMS)
+// goes out once the network returns (P4 review C1). It is persisted, so an
+// app kill or restart doesn't drop it: `resumePendingCriticalBP` picks it
+// up again (W1).
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { isAxiosError } from "axios";
@@ -13,6 +18,8 @@ import { isCriticalBP, type ReadingContext, type ReadingSource } from "@swasth/s
 
 import { api } from "@/services/api";
 import { logError, track } from "@/services/analytics";
+import { enqueuePendingWrite } from "@/services/pending-writes";
+import { classifyDrainFailure } from "@/services/drain-policy";
 
 export interface SaveBPInput {
   userId: string;
@@ -36,7 +43,12 @@ export interface ServerBPResponse {
 
 export type SaveBPResult =
   | { kind: "synced"; readingId: string }
-  /** Not saved — no network / server error. `retrying`: critical BP being re-sent in the background. */
+  /** Stored on the phone; sent when the server answers again. */
+  | { kind: "queued"; clientUuid: string }
+  /**
+   * No answer from the server AND it couldn't be stored on the phone.
+   * `retrying`: a critical BP is being re-sent in the background.
+   */
   | { kind: "network_failed"; retrying: boolean }
   | { kind: "rejected"; status: number; code: string | null; message: string };
 
@@ -59,6 +71,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 interface BPPayload {
   clientUuid: string;
+  targetUserId: string;
   [field: string]: unknown;
 }
 
@@ -201,8 +214,28 @@ export const saveBPReading = async (input: SaveBPInput): Promise<SaveBPResult> =
     if (critical) await clearPending(clientUuid);
     return { kind: "synced", readingId: res.data.reading.id };
   } catch (err) {
-    // A critical BP is also kept when the session expired or the server
-    // throttled it (review W2): the family alert depends on it landing.
+    if (classifyDrainFailure(err) === "abort") {
+      const stored = await enqueuePendingWrite({
+        kind: "bp",
+        payload,
+        critical,
+        takenAtIso: input.measuredAtIso,
+      });
+      if (stored) {
+        // The queue owns it now; drop any fallback copy of the same reading.
+        if (critical) await clearPending(clientUuid);
+        track("reading_logged", {
+          type: "bp",
+          source: input.source,
+          value: input.systolic,
+          offline: true,
+        });
+        return { kind: "queued", clientUuid };
+      }
+    }
+    // Not stored. A critical BP is also kept when the session expired or
+    // the server throttled it (review W2): the family alert depends on it
+    // landing.
     if (isNetworkOrServerError(err) || (critical && isRetryable(err))) {
       if (critical) {
         await persistPending(payload);

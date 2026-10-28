@@ -5,8 +5,10 @@ import { appSchema, tableSchema } from "@nozbe/watermelondb";
 //   v2 — + chat_messages, chat_pending_sends (Phase 3 chat offline layer).
 //        Additive only; see ./migrations.ts. Existing-table data is
 //        untouched by the v1→v2 migration.
+//   v3 — + pending_writes (audit P8 offline queue for BP, cardiac,
+//        respiratory and meal logs). Additive only.
 export const dbSchema = appSchema({
-  version: 2,
+  version: 3,
   tables: [
     tableSchema({
       name: "glucose_readings",
@@ -90,6 +92,22 @@ export const dbSchema = appSchema({
         { name: "user_id", type: "string", isIndexed: true },
         { name: "message", type: "string" },
         { name: "queued_at", type: "number", isIndexed: true },
+      ],
+    }),
+    // Audit P8 — BP, cardiac, respiratory and meal logs not yet on the
+    // server. `payload_json` is the exact POST body: it carries the
+    // `clientUuid` idempotency key and the `targetUserId` profile. A row
+    // is removed once the server has the log.
+    tableSchema({
+      name: "pending_writes",
+      columns: [
+        { name: "client_uuid", type: "string", isIndexed: true },
+        { name: "user_id", type: "string", isIndexed: true },
+        { name: "kind", type: "string" },
+        { name: "payload_json", type: "string" },
+        { name: "critical", type: "boolean" },
+        { name: "taken_at", type: "number", isIndexed: true },
+        { name: "queued_at", type: "number" },
       ],
     }),
   ],

@@ -89,7 +89,10 @@
     "extremeConfirm": "{{value}} — this is very {{direction}}. Is it correct?",
     "saved": "Saved",
     "savedOffline": "Saved locally — will sync when you're back online.",
-    "saveFailed": "Could not save — data is safe locally, will sync later.",
+    "savedOfflineCritical": "Saved on this phone. Your family hasn't been alerted yet — don't wait, call now.",
+    "saveFailed": "Could not save — try again.",
+    "saveFailedNetwork": "Couldn't save — please try again in a little while.",
+    "saveFailedCritical": "Couldn't save, and your family hasn't been alerted. Don't wait — call now.",
     "rateLimited": {
       "title": "Daily limit reached",
       "body": "You've reached today's reading limit. You can log again tomorrow morning. Critical-low and critical-high readings always go through.",
@@ -389,6 +392,7 @@
     "pulse": "Pulse (optional)",
     "confirmSave": "Save {{sys}}/{{dia}} for {{profile}}?",
     "saved": "BP saved",
+    "savedOffline": "Saved locally — will sync when you're back online.",
     "saveFailed": "Could not save — try again.",
     "saveFailedNetwork": "No internet — BP not saved. Try again.",
     "saveFailedCriticalRetrying": "No internet — BP not saved yet. We'll keep trying to send it so your family gets alerted. Don't wait: call now.",
@@ -576,7 +580,9 @@
     }
   },
   "sync": {
-    "draining": "Syncing..."
+    "draining": "Syncing...",
+    "pending": "{{count}} saved locally",
+    "pendingA11y": "{{count}} saved on this phone — they'll be sent when you're back online"
   },
   "errorBoundary": {
     "title": "Something went wrong 😔",

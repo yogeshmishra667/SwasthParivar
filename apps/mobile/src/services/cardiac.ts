@@ -1,27 +1,28 @@
-// Phase 4 Feature E — Cardiac log mobile service. Online-first with a
-// `queued` fallback on network / server error, mirroring `services/bp.ts`.
-//
-// Why no WatermelonDB queue yet: cardiac logs are Phase 4 — the local-
-// first storage path will land alongside the wearables push integration
-// (Feature I) when the sync surface needs to scale beyond manual entry.
-// For now an in-memory queued result lets the UI tell the user the row
-// is safe and the next pull-to-refresh resyncs.
+// Phase 4 Feature E — Cardiac log mobile service. Online-first; a log the
+// server didn't answer for (network, 5xx, expired session) is stored in the
+// offline queue (`services/pending-writes.ts`, audit P8) and sent later.
+// Before P8 it returned `queued` without storing anything.
 //
 // Server kill-switch `cardiac_logging_enabled` returns 503 with code
 // `CARDIAC_DISABLED` — surfaced as a typed `rejected` result so the
 // caller can render a friendly "feature unavailable" card rather than a
-// generic error.
+// generic error. Not queued: the feature is off, not the network.
 
 import { isAxiosError } from "axios";
 import { v4 as uuidv4 } from "uuid";
+import { classifyCardiacReading } from "@swasth/domain-logic";
 import type { ExerciseTolerance, ReadingSource, RhythmStatus } from "@swasth/shared-types";
 
 import { api } from "@/services/api";
 import { logError, track } from "@/services/analytics";
+import { enqueuePendingWrite } from "@/services/pending-writes";
+import { classifyDrainFailure } from "@/services/drain-policy";
 
 export interface SaveCardiacInput {
   /** Profile to log against (shared phone — see CLAUDE.md "Shared Phone Profile Switcher"). */
   userId: string;
+  /** Stable per entered log, so a retry is an idempotent replay. New when omitted. */
+  clientUuid?: string;
   heartRate: number;
   rhythmStatus?: RhythmStatus;
   chestPain?: boolean;
@@ -53,17 +54,19 @@ export type SaveCardiacResult =
       heartRate: number;
       critical: { isCritical: boolean; primaryReason: string; withinCooldown: boolean };
     }
+  /** Stored on the phone; sent when the server answers again. */
   | { kind: "queued"; clientUuid: string }
+  /** No answer from the server AND it couldn't be stored on the phone. */
+  | { kind: "network_failed" }
   | { kind: "rejected"; status: number; code: string | null; message: string };
 
-const isNetworkOrServerError = (err: unknown): boolean => {
-  if (!isAxiosError(err)) return true;
-  if (!err.response) return true;
-  return err.response.status >= 500 && err.response.status !== 503;
-};
+const errorCode = (err: unknown): string | null =>
+  isAxiosError(err)
+    ? ((err.response?.data as { error?: { code?: string } } | undefined)?.error?.code ?? null)
+    : null;
 
 export const saveCardiacLog = async (input: SaveCardiacInput): Promise<SaveCardiacResult> => {
-  const clientUuid = uuidv4();
+  const clientUuid = input.clientUuid ?? uuidv4();
   const payload = {
     clientUuid,
     heartRate: input.heartRate,
@@ -78,7 +81,7 @@ export const saveCardiacLog = async (input: SaveCardiacInput): Promise<SaveCardi
     measuredAt: input.measuredAtIso,
     version: 1,
     targetUserId: input.userId,
-  } as const;
+  };
 
   try {
     const res = await api.post<ServerCardiacResponse>("/readings/cardiac", payload);
@@ -95,14 +98,29 @@ export const saveCardiacLog = async (input: SaveCardiacInput): Promise<SaveCardi
       critical: res.data.critical,
     };
   } catch (err) {
-    if (isNetworkOrServerError(err)) {
+    if (errorCode(err) !== "CARDIAC_DISABLED" && classifyDrainFailure(err) === "abort") {
+      const critical =
+        classifyCardiacReading({
+          heartRateBpm: input.heartRate,
+          rhythmStatus: input.rhythmStatus ?? "unknown",
+          chestPain: input.chestPain ?? false,
+          painSeverity: input.painSeverity ?? null,
+          exerciseTolerance: input.exerciseTolerance ?? "normal",
+        }).severity === "critical_bypass";
+      const stored = await enqueuePendingWrite({
+        kind: "cardiac",
+        payload,
+        critical,
+        takenAtIso: input.measuredAtIso,
+      });
       track("reading_logged", {
         type: "cardiac",
         source: input.source,
         value: input.heartRate,
         offline: true,
+        stored,
       });
-      return { kind: "queued", clientUuid };
+      return stored ? { kind: "queued", clientUuid } : { kind: "network_failed" };
     }
 
     if (isAxiosError(err) && err.response) {

@@ -89,7 +89,10 @@
     "extremeConfirm": "{{value}} — yeh bahut {{direction}} hai. Kya sahi hai?",
     "saved": "Save ho gaya",
     "savedOffline": "Locally save ho gaya — internet aane par sync ho jaayega.",
-    "saveFailed": "Save nahi ho paya — data locally safe hai, sync baad mein hoga.",
+    "savedOfflineCritical": "Locally save ho gaya. Family ko abhi tak alert nahi gaya — intezaar na karein, abhi call karein.",
+    "saveFailed": "Save nahi ho paya — dobara try karein.",
+    "saveFailedNetwork": "Save nahi ho paya — thodi der baad dobara try karein.",
+    "saveFailedCritical": "Save nahi ho paya, aur family ko alert nahi gaya. Intezaar na karein — abhi call karein.",
     "rateLimited": {
       "title": "Aaj ka limit poori ho gayi",
       "body": "Aap aaj ki reading limit poori kar chuke hain. Kal subah firse log kar sakte hain. Bahut kam ya bahut zyada (critical) readings hamesha save hoti hain.",
@@ -389,6 +392,7 @@
     "pulse": "Pulse (optional)",
     "confirmSave": "{{sys}}/{{dia}} — {{profile}} ke liye save karein?",
     "saved": "BP save ho gaya",
+    "savedOffline": "Locally save ho gaya — internet aane par sync ho jaayega.",
     "saveFailed": "Save nahi ho paya — dobara try karein.",
     "saveFailedNetwork": "Internet nahi mila — BP save nahi hua. Dobara try karein.",
     "saveFailedCriticalRetrying": "Internet nahi mila — BP abhi save nahi hua. Hum ise bhejne ki koshish karte rahenge taaki family ko alert jaye. Intezaar na karein, abhi call karein.",
@@ -576,7 +580,9 @@
     }
   },
   "sync": {
-    "draining": "Sync ho raha hai..."
+    "draining": "Sync ho raha hai...",
+    "pending": "{{count}} locally saved",
+    "pendingA11y": "{{count}} entry phone par save hain — internet aane par apne aap bhej denge"
   },
   "errorBoundary": {
     "title": "Kuch gadbad hui 😔",

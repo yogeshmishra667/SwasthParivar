@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import NetInfo from "@react-native-community/netinfo";
 import { drainPendingReadings, refreshPendingCount } from "@/services/readings";
 import { resumePendingCriticalBP } from "@/services/bp";
+import { drainPendingWrites, refreshPendingWritesCount } from "@/services/pending-writes";
 import { useAuthStore } from "@/stores/auth.store";
 import { logError } from "@/services/analytics";
 
@@ -15,9 +16,11 @@ import { logError } from "@/services/analytics";
  *   3. Every 60s while authenticated — defensive in case (1) and (2)
  *      both miss (rare; e.g. captive-portal Wi-Fi changes).
  *
+ * Two queues drain: glucose readings (`drainPendingReadings`) and BP,
+ * cardiac, respiratory and meal logs (`drainPendingWrites`, audit P8).
  * Drains are no-ops when there's no local DB (Expo Go on Android) or
- * no pending rows. The service guards against concurrent drains via
- * `useSyncStore.phase`.
+ * no pending rows. Each service guards against concurrent drains of its
+ * own queue.
  */
 const DEFENSIVE_INTERVAL_MS = 60_000;
 
@@ -32,12 +35,17 @@ export const useSyncDrain = (): void => {
     const tryDrain = (): void => {
       if (!mounted) return;
       void drainPendingReadings().catch((err) => logError("useSyncDrain.drain", err));
-      // BP has no local queue; only a critical BP is kept for re-send (P4).
+      void drainPendingWrites().catch((err) => logError("useSyncDrain.outbox", err));
+      // A critical BP the queue couldn't store is re-sent from here (P4).
       void resumePendingCriticalBP().catch((err) => logError("useSyncDrain.criticalBP", err));
     };
 
-    // 1. Seed pending count + first drain.
-    void refreshPendingCount()
+    // 1. Seed pending counts + first drain. The outbox count is caught on
+    // its own: it must never stop the glucose drain from starting.
+    void Promise.all([
+      refreshPendingCount(),
+      refreshPendingWritesCount().catch((err) => logError("useSyncDrain.seedOutbox", err)),
+    ])
       .then(() => tryDrain())
       .catch((err) => logError("useSyncDrain.seed", err));
 

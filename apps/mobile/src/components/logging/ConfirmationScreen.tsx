@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { View, Text, Pressable, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 import { isCriticalGlucose } from "@swasth/shared-types";
 import type { GlucoseReadingType } from "@swasth/shared-types";
+import { SaveErrorNotice } from "@/components/shared/SaveErrorNotice";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
@@ -21,6 +22,15 @@ interface ConfirmationProps {
   uncertainType: boolean;
   onConfirm: (type: GlucoseReadingType, context: ReadingContext) => void;
   onEdit: () => void;
+  /** Shown above the buttons when the last save didn't go through. */
+  errorMessage?: string | null;
+  /** Under the message, e.g. the call button when a critical entry failed. */
+  errorAction?: ReactNode;
+  /**
+   * A save is in flight: confirm and edit are disabled, so neither a double
+   * save nor an edit can be overtaken by the first save's result.
+   */
+  saving?: boolean;
 }
 
 const TYPE_OPTIONS: readonly GlucoseReadingType[] = ["fasting", "post_meal", "random"] as const;
@@ -52,6 +62,9 @@ export const ConfirmationScreen = ({
   uncertainType,
   onConfirm,
   onEdit,
+  errorMessage = null,
+  errorAction = null,
+  saving = false,
 }: ConfirmationProps): JSX.Element => {
   const { t } = useTranslation();
   const profile = useActiveProfile();
@@ -241,21 +254,26 @@ export const ConfirmationScreen = ({
             </Card>
           )}
 
+          {errorMessage ? <SaveErrorNotice message={errorMessage} /> : null}
+          {errorMessage && errorAction ? <View className="mt-3">{errorAction}</View> : null}
+
           <View className="flex-row gap-3">
             <View className="flex-1">
-              <Button label={t("common.edit")} variant="ghost" onPress={onEdit} />
+              <Button label={t("common.edit")} variant="ghost" disabled={saving} onPress={onEdit} />
             </View>
             <View className="flex-[2]">
               <Button
                 label={
-                  confirmReady
-                    ? t("logging.confirmYes")
-                    : t("logging.confirmWait", {
-                        seconds: secondsLeft,
-                      })
+                  saving
+                    ? t("common.loading")
+                    : confirmReady
+                      ? t("logging.confirmYes")
+                      : t("logging.confirmWait", {
+                          seconds: secondsLeft,
+                        })
                 }
                 variant={isCritical ? "critical" : "primary"}
-                disabled={!confirmReady}
+                disabled={!confirmReady || saving}
                 onPress={handleConfirm}
               />
             </View>

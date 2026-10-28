@@ -3,10 +3,12 @@
 // CTA. No festive toggle (not a meal-tied measurement), no fasting/
 // post-meal toggle (not applicable).
 
+import type { ReactNode } from "react";
 import { View, Text, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
+import { SaveErrorNotice } from "@/components/shared/SaveErrorNotice";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
@@ -19,6 +21,15 @@ interface BPConfirmationProps {
   pulse?: number;
   onConfirm: () => void;
   onEdit: () => void;
+  /** Shown above the buttons when the last save didn't go through. */
+  errorMessage?: string | null;
+  /** Under the message, e.g. the call button when a critical entry failed. */
+  errorAction?: ReactNode;
+  /**
+   * A save is in flight: confirm and edit are disabled, so neither a double
+   * save nor an edit can be overtaken by the first save's result.
+   */
+  saving?: boolean;
 }
 
 const HIGH_SYS = 140;
@@ -30,6 +41,9 @@ export const BPConfirmationScreen = ({
   pulse,
   onConfirm,
   onEdit,
+  errorMessage = null,
+  errorAction = null,
+  saving = false,
 }: BPConfirmationProps): JSX.Element => {
   const { t } = useTranslation();
   const profile = useActiveProfile();
@@ -92,14 +106,18 @@ export const BPConfirmationScreen = ({
             )}
           </Card>
 
+          {errorMessage ? <SaveErrorNotice message={errorMessage} /> : null}
+          {errorMessage && errorAction ? <View className="mt-3">{errorAction}</View> : null}
+
           <View className="flex-row gap-3">
             <View className="flex-1">
-              <Button label={t("common.edit")} variant="ghost" onPress={onEdit} />
+              <Button label={t("common.edit")} variant="ghost" disabled={saving} onPress={onEdit} />
             </View>
             <View className="flex-[2]">
               <Button
-                label={t("common.confirm")}
+                label={saving ? t("common.loading") : t("common.confirm")}
                 variant={elevated ? "secondary" : "primary"}
+                disabled={saving}
                 onPress={onConfirm}
               />
             </View>
