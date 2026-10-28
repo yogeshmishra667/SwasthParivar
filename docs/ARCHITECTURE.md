@@ -330,7 +330,7 @@ Concrete scenarios this exists for:
 - Storage: Redis. Keys are `flag:<name>`. JSON values (`string | number | boolean | object | array`).
 - Cache: 30-second in-process per-replica. Invalidated by Redis pub/sub on every `setFlag` — every replica clears its cache for that key within milliseconds.
 - Audit: every set appends to a capped (100-entry) list at `flag-audit:<name>` with `{ts, prevValue, newValue, by}`.
-- Admin route: `/admin/flags` (under `apps/server/src/modules/admin/`) gated by `Authorization: Bearer $ADMIN_API_TOKEN` (constant-time compare).
+- Admin route: `/admin/flags` (under `apps/server/src/modules/admin/`) gated by `Authorization: Bearer $ADMIN_JWT`, a 15-minute admin access token from the email + password + 2FA login (`/admin/auth/*`). Reads need any admin role; writes need `super_admin` or `ops`. For curl, mint one with `node scripts/admin-token.mjs` (see `docs/HOWTO.md` → "Get an admin token for curl").
 - Application code calls `getFlag(key, default)` — never crashes if Redis is down (returns the default).
 
 ### Endpoints
