@@ -18,7 +18,8 @@ import { getReadingsDailyLimit } from "../../shared/middleware/rate-limit.js";
 import {
   enqueueCriticalAlert,
   isFreshForReplayDispatch,
-  lateCriticalOf,
+  criticalTimingOf,
+  type CriticalTiming,
 } from "../../workers/critical-alert.enqueue.js";
 
 const analyzeQueue = createQueue<{
@@ -113,7 +114,9 @@ const ist = (): number => 330;
 const buildReplayResult = async (
   reading: GlucoseReading,
   userId: string,
-  requestId?: string,
+  requestId: string | undefined,
+  /** From the replay request's own sentAt and receive time (review B2). */
+  timing: CriticalTiming,
 ): Promise<CreateReadingResult> => {
   // Re-derive the decision the original request made: as of the moment
   // this version was saved, against critical alerts shown BEFORE it. This
@@ -152,13 +155,12 @@ const buildReplayResult = async (
   });
 
   if (critical.isCritical && !critical.withinCooldown && isFreshForReplayDispatch(savedAt)) {
-    const late = lateCriticalOf({ measuredAt: reading.measuredAt, receivedAt: savedAt });
     await enqueueCriticalAlert(
       {
         readingId: reading.id,
         userId,
         decision: critical,
-        ...(late ? { late } : {}),
+        ...(timing.late ? { late: timing.late } : {}),
         ...(requestId ? { requestId } : {}),
       },
       reading.version,
@@ -202,7 +204,16 @@ export const createGlucoseReading = async (
   if (idem.kind === "replay") {
     // Idempotent replay — same {clientUuid, version} we already stored.
     // Return the prior result without re-running side effects.
-    return await buildReplayResult(idem.existing, input.userId, input.requestId);
+    return await buildReplayResult(
+      idem.existing,
+      input.userId,
+      input.requestId,
+      criticalTimingOf({
+        measuredAt: idem.existing.measuredAt,
+        sentAt: input.sentAt,
+        receivedAt: serverNow,
+      }),
+    );
   }
   // `update` carries the existing row; `insert` leaves it null.
   const existing = idem.kind === "update" ? idem.existing : null;
@@ -388,19 +399,40 @@ export const createGlucoseReading = async (
             { clientUuid: input.clientUuid, userId: input.userId },
             "concurrent create resolved as idempotent replay",
           );
-          return await buildReplayResult(winner, input.userId, input.requestId);
+          return await buildReplayResult(
+            winner,
+            input.userId,
+            input.requestId,
+            criticalTimingOf({
+              measuredAt: winner.measuredAt,
+              sentAt: input.sentAt,
+              receivedAt: serverNow,
+            }),
+          );
         }
+        // The key is taken by another profile's reading: never answer with
+        // it. A 409 the app keeps queued, not a 500 that stops its sync.
+        throw new DomainError(
+          "READING_CLIENT_UUID_CONFLICT",
+          "clientUuid already used by another profile",
+        );
       }
       throw err;
     }
   }
 
-  // Audit P33: taken more than 2h before it reached us (offline queue).
-  // The family gets a late notice, not an emergency page, and its feedback
-  // row isn't a `critical_warn` — the marker the cooldown, guardian-alert
-  // dedup and chat's active-emergency check look for.
-  const late = critical.isCritical
-    ? lateCriticalOf({ measuredAt: input.measuredAt, sentAt: input.sentAt, receivedAt: serverNow })
+  // Audit P33: a reading over 2h old (offline queue) doesn't start the
+  // cooldown — its feedback row isn't a `critical_warn`, the marker the
+  // cooldown, guardian-alert dedup and chat's active-emergency check look
+  // for — and, when the device's own send time confirms it, the family gets
+  // a late notice instead of the live chain. An edit keeps the stored
+  // measuredAt.
+  const timing = critical.isCritical
+    ? criticalTimingOf({
+        measuredAt: existing?.measuredAt ?? input.measuredAt,
+        sentAt: input.sentAt,
+        receivedAt: serverNow,
+      })
     : null;
 
   // Hand off the critical alert FIRST — before the streak and feedback
@@ -412,7 +444,7 @@ export const createGlucoseReading = async (
         readingId: reading.id,
         userId: input.userId,
         decision: critical,
-        ...(late ? { late } : {}),
+        ...(timing?.late ? { late: timing.late } : {}),
         ...(input.requestId ? { requestId: input.requestId } : {}),
       },
       reading.version,
@@ -440,7 +472,9 @@ export const createGlucoseReading = async (
       userId: input.userId,
       readingId: reading.id,
       feedbackType:
-        late && feedback.type === "critical_warn" ? "critical_warn_late" : feedback.type,
+        timing?.startsCooldown === false && feedback.type === "critical_warn"
+          ? "critical_warn_late"
+          : feedback.type,
       tone: feedback.tone,
       messageKey: feedback.messageKey,
       variantIndex: feedback.variantIndex,

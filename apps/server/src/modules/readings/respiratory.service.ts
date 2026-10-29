@@ -11,14 +11,12 @@ import { createQueue, enqueueBestEffort, QUEUE_NAMES } from "../../shared/queue.
 import { checkIdempotent } from "../../shared/idempotency.js";
 import { isFeatureEnabledFor } from "../../shared/feature-gate.js";
 import { bypassOwner, getLastBypass, markBypassed } from "../../shared/critical-bypass-cooldown.js";
-import type {
-  CriticalAlertMultiCategoryJob,
-  LateCriticalReading,
-} from "../../workers/critical-alert.processor.js";
+import type { CriticalAlertMultiCategoryJob } from "../../workers/critical-alert.processor.js";
 import {
   enqueueCriticalAlert,
   isFreshForReplayDispatch,
-  lateCriticalOf,
+  criticalTimingOf,
+  type CriticalTiming,
 } from "../../workers/critical-alert.enqueue.js";
 import type { AnalyzeReadingJob } from "../../workers/analyze-reading.processor.js";
 
@@ -105,8 +103,8 @@ const handOffRespiratoryBypass = async (
   dispatch: MultiCategoryBypassDispatch,
   requestId: string | undefined,
   stamp: boolean,
-  /** Audit P33: taken > 2h before it reached us — a late notice, no cooldown. */
-  late: LateCriticalReading | null,
+  /** Audit P33: a late notice instead of the live chain, and whether it starts the cooldown. */
+  timing: CriticalTiming,
 ): Promise<void> => {
   if (dispatch.withinCooldown) return;
   const job: CriticalAlertMultiCategoryJob = {
@@ -119,14 +117,14 @@ const handOffRespiratoryBypass = async (
       ...(reading.baselinePeakFlow !== null ? { baselinePeakFlow: reading.baselinePeakFlow } : {}),
     },
     ...(requestId ? { requestId } : {}),
-    ...(late ? { late } : {}),
+    ...(timing.late ? { late: timing.late } : {}),
   };
   await enqueueCriticalAlert(job, reading.version);
   // Stamp the Redis cooldown AFTER the hand-off — a Redis outage before it
   // would silence the dispatch, which is the opposite of safety-first.
-  // A late reading doesn't start the cooldown: a real critical reading
-  // soon after must still reach the family (audit P33).
-  if (stamp && !late) {
+  // A reading over 2h old doesn't start the cooldown: a real critical
+  // reading soon after must still reach the family (audit P33).
+  if (stamp && timing.startsCooldown) {
     await markBypassed(
       "respiratory",
       reading.userId,
@@ -142,7 +140,9 @@ const handOffRespiratoryBypass = async (
  */
 const buildReplayResult = async (
   reading: RespiratoryLog,
-  requestId?: string,
+  requestId: string | undefined,
+  /** From the replay request's own sentAt and receive time (review B2). */
+  timing: CriticalTiming,
 ): Promise<CreateRespiratoryResult> => {
   const classification = classifyRespiratoryReading({
     peakFlow: reading.peakFlow,
@@ -164,13 +164,7 @@ const buildReplayResult = async (
       reading.updatedAt.toISOString(),
       bypassOwner(reading.id, reading.version),
     );
-    await handOffRespiratoryBypass(
-      reading,
-      dispatch,
-      requestId,
-      false,
-      lateCriticalOf({ measuredAt: reading.measuredAt, receivedAt: reading.updatedAt }),
-    );
+    await handOffRespiratoryBypass(reading, dispatch, requestId, false, timing);
   }
   return {
     reading,
@@ -206,7 +200,11 @@ export const createRespiratoryLog = async (
     throw new DomainError("READING_STALE_VERSION", "incoming version not newer than stored");
   }
   if (idem.kind === "replay") {
-    return await buildReplayResult(idem.existing, input.requestId);
+    return await buildReplayResult(
+      idem.existing,
+      input.requestId,
+      criticalTimingOf({ measuredAt: idem.existing.measuredAt, sentAt: input.sentAt, receivedAt }),
+    );
   }
   const existing = idem.kind === "update" ? idem.existing : null;
 
@@ -286,8 +284,18 @@ export const createRespiratoryLog = async (
             { clientUuid: input.clientUuid, userId: input.userId },
             "respiratory concurrent create resolved as idempotent replay",
           );
-          return await buildReplayResult(winner, input.requestId);
+          return await buildReplayResult(
+            winner,
+            input.requestId,
+            criticalTimingOf({ measuredAt: winner.measuredAt, sentAt: input.sentAt, receivedAt }),
+          );
         }
+        // The key is taken by another profile's reading: never answer with
+        // it. A 409 the app keeps queued, not a 500 that stops its sync.
+        throw new DomainError(
+          "READING_CLIENT_UUID_CONFLICT",
+          "clientUuid already used by another profile",
+        );
       }
       throw err;
     }
@@ -299,7 +307,12 @@ export const createRespiratoryLog = async (
       plannedBypass,
       input.requestId,
       true,
-      lateCriticalOf({ measuredAt: input.measuredAt, sentAt: input.sentAt, receivedAt }),
+      // An edit keeps the stored measuredAt (the partition key).
+      criticalTimingOf({
+        measuredAt: existing?.measuredAt ?? input.measuredAt,
+        sentAt: input.sentAt,
+        receivedAt,
+      }),
     );
   }
   const withinCooldown = plannedBypass?.withinCooldown ?? false;

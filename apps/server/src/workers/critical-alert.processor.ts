@@ -9,7 +9,7 @@ import type { CriticalBypassAutoEscalateJob } from "./critical-bypass-auto-escal
 import { logger } from "../shared/logger.js";
 import { prisma } from "../shared/database.js";
 import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
-import { captureUnhandled } from "../shared/observability/sentry.js";
+import { captureUnhandled, captureWarning } from "../shared/observability/sentry.js";
 import { sendExpoPush, type ExpoPushMessage } from "../shared/notifications/expo-push.js";
 import { sendSmsBatch, type SmsMessage } from "../shared/notifications/msg91-sms.js";
 import { householdUserIds } from "../shared/notifications/household-delivery.js";
@@ -34,7 +34,12 @@ export type CriticalAlertJob =
  * isn't re-alerted, and no SOS escalation or on-call page follows.
  */
 export interface LateCriticalReading {
+  /** As sent (device clock). */
   measuredAtIso: string;
+  /** When it was taken on the server's clock — shown in the notice. */
+  takenAtIso: string;
+  /** Age when sent, by the device's clock. */
+  minutesLate: number;
 }
 
 export interface CriticalAlertGlucoseJob {
@@ -298,13 +303,17 @@ const fanOutCriticalAlert = async (input: FanOutInput): Promise<FanOutResult> =>
           { userId, guardianContacts: input.pushTargets.length, reason },
           "critical-alert: zero push tokens — falling through to SMS",
         );
-        const householdSize = (await householdUserIds(userId)).length;
-        captureAnalyticsEvent("push_zero_recipients", userId, {
-          surface: "critical_alert",
-          ...input.analytics,
-          reason,
-          household_size: householdSize,
-        });
+        // A late notice leaves the household out on purpose: it says
+        // nothing about token registration.
+        if (input.includePatientDevice) {
+          const householdSize = (await householdUserIds(userId)).length;
+          captureAnalyticsEvent("push_zero_recipients", userId, {
+            surface: "critical_alert",
+            ...input.analytics,
+            reason,
+            household_size: householdSize,
+          });
+        }
       }
     } catch (err) {
       // A push-stage failure (token lookup, Expo client) must never cost
@@ -338,6 +347,7 @@ const fanOutCriticalAlert = async (input: FanOutInput): Promise<FanOutResult> =>
         captureAnalyticsEvent("critical_sms_per_contact", userId, {
           contact_id: c.id,
           delivered: delivered.has(c.id),
+          ...(input.includePatientDevice ? {} : { late: true }),
         });
       }
     }
@@ -494,7 +504,7 @@ const processLateCriticalReading = async (input: {
   const patientName = patient?.name ?? "Patient";
   const language = patient?.preferredLanguage ?? "hi";
   const reading = lateReadingLabel(category, input.copyParams, input.copyKey, language);
-  const takenAt = formatTakenAt(late.measuredAtIso);
+  const takenAt = formatTakenAt(late.takenAtIso);
   const copy = notif("critical_late", { patientName, reading, takenAt }, language);
   const notificationId = randomUUID();
 
@@ -541,11 +551,26 @@ const processLateCriticalReading = async (input: {
     },
     "late critical reading: family notified",
   );
+  // No on-call page (it is not a current emergency), but a notice that
+  // reached nobody — or SMS that failed — must still be visible (review W3).
+  const reachedSomeone = result.contactsReachedByPush > 0 || result.smsSuccessCount > 0;
+  const hadTargets = input.pushTargets.length > 0 || input.smsTargets.length > 0;
+  if ((hadTargets && !reachedSomeone) || result.smsFailedCount > 0) {
+    captureWarning("late critical notice not fully delivered", {
+      userId,
+      readingId,
+      category,
+      pushTargets: input.pushTargets.length,
+      contactsReachedByPush: result.contactsReachedByPush,
+      smsContacts: result.smsContacts,
+      smsFailed: result.smsFailedCount,
+    });
+  }
   // Its own event: `critical_bypass_triggered` feeds the live-alert SMS
   // success metric, which a late notice must not skew.
   captureAnalyticsEvent("critical_reading_late_notified", userId, {
     category,
-    minutes_late: Math.round((Date.now() - Date.parse(late.measuredAtIso)) / 60_000),
+    minutes_late: late.minutesLate,
     push_success: result.pushSuccessCount > 0,
     contacts_reached_by_push: result.contactsReachedByPush,
     sms_contacts: result.smsContacts,

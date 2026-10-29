@@ -33,6 +33,9 @@ export type ErrorCode =
   | "READING_INVALID_VALUE"
   | "READING_CONFIRMATION_NEEDED"
   | "READING_STALE_VERSION"
+  // A clientUuid another profile already used, with the same measuredAt
+  // (the hypertable's unique key). 409, never a replay of their reading.
+  | "READING_CLIENT_UUID_CONFLICT"
   | "READING_NOT_FOUND"
   | "MEAL_STALE_VERSION"
   | "MEAL_NOT_FOUND"

@@ -81,6 +81,8 @@ export interface EventPropsMap {
   critical_sms_per_contact: {
     contact_id: string;
     delivered: boolean;
+    /** A late notice (audit P33), not a live alert. */
+    late?: boolean;
   };
   streak_milestone: {
     milestone_days: number;

@@ -20,7 +20,7 @@
 // goes out twice. A duplicate alert is the safe direction; a lost one is
 // not.
 
-import { CRITICAL_COOLDOWN_MINUTES, isLateCriticalReading } from "@swasth/domain-logic";
+import { CRITICAL_COOLDOWN_MINUTES, criticalReadingTiming } from "@swasth/domain-logic";
 import type { Queue } from "bullmq";
 import { isTest } from "../config/env.js";
 import { createQueue, QUEUE_NAMES } from "../shared/queue.js";
@@ -58,28 +58,47 @@ export const criticalAlertJobId = (job: CriticalAlertJob, version: number): stri
 export const isFreshForReplayDispatch = (savedAt: Date, now: Date = new Date()): boolean =>
   now.getTime() - savedAt.getTime() < COOLDOWN_MS;
 
+export interface CriticalTiming {
+  /** Set: the family gets a late notice instead of the live chain. */
+  readonly late: LateCriticalReading | null;
+  /** False: the reading must not start the cooldown (it is too old). */
+  readonly startsCooldown: boolean;
+}
+
 /**
- * Audit P33: the late marker for a critical reading taken more than 2h
- * before it was sent (an offline queue drained later), or null when it is
- * current. A late one alerts the family with the time it was taken, but
- * doesn't start the cooldown, re-alert the patient's phone or escalate.
- * `sentAt` is the device's own send time (newer app builds); without it the
- * server's receive time stands in.
+ * Audit P33: how a critical reading's age changes its dispatch (rules in
+ * domain-logic `criticalReadingTiming`). Late — a notice with when it was
+ * taken, no cooldown, no patient re-alert, no escalation — only when the
+ * request carries the device's own send time (`sentAt`) and both clocks
+ * agree it is over 2h old. Without `sentAt` it always gets the live chain.
+ *
+ * Replays pass the replay request's own `sentAt` and receive time: the
+ * stored `updatedAt` is the server's clock, which a phone clock hours off
+ * would turn into a false "late" (review B2).
  */
-export const lateCriticalOf = (input: {
+export const criticalTimingOf = (input: {
   measuredAt: Date | string;
   sentAt?: string | null | undefined;
   receivedAt: Date;
-}): LateCriticalReading | null => {
+}): CriticalTiming => {
   const measuredAtIso =
     typeof input.measuredAt === "string" ? input.measuredAt : input.measuredAt.toISOString();
-  return isLateCriticalReading({
+  const timing = criticalReadingTiming({
     measuredAtIso,
     sentAtIso: input.sentAt ?? null,
     receivedAtIso: input.receivedAt.toISOString(),
-  })
-    ? { measuredAtIso }
-    : null;
+  });
+  const late =
+    timing.late && timing.deviceAgeMs !== null
+      ? {
+          measuredAtIso,
+          // When it was taken on the server's clock: a phone clock hours off
+          // would otherwise put the wrong time in the family's notice.
+          takenAtIso: new Date(input.receivedAt.getTime() - timing.deviceAgeMs).toISOString(),
+          minutesLate: Math.round(timing.deviceAgeMs / 60_000),
+        }
+      : null;
+  return { late, startsCooldown: timing.startsCooldown };
 };
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));

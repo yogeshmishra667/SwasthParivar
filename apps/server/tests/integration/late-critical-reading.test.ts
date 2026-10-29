@@ -16,11 +16,14 @@ import request from "supertest";
 import jwt from "jsonwebtoken";
 import { Queue } from "bullmq";
 
-const { sendExpoPushMock, sendSmsBatchMock, captureUnhandledMock } = vi.hoisted(() => ({
-  sendExpoPushMock: vi.fn(),
-  sendSmsBatchMock: vi.fn(),
-  captureUnhandledMock: vi.fn(),
-}));
+const { sendExpoPushMock, sendSmsBatchMock, captureUnhandledMock, captureWarningMock } = vi.hoisted(
+  () => ({
+    sendExpoPushMock: vi.fn(),
+    sendSmsBatchMock: vi.fn(),
+    captureUnhandledMock: vi.fn(),
+    captureWarningMock: vi.fn(),
+  }),
+);
 
 vi.mock("../../src/shared/notifications/expo-push.js", () => ({
   sendExpoPush: sendExpoPushMock,
@@ -30,6 +33,7 @@ vi.mock("../../src/shared/notifications/msg91-sms.js", () => ({
 }));
 vi.mock("../../src/shared/observability/sentry.js", () => ({
   captureUnhandled: captureUnhandledMock,
+  captureWarning: captureWarningMock,
   initSentry: vi.fn(),
   isSentryEnabled: vi.fn(() => false),
   warnIfMisconfigured: vi.fn(),
@@ -115,6 +119,7 @@ beforeEach(() => {
   sendExpoPushMock.mockReset();
   sendSmsBatchMock.mockReset();
   captureUnhandledMock.mockReset();
+  captureWarningMock.mockReset();
   sendExpoPushMock.mockImplementation((messages: { to: string }[]) =>
     Promise.resolve(messages.map((m) => ({ token: m.to, success: true }))),
   );
@@ -282,7 +287,11 @@ describe("late critical glucose (audit P33)", () => {
     const id = res.body.data.reading.id as string;
 
     const job = await runJobFor(id);
-    expect(job.data.late).toEqual({ measuredAtIso: expect.any(String) });
+    expect(job.data.late).toEqual({
+      measuredAtIso: expect.any(String),
+      takenAtIso: expect.any(String),
+      minutesLate: 360,
+    });
 
     // The guardian's phone gets a late notice; the patient's own phone gets nothing.
     const pushed = pushedMessages();
@@ -331,14 +340,74 @@ describe("late critical glucose (audit P33)", () => {
     expect(feedback.feedbackType).toBe("critical_warn");
   });
 
-  it("an older app build (no sentAt) is aged by when the server got it", async () => {
+  it("without sentAt (older app build) it is never a late notice — but an old one doesn't start the cooldown (review B1)", async () => {
+    // A phone clock 5h behind on an older build looks exactly like this:
+    // it must page live.
     const seed = await seedPatient();
-    const late = await post(seed.token, "glucose", glucoseBody(340, ago(5 * 60)));
-    expect((await runJobFor(late.body.data.reading.id)).data.late).toBeDefined();
+    const old = await post(seed.token, "glucose", glucoseBody(340, ago(5 * 60)));
+    const job = await runJobFor(old.body.data.reading.id);
+    expect(job.data.late).toBeUndefined();
+    expect(pushedMessages()[0]!.data.type).toBe("critical_alert");
+    expect(await escalationJobsFor(old.body.data.reading.id)).toHaveLength(1);
+    const feedback = await prisma.feedbackEvent.findFirst({
+      where: { readingId: old.body.data.reading.id },
+    });
+    expect(feedback.feedbackType).toBe("critical_warn_late");
+    // So a current critical right after still alerts.
+    const now = await post(seed.token, "glucose", glucoseBody(45, ago(0)));
+    expect(now.body.data.critical.withinCooldown).toBe(false);
+    expect(await criticalJobsFor(now.body.data.reading.id)).toHaveLength(1);
+  });
 
-    const seed2 = await seedPatient();
-    const current = await post(seed2.token, "glucose", glucoseBody(340, ago(10)));
-    expect((await runJobFor(current.body.data.reading.id)).data.late).toBeUndefined();
+  it("a replay judges the age with the replay's own sentAt, not the stored time (review B2)", async () => {
+    // Phone clock 3h behind. The first request saved the row and died
+    // before handing off the alert; the app re-sends the same reading.
+    const seed = await seedPatient();
+    const body = glucoseBody(48, ago(3 * 60 + 1), ago(3 * 60));
+    const row = await prisma.glucoseReading.create({
+      data: {
+        clientUuid: body.clientUuid,
+        valueMgDl: 48,
+        readingType: "fasting",
+        context: "normal",
+        source: "manual",
+        measuredAt: new Date(body.measuredAt),
+        streakCreditedTo: new Date(body.measuredAt),
+        version: 1,
+        user: { connect: { id: seed.patientId } },
+      },
+    });
+    expect(await criticalJobsFor(row.id)).toHaveLength(0);
+    const replay = await post(seed.token, "glucose", body);
+    expect(replay.body.data.reading.id).toBe(row.id);
+    const job = await runJobFor(row.id);
+    expect(job.data.late).toBeUndefined();
+  });
+
+  it("the notice shows when it was taken on the server's clock, even if the phone's is off", async () => {
+    // Phone clock 3h behind; the reading was taken 5h ago.
+    const seed = await seedPatient();
+    const res = await post(seed.token, "glucose", glucoseBody(52, ago(8 * 60), ago(3 * 60)));
+    const job = await runJobFor(res.body.data.reading.id);
+    expect(job.data.late).toMatchObject({ minutesLate: 300 });
+    const { formatTakenAt } = await import("../../src/workers/critical-alert.processor.js");
+    const takenAt = (job.data.late as { takenAtIso: string }).takenAtIso;
+    expect(Math.abs(Date.parse(takenAt) - Date.parse(ago(5 * 60)))).toBeLessThan(60_000);
+    expect(smsTexts()[0]).toContain(formatTakenAt(takenAt));
+  });
+
+  it("a late notice that reached nobody is a Sentry warning, not an on-call page", async () => {
+    const seed = await seedPatient();
+    sendSmsBatchMock.mockImplementation((messages: { phone: string }[]) =>
+      Promise.resolve(messages.map((m) => ({ phone: m.phone, success: false }))),
+    );
+    const res = await post(seed.token, "glucose", glucoseBody(52, ago(6 * 60), ago(0)));
+    await runJobFor(res.body.data.reading.id);
+    expect(captureWarningMock).toHaveBeenCalledWith(
+      "late critical notice not fully delivered",
+      expect.objectContaining({ category: "glucose", smsFailed: 1 }),
+    );
+    expect(captureUnhandledMock).not.toHaveBeenCalled();
   });
 
   it("a reading 2h old is still current; just over 2h is late", async () => {
@@ -429,6 +498,16 @@ describe("replays are scoped to the reading's owner (P8 safety review W3)", () =
     expect(theirs.body.data.reading.valueMgDl).toBe(50);
     // B's critical reading alerts B's family.
     expect(await criticalJobsFor(theirs.body.data.reading.id)).toHaveLength(1);
+  });
+
+  it("a clientUuid another profile used at the same measuredAt is a 409, not their reading or a 500", async () => {
+    const a = await seedPatient();
+    const b = await seedPatient();
+    const body = glucoseBody(120, ago(0), ago(0));
+    expect((await post(a.token, "glucose", body)).status).toBe(201);
+    const theirs = await post(b.token, "glucose", body);
+    expect(theirs.status).toBe(409);
+    expect(theirs.body.error.code).toBe("READING_CLIENT_UUID_CONFLICT");
   });
 
   it.each(["cardiac", "respiratory"] as const)(
