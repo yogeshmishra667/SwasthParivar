@@ -384,6 +384,31 @@ describe("late critical glucose (audit P33)", () => {
     expect(job.data.late).toBeUndefined();
   });
 
+  it("a replay of a truly late reading uses its sentAt: a late notice, not a live page", async () => {
+    // Taken 6h ago, queued offline; the first send saved the row and died
+    // before handing off the alert. The re-send carries sentAt = now.
+    const seed = await seedPatient();
+    const body = glucoseBody(47, ago(6 * 60), ago(0));
+    const row = await prisma.glucoseReading.create({
+      data: {
+        clientUuid: body.clientUuid,
+        valueMgDl: 47,
+        readingType: "fasting",
+        context: "normal",
+        source: "manual",
+        measuredAt: new Date(body.measuredAt),
+        streakCreditedTo: new Date(body.measuredAt),
+        version: 1,
+        user: { connect: { id: seed.patientId } },
+      },
+    });
+    const replay = await post(seed.token, "glucose", body);
+    expect(replay.body.data.reading.id).toBe(row.id);
+    const job = await runJobFor(row.id);
+    expect(job.data.late).toMatchObject({ minutesLate: 360 });
+    expect(await escalationJobsFor(row.id)).toHaveLength(0);
+  });
+
   it("the notice shows when it was taken on the server's clock, even if the phone's is off", async () => {
     // Phone clock 3h behind; the reading was taken 5h ago.
     const seed = await seedPatient();
