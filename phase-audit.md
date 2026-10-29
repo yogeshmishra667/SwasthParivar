@@ -6,7 +6,7 @@
 > **Pass 2 — app features (patient + guardian app and the server paths behind them):** section 4 (P1–P34). Scope: glucose/BP/cardiac/respiratory logging, voice, critical-bypass, SOS, offline sync, shared-phone profiles, medicines + reminders, medicine/prescription scan, AI chat + chat signals, guardian/family flow, settings, auth, privacy and security. Pass 2 is based on reading code, one local `pino` redaction check, and the Expo push docs. **No tests were run in pass 2.**
 > **Rule for the fix phase:** do not break existing behaviour. See "Safety rules for the fix work" before starting anything.
 
-## 0. Fix status — updated 2026-10-26
+## 0. Fix status — updated 2026-10-29
 
 Every fix below shipped as its own PR, with a `safety-reviewer` pass (re-run until PASS) and a sabotage check: each new test fails with its fix removed. Details are in `audit-progress.md` → "Phase-audit fix wave".
 
@@ -25,7 +25,11 @@ Every fix below shipped as its own PR, with a `safety-reviewer` pass (re-run unt
 | **P10** | Android channels: the app creates every channel the server pushes to. `channelId` is typed against one shared list. | ✅ #203 |
 | **D1** | SMS success rate divides only by alerts that attempted an SMS. | ✅ #201 |
 | CI / supply chain | Third-party actions pinned to SHAs. This unblocked #85 and #86, which CodeQL review threads had blocked. | ✅ #199 |
-| Next | The rest per §7 (e.g. P7, P8, P9, X1, X2, D2), plus the follow-ups below | ⏳ |
+| **X1** | Ops docs sign in through the admin login (email + password + 2FA) instead of the removed `ADMIN_API_TOKEN`. `scripts/admin-token.mjs` prints a 15-minute token for curl and is tested against the real app. | ✅ #225 |
+| **P9** | The glucose offline queue deletes a reading only when the server refuses it for good, never a critical one, and the daily cap counts by the reading's day. The review found that every offline reading drained with `"notes": null`, got a 400 and was deleted. The server now accepts it, so installed builds stop losing readings. | ✅ #226 |
+| **P8** (BP, cardiac, respiratory, meals) | A real offline queue (WatermelonDB v3 `pending_writes`) with P9's rules: critical first, newest first, held rather than deleted. "Not saved" when nothing could be stored. Failed-save messages now show on the confirm screens (they never did). One-tap call for a critical log stored offline. | ✅ #227. Medicine taken/skipped is still online-only (next) |
+| **P33** | A critical reading over 2h old when sent gets a late notice (push + SMS with when it was taken), not an emergency page: no patient re-alert, no cooldown, no SOS escalation. The age is measured on the phone's clock (`sentAt`); without it, the live chain always runs. Also: glucose, cardiac and respiratory replays are scoped to the reading's owner. | ⏳ #228 — deploy before an app build with #227 ships |
+| Next | P8's medicine half, then P7, D2, X2 (§7), plus the follow-ups below | ⏳ |
 
 Follow-ups raised by the safety reviews (not yet filed as items):
 
@@ -43,7 +47,7 @@ Follow-ups raised by the safety reviews (not yet filed as items):
   - The metric now relies on `sms_triggered`; check against real PostHog data.
 - **P4 (BP):**
   - Clinician sign-off on the BP copy (questions listed in #207).
-  - Server-side handling of late critical readings: a reading that lands hours late (offline drain, any category) still pages the family as current and schedules SOS.
+  - ~~Server-side handling of late critical readings: a reading that lands hours late (offline drain, any category) still pages the family as current and schedules SOS.~~ Handled in #228 (open).
   - A Devanagari patient name makes any alert SMS UCS-2 / multi-part; cardiac/respiratory SMS still reuse the push copy (emoji).
   - RED 3-second confirm for a critical BP; chat and guardian dedup ignore BP critical.
 - **P2 / P3 (app alert):**
@@ -56,6 +60,26 @@ Follow-ups raised by the safety reviews (not yet filed as items):
   - A Redis outage mid-chain reads `sos_enabled` as off and stops the escalation tick.
   - Exotel / Twilio call-status callbacks accept unsigned requests when their secret is unset (env marks them optional); the Exotel HMAC signs `JSON.stringify` of a form body. Fail closed in production.
 - **P11:** best-time from a rolling 5-day average; 5-variant pool; tap routing; medicine / critical sends still feed the 30-min throttle.
+- **P9 (glucose queue):**
+  - The glucose fullscreen alert waits for the save's network call (up to 10s). BP, cardiac and respiratory raise it first.
+  - A reading synced more than 2h late bumps the device-clock anomaly counter; two flag the user for time manipulation (CLAUDE.md #18).
+  - `api.ts`: the token refresh has no timeout, and any refresh failure (a network blip included) logs the user out, which stops every queue drain until they sign in again.
+  - Logout doesn't clear the local database (see P21).
+  - Check PostHog `sync_drop_400` for readings lost before #226.
+- **P8 (offline queue):**
+  - Medicine taken/skipped is still online-only: the medicine log needs server idempotency first.
+  - The log screen has no test harness: the per-entry id and time, its renewal on a profile switch and the haptic placement are untested.
+  - Device check: in airplane mode, log a critical BP and a meal, kill the app, reconnect, confirm both arrive.
+  - The glucose queue holds a critical reading answered with `READING_STALE_VERSION` forever; the new queue treats that answer as delivered.
+  - The glucose queue has no quick retries after a critical reading, and doesn't go round again for one queued mid-drain (the new queue does both).
+  - Rows for a profile no longer in the household are held and retried every 60s forever (badge noise).
+  - Older UX items: sub-14px fonts on the log screen; an offline respiratory red zone isn't critical (no cached baseline).
+- **P33 (late critical readings):**
+  - Before ship: check that Sentry's paging rule filters on `level:error`, or late-notice warnings will page too.
+  - Clinician sign-off on the late copy. Product calls: the 2h cutoff, SMS for late notices (CLAUDE.md #14 says push only for non-critical), and the `critical` channel (bypasses Do Not Disturb at 3 AM).
+  - A clock corrected between taking and sending (phone booted offline with a wrong clock) can still make a current reading look late; needs a monotonic age from the app.
+  - Bluetooth meter readings (when they land) must be aged by the phone's receive time, not the meter's clock.
+  - Tapping a late notice opens nothing specific. The time in it is IST with no label.
 
 ---
 
@@ -229,6 +253,8 @@ Follow-ups raised by the safety reviews (not yet filed as items):
 
 ### X1 — High — Ops docs still use the removed `ADMIN_API_TOKEN`
 
+> **✅ Fixed in #225 (2026-10-28).** The docs use `$ADMIN_JWT` from `scripts/admin-token.mjs` (admin login with 2FA).
+
 `ADMIN_API_TOKEN` was removed in admin M0-T5, when admin auth became email + password + 2FA. These still tell ops to use `Authorization: Bearer $ADMIN_API_TOKEN`, which fails with 401 during an incident:
 
 - `docs/ARCHITECTURE.md:338`
@@ -380,6 +406,8 @@ IDs use the `P` prefix so they don't clash with `phase6.md`'s own A1–A10.
 
 #### P8 — High — "Saved locally" is false for BP, cardiac, respiratory and meals; medicine logging is online-only
 
+> **Half fixed in #227 (2026-10-28):** BP, cardiac, respiratory and meals are now stored in an offline queue and sent later; the glucose "rejected" copy is honest. **Still open:** medicine taken/skipped (needs server idempotency first).
+
 - **Evidence:**
   - `bp.ts:70-79`, `cardiac.ts:105`, `respiratory.ts:113`, `meals.ts:64` return `{ kind: "queued" }` without storing anything. The UI says "Locally save ho gaya — sync hone par update hoga" (`i18n bp/cardiac/respiratory.savedOffline`; meals use `logging.savedOffline`).
   - An offline critical cardiac/respiratory reading reaches nobody.
@@ -389,6 +417,8 @@ IDs use the `P` prefix so they don't clash with `phase6.md`'s own A1–A10.
 - **Fix:** queue these writes in WatermelonDB (one additive schema bump, `db-reviewer`) and drain them like glucose. Until then, change the copy to "not saved, please retry".
 
 #### P9 — High — The glucose offline queue deletes readings on any 4xx, including the daily-cap 429
+
+> **✅ Fixed in #226 (2026-10-28).** The safety review found worse: every queued reading drained with `"notes": null`, got a 400 and was deleted. The server now accepts it.
 
 - **Evidence:** `drainPendingReadings` calls `markAsDeleted()` for every 400–499 response (`readings.ts:259-274`). The free-tier daily cap is counted per server UTC day at drain time (`readings.service.ts:50-55, 160-173`) and returns 429 (`error-handler.ts:63-65`). A failed token refresh returns 401.
 - **Failure case:** 7 days offline at 3 readings/day = 21 queued. On reconnect, reading 21 gets 429 and is deleted. The same happens after a 30-day refresh expiry (401), or if the per-minute limit (100/min) is hit while draining a large backlog.
@@ -551,7 +581,7 @@ CLAUDE.md "Data Corruption Prevention" requires every save to go to the active p
 - **P30 — "Notifications off" toggle.** It silences only on-device reminders; server reminder pushes ignore `UserPreferences.notificationsEnabled`. This is deliberate per `phase4-progress.md`, but conflicts with CLAUDE.md Edge Case #17. Decision needed.
 - **P31 — Medicine log validation.** `POST /medications/log` accepts any `scheduleId` without an ownership check (`medications.service.ts:44-54`). `?days=` on adherence is unvalidated and unbounded (`medications.controller.ts:40-43`).
 - **P32 — No "Call patient" button** on the guardian alert detail or patient dashboard (`phase3.md` M.3).
-- **P33 — Old offline readings alert as new.** A critical reading that syncs hours later triggers a live-looking alert: the decision uses the current time (`readings.service.ts:269-278`) and the copy doesn't say when the reading was taken.
+- **P33 — Old offline readings alert as new.** A critical reading that syncs hours later triggers a live-looking alert: the decision uses the current time (`readings.service.ts:269-278`) and the copy doesn't say when the reading was taken. **Fix in #228 (open):** late notice, no cooldown, no escalation.
 - **P34 — Info — dev seed enables features.** `prisma/seed-flags.ts:14-28` sets `sos_enabled`, `ai_chat_enabled` and `silent_guardian_enabled` to true. It is labelled a dev bootstrap; never run it against production.
 
 ### 4.11 Doc drift found in pass 2

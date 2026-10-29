@@ -1,8 +1,8 @@
 # Audit Progress
 
 > Source plan: `~/.claude/plans/flickering-wiggling-sundae.md`
-> Last updated: 2026-10-28 (housekeeping re-check; vitest 4.1.12 bump replaces #215. Phase-audit fix wave: P1, P2, P3, P4, P5, P6, P10, P11, P22, D1, D3, D8 merged)
-> Current session focus: Working through `phase-audit.md` in its §7 order, safety items first. Each fix gets its own PR, a `safety-reviewer` pass and a sabotage-checked test. **Resume at "Phase-audit fix wave" below** (next: the remaining §7 items — 6 High not started: P7, P8, P9, D2, X1, X2) and the housekeeping list (#194, #195, #48, code scanning).
+> Last updated: 2026-10-29 (Phase-audit fix wave: P1, P2, P3, P4, P5, P6, P10, P11, P22, D1, D3, D8, X1, P9 and P8's first half merged; P33 open. Housekeeping: #217, #218, #222 merged, #167 closed)
+> Current session focus: Working through `phase-audit.md` in its §7 order, safety items first. Each fix gets its own PR, a `safety-reviewer` pass and a sabotage-checked test. **Resume at "Phase-audit fix wave" below** (next: P8's medicine half, then the High items not started: P7, D2, X2) and the housekeeping list (#223, #219–#221, #48, code scanning).
 
 ## Status Legend
 
@@ -69,25 +69,26 @@ Each item gets its own PR based on `main`, a `safety-reviewer` pass (re-run unti
 - [x] **D8** SOS and signed payment webhooks stay up during maintenance; fuller Ops warning — #211 (`a7bf40d`).
 - [x] **P11** anti-fatigue: ignores counted, opens reported by the app (`POST /notifications/opened`), CLAUDE.md caps, streak-day recovery — #212 (`0238e0f`). Rest of P11 (best-time average, variant pool, tap routing) still open.
 - [x] **P22** top-level phone (and other PII) redacted in logs — #213 (`14d4075`).
-- [ ] Remaining items in the `phase-audit.md` §7 order.
+- [x] **X1** ops docs use the admin login; `scripts/admin-token.mjs` — #225 (`1efa224`).
+- [x] **P9** glucose offline queue keeps readings — #226 (`3e88d80`). The review's C1: every queued reading drained with `"notes": null`, got a 400 and was deleted; the server now accepts it, which protects installed builds. Two review passes.
+- [x] **P8** (first half) offline queue for BP, cardiac, respiratory and meals — #227 (`ef687bc`). Three reviewers plus two safety passes. Also fixed: failed-save messages never showed on the confirm screens; edit during a slow save could replace a corrected critical value. The medicine half (taken/skipped offline, server idempotency first) is next.
+- [~] **P33** late critical readings get a late notice, not an emergency page — #228 (open). Release gate for #227: deploy before an app build with the queue ships. The first safety review failed it (B1: no `sentAt` aged by the server clock; B2: replays ignored `sentAt`); fixed so it always fails toward a live alert.
+- [ ] Remaining items in the `phase-audit.md` §7 order: P8's medicine half, P7, D2, X2.
 - [ ] Safety-review follow-ups listed in `phase-audit.md` §0.
 
 Open repo housekeeping (status at 2026-10-26 hand-off, re-checked 2026-10-28):
 
-- Dependabot PRs:
-  - Merged on 2026-10-26 after `@dependabot rebase` and green CI: #205 (gitleaks-action v3, `35f517b`), #204 (download-artifact v8, `8be9212`; v5–v8 breaking changes don't affect the SBOM "download all" step), #196 (vite security, `5c3e3fa`).
-  - #194, #195 and #48 each got an "Update branch" merge commit on 2026-10-26 (13:22–13:26 UTC). #194 and #195 now conflict with main, and Dependabot refuses `@dependabot rebase` on all three ("edited by someone other than Dependabot"). Use `@dependabot recreate` (it only discards those merge commits). Never `update-branch` a lockfile PR.
-  - #194 (prod-patches, lockfile): next. Besides the recreate, "Mobile app checks" fails: `expo install --check` rejects three patch bumps the SDK pins (`@shopify/flash-list` 2.0.2 → 2.0.3, `@shopify/react-native-skia` 2.2.12 → 2.2.21, `react-native-worklets` 0.5.1 → 0.5.2). `dependabot.yml` only ignores _minor_ bumps for these, so also ignore their patch bumps before recreating.
-  - #195 (dev-minors, lockfile): after #194. Re-apply three fixes right before merge: pin the prisma CLI to `7.8.0`, run `pnpm format` (Prettier 3.9; CI flags 19 files), add the cardiac-voice coverage test ("thakaan hai, dhadkan 95"; `numeric-parser.ts` statements are at 96.7% vs the 97% threshold).
-  - #48 (express-rate-limit 8.3.2 → 8.7.1, lockfile only): Dependabot refuses to rebase because the PR was edited by someone else. Needs an owner call: `@dependabot recreate` (overwrites those edits), or close it. Note: integration logs already show express-rate-limit's `ERR_ERL_KEY_GEN_IPV6` validation warning for the custom keyGenerator; check it before bumping.
-  - #215 (admin vitest 4.1.6 → 4.1.11): closed. Dependabot's `/apps/admin` security PR changed only `apps/admin/package.json`, not the root `pnpm-lock.yaml`, so every CI job failed at `--frozen-lockfile`; and 4.1.11 doesn't fix the newer `@vitest/mocker` advisory (GHSA-qxg6-89mg-rqv8, fixed in 4.1.12). Replaced by the vitest 4.1.12 bump (`chore/vitest-4.1.12`): root + admin `vitest`, and `@vitest/coverage-v8` in domain-logic, server and mobile. Clears Dependabot alerts 147, 161, 162, 163 and 247.
-  - #86 closed (superseded by #199).
+- Dependabot PRs (re-checked 2026-10-29). Never `update-branch` a lockfile PR: Dependabot then refuses `@dependabot rebase` and needs `@dependabot recreate`.
+  - Merged: #217 vitest 4.1.12 across the workspace (`0d2e7b5`, replaces #215; clears alerts 147, 161–163, 247); #218 Dependabot ignores patch bumps of the native modules Expo SDK 54 pins exactly (`bbf71fe`). Earlier: #205, #204, #196 (2026-10-26).
+  - #194 and #195 were recreated; Dependabot closed both and opened **#223** (prod-patches, 15 updates; "Mobile app checks" now passes). Main has moved since, so it needs `@dependabot rebase`, then merge once green. #195's dev-minor bumps will come back in a later run: re-apply the three fixes then (pin the prisma CLI to `7.8.0`, run `pnpm format`, add the cardiac-voice coverage test "thakaan hai, dhadkan 95").
+  - Action bumps: #220 (anchore/sbom-action 0.24.0 → 0.24.3, patch) can merge when green. #219 (dorny/paths-filter 3 → 4) and #221 (pnpm/action-setup 4 → 6) are majors: read the release notes first.
+  - #48 (express-rate-limit 8.3.2 → 8.7.1): owner call, `@dependabot recreate` or close. Check the `ERR_ERL_KEY_GEN_IPV6` warning the custom keyGenerator already logs before bumping.
 - Code scanning (Security → Code scanning), checked 2026-10-26: 94 open alerts, all **stale**. The last analysis on main is from 2026-06-15: `codeql.yml` and `scorecard.yml` were removed in #188, and CodeQL default setup is "not configured", so nothing re-scans or closes them.
   - 22 CodeQL `actions/unpinned-tag` + 12 `actions/missing-workflow-permissions`: fixed on main (#199 pinned third-party actions; every workflow has a top-level `permissions:`).
   - 59 Scorecard `PinnedDependencies`: mostly fixed; first-party `actions/*` are still tag-pinned (Scorecard flags those).
   - 1 Scorecard `Vulnerabilities` (esbuild GHSA-g7r4/-gv7w, joi GHSA-q7cg): fixed (esbuild 0.28.2, joi 17.13.8).
   - Owner decision: turn on CodeQL default setup (free now the repo is public; it would close the stale CodeQL alerts), and dismiss the stale Scorecard alerts or restore a Scorecard workflow.
-- Issue #167 (monthly moderate audit): the 2026-09-30 refresh is an OOM crash trace (fixed since: `NODE_OPTIONS=--max-old-space-size=6144` in `audit-moderate.yml`). A local `pnpm audit --prod --audit-level=moderate` on 2026-10-26 finds 2 moderates, both mobile transitive: `decode-uri-component` ≤0.4.2 (via expo-router; fix 0.5.x is ESM-only) and `postcss-selector-parser` <7.1.6 (via gluestack; fix is a major). The 3 highs are the already-accepted ignores (node-forge, image-size ×2). Needs a decision: ignore with justification or wait for upstream. The next monthly run is 2026-10-31 (21:30 UTC) and will post both moderates to #167 unless they are added to `pnpm.auditConfig` first; CI's audit gate is `--audit-level=high`, so they don't block merges.
+- Issue #167 (monthly moderate audit): closed 2026-10-28. `pnpm audit --prod --audit-level=moderate` exits 0 on main. `decode-uri-component` (GHSA-vcc3-ghjq-m6fr) is accepted in #222 (`b0bd3f5`) with the reasoning in `SECURITY.md`; `postcss-selector-parser` resolved itself (GitHub's advisory now accepts the 6.1.5 the existing override pins). New, below threshold: `deepmerge` 4.3.1 low (Expo CLI tooling, no fix yet).
 - Decisions waiting on the owner:
   - Orphaned PR #97 (household tier, 24 files): rescue or drop.
   - DigitalOcean runbook plus `docker-compose.prod.yml` (`a10f2a9`): rescue or drop.
