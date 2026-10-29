@@ -20,6 +20,7 @@ import { api } from "@/services/api";
 import { logError, track } from "@/services/analytics";
 import { enqueuePendingWrite } from "@/services/pending-writes";
 import { classifyDrainFailure } from "@/services/drain-policy";
+import { withSentAt } from "@/services/sent-at";
 
 export interface SaveBPInput {
   userId: string;
@@ -146,7 +147,7 @@ const resendCriticalInBackground = (
       for (const [attempt, delayMs] of backoffMs.entries()) {
         await sleep(delayMs);
         try {
-          await api.post("/readings/bp", payload);
+          await api.post("/readings/bp", withSentAt(payload));
           track("critical_bp_background_sync", { attempt: attempt + 1, delivered: true });
           await clearPending(clientUuid);
           return;
@@ -203,7 +204,7 @@ export const saveBPReading = async (input: SaveBPInput): Promise<SaveBPResult> =
   };
 
   try {
-    const res = await api.post<ServerBPResponse>("/readings/bp", payload);
+    const res = await api.post<ServerBPResponse>("/readings/bp", withSentAt(payload));
     track("reading_logged", {
       type: "bp",
       source: input.source,

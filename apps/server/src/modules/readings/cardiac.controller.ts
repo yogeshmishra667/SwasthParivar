@@ -15,6 +15,7 @@ export const postCardiac = async (req: Request, res: Response): Promise<void> =>
     notes?: string;
     source: "manual" | "voice" | "device";
     measuredAt: string;
+    sentAt?: string;
     version: number;
     targetUserId?: string;
   };

@@ -51,6 +51,7 @@ const statusFor = (code: ErrorCode): number => {
     case "FAMILY_LINK_EXISTS":
     case "SOS_ALREADY_ACTIVE":
     case "READING_STALE_VERSION":
+    case "READING_CLIENT_UUID_CONFLICT":
     case "MEAL_STALE_VERSION":
     case "HOUSEHOLD_PROFILE_LIMIT":
     case "PRESCRIPTION_LOCKED":

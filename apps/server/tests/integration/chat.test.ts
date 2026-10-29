@@ -272,6 +272,31 @@ describe("POST /api/v1/chat/message — emergency skip", () => {
   });
 });
 
+describe("POST /api/v1/chat/message — emergency skip after an old reading (audit P33)", () => {
+  it("a critical_warn_late reading also puts chat in emergency mode", async () => {
+    // An older app build's critical reading whose age the server can't
+    // trust pages live but is stored as critical_warn_late.
+    await prisma.feedbackEvent.create({
+      data: {
+        userId: patientId,
+        feedbackType: "critical_warn_late",
+        tone: "gentle_warn",
+        messageKey: "critical.low",
+        variantIndex: 0,
+        messageParams: {},
+        shownAt: new Date(),
+      },
+    });
+    const res = await post({
+      client_uuid: randomUUID(),
+      version: 1,
+      message: "Sugar 45 hai, kya karun?",
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.data.emergencySkipped).toBe(true);
+  });
+});
+
 describe("POST /api/v1/chat/message — Tier 1 routing", () => {
   it("medication question always returns the doctor redirect (no Claude call)", async () => {
     const res = await post({

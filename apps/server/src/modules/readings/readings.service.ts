@@ -18,6 +18,8 @@ import { getReadingsDailyLimit } from "../../shared/middleware/rate-limit.js";
 import {
   enqueueCriticalAlert,
   isFreshForReplayDispatch,
+  criticalTimingOf,
+  type CriticalTiming,
 } from "../../workers/critical-alert.enqueue.js";
 
 const analyzeQueue = createQueue<{
@@ -84,6 +86,8 @@ interface CreateReadingInput {
   notes?: string | undefined;
   source: "manual" | "voice" | "device";
   measuredAt: string;
+  /** When the device sent it (device clock), for the late-reading check (P33). */
+  sentAt?: string | undefined;
   version: number;
   requestId?: string;
 }
@@ -110,7 +114,9 @@ const ist = (): number => 330;
 const buildReplayResult = async (
   reading: GlucoseReading,
   userId: string,
-  requestId?: string,
+  requestId: string | undefined,
+  /** From the replay request's own sentAt and receive time (review B2). */
+  timing: CriticalTiming,
 ): Promise<CreateReadingResult> => {
   // Re-derive the decision the original request made: as of the moment
   // this version was saved, against critical alerts shown BEFORE it. This
@@ -154,6 +160,7 @@ const buildReplayResult = async (
         readingId: reading.id,
         userId,
         decision: critical,
+        ...(timing.late ? { late: timing.late } : {}),
         ...(requestId ? { requestId } : {}),
       },
       reading.version,
@@ -183,14 +190,30 @@ export const createGlucoseReading = async (
   const clockDeltaMs = Math.abs(serverNow.getTime() - measuredAtDate.getTime());
   const isAnomalousClock = clockDeltaMs > SERVER_TIME_FALLBACK_THRESHOLD_HOURS * MS_PER_HOUR;
 
-  const idem = await checkIdempotent(prisma.glucoseReading, input.clientUuid, input.version);
+  // Scoped to the caller: a clientUuid owned by another profile is never
+  // replayed back or updated (as BP, P4 review W5; P8 safety review W3).
+  const idem = await checkIdempotent(
+    prisma.glucoseReading,
+    input.clientUuid,
+    input.version,
+    input.userId,
+  );
   if (idem.kind === "stale") {
     throw new DomainError("READING_STALE_VERSION", "incoming version not newer than stored");
   }
   if (idem.kind === "replay") {
     // Idempotent replay — same {clientUuid, version} we already stored.
     // Return the prior result without re-running side effects.
-    return await buildReplayResult(idem.existing, input.userId, input.requestId);
+    return await buildReplayResult(
+      idem.existing,
+      input.userId,
+      input.requestId,
+      criticalTimingOf({
+        measuredAt: idem.existing.measuredAt,
+        sentAt: input.sentAt,
+        receivedAt: serverNow,
+      }),
+    );
   }
   // `update` carries the existing row; `insert` leaves it null.
   const existing = idem.kind === "update" ? idem.existing : null;
@@ -369,19 +392,48 @@ export const createGlucoseReading = async (
       // the findFirst race and arrived first. Re-fetch and treat as replay.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         const winner = await prisma.glucoseReading.findFirst({
-          where: { clientUuid: input.clientUuid },
+          where: { clientUuid: input.clientUuid, userId: input.userId },
         });
         if (winner) {
           logger.info(
             { clientUuid: input.clientUuid, userId: input.userId },
             "concurrent create resolved as idempotent replay",
           );
-          return await buildReplayResult(winner, input.userId, input.requestId);
+          return await buildReplayResult(
+            winner,
+            input.userId,
+            input.requestId,
+            criticalTimingOf({
+              measuredAt: winner.measuredAt,
+              sentAt: input.sentAt,
+              receivedAt: serverNow,
+            }),
+          );
         }
+        // The key is taken by another profile's reading: never answer with
+        // it. A 409 the app keeps queued, not a 500 that stops its sync.
+        throw new DomainError(
+          "READING_CLIENT_UUID_CONFLICT",
+          "clientUuid already used by another profile",
+        );
       }
       throw err;
     }
   }
+
+  // Audit P33: a reading over 2h old (offline queue) doesn't start the
+  // cooldown — its feedback row is `critical_warn_late`, which the cooldown
+  // query doesn't match (chat's emergency mode and the guardian dedup do) —
+  // and, when the device's own send time confirms it, the family gets a
+  // late notice instead of the live chain. An edit keeps the stored
+  // measuredAt.
+  const timing = critical.isCritical
+    ? criticalTimingOf({
+        measuredAt: existing?.measuredAt ?? input.measuredAt,
+        sentAt: input.sentAt,
+        receivedAt: serverNow,
+      })
+    : null;
 
   // Hand off the critical alert FIRST — before the streak and feedback
   // writes — so no later failure can leave a saved critical reading whose
@@ -392,6 +444,7 @@ export const createGlucoseReading = async (
         readingId: reading.id,
         userId: input.userId,
         decision: critical,
+        ...(timing?.late ? { late: timing.late } : {}),
         ...(input.requestId ? { requestId: input.requestId } : {}),
       },
       reading.version,
@@ -418,7 +471,10 @@ export const createGlucoseReading = async (
     data: {
       userId: input.userId,
       readingId: reading.id,
-      feedbackType: feedback.type,
+      feedbackType:
+        timing?.startsCooldown === false && feedback.type === "critical_warn"
+          ? "critical_warn_late"
+          : feedback.type,
       tone: feedback.tone,
       messageKey: feedback.messageKey,
       variantIndex: feedback.variantIndex,

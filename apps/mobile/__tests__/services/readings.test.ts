@@ -209,6 +209,17 @@ describe("drainPendingReadings", () => {
     expect((post.mock.calls[0]?.[1] as { notes?: string }).notes).toBe("khana ke baad");
   });
 
+  it("says when each reading is sent, on the first try and on a drain (audit P33)", async () => {
+    post.mockRejectedValueOnce(networkError());
+    await saveGlucoseReading(input);
+    post.mockResolvedValueOnce({ data: {} });
+    await drainPendingReadings();
+    for (const call of post.mock.calls as [string, { sentAt?: string }][]) {
+      expect(typeof call[1].sentAt).toBe("string");
+    }
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
   it("sends critical readings first, newest first, ahead of an older backlog", async () => {
     // The 30-min cooldown lets only the first critical alert: it must be
     // the reading closest to now.

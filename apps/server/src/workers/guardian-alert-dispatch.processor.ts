@@ -91,7 +91,8 @@ export const processGuardianAlertDispatch = async (
     const recentBypass = await prisma.feedbackEvent.findFirst({
       where: {
         userId: alert.patientId,
-        feedbackType: "critical_warn",
+        // Late readings too (audit P33): the family was just told about it.
+        feedbackType: { in: ["critical_warn", "critical_warn_late"] },
         shownAt: { gte: new Date(now.getTime() - CRITICAL_BYPASS_DEDUP_MS) },
       },
     });

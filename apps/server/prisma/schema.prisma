@@ -89,6 +89,10 @@ enum FeedbackType {
   post_log_compare
   streak_milestone
   critical_warn
+  /// Audit P33: a critical glucose reading over 2h old when it arrived. Not a
+  /// cooldown marker, unlike `critical_warn`; chat's emergency mode and the
+  /// guardian-alert dedup still count it.
+  critical_warn_late
   festive
 }
 

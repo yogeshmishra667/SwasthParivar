@@ -49,6 +49,19 @@ deploy).
 - Did the bad release publish any push notifications with bad copy?
   Notifications already sent are unrecoverable. Note the count, file
   a separate incident report.
+- **Reverting to an image older than audit P33** (migration
+  `20261028000000_feedback_type_critical_warn_late`)? The migration stays,
+  and the old Prisma client can't read the new `critical_warn_late` value:
+  a glucose replay that reads one returns 500, and the app's offline queue
+  then stops at that reading on every sync. Before the revert, run:
+
+  ```sql
+  UPDATE feedback_events SET feedback_type = 'critical_warn' WHERE feedback_type = 'critical_warn_late';
+  ```
+
+  Run it again once the old image is serving (it is idempotent): the new
+  image may write more rows until the revert completes. Those readings then
+  count toward the 30-min cooldown again, as before P33.
 
 ---
 

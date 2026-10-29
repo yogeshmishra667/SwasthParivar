@@ -17,6 +17,7 @@ import { api } from "@/services/api";
 import { logError, track } from "@/services/analytics";
 import { enqueuePendingWrite } from "@/services/pending-writes";
 import { classifyDrainFailure } from "@/services/drain-policy";
+import { withSentAt } from "@/services/sent-at";
 
 export interface SaveCardiacInput {
   /** Profile to log against (shared phone — see CLAUDE.md "Shared Phone Profile Switcher"). */
@@ -84,7 +85,7 @@ export const saveCardiacLog = async (input: SaveCardiacInput): Promise<SaveCardi
   };
 
   try {
-    const res = await api.post<ServerCardiacResponse>("/readings/cardiac", payload);
+    const res = await api.post<ServerCardiacResponse>("/readings/cardiac", withSentAt(payload));
     track("reading_logged", {
       type: "cardiac",
       source: input.source,

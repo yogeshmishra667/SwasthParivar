@@ -17,6 +17,12 @@ export const glucoseCreateSchema = z.object({
     .transform((v) => v ?? undefined),
   source: z.enum(["manual", "voice", "device"]),
   measuredAt: z.string().datetime(),
+  /**
+   * When the device sent this request (device clock). Optional: older app
+   * builds don't send it. Used to tell a reading synced late from an
+   * offline queue apart from a current one (audit P33).
+   */
+  sentAt: z.string().datetime().optional(),
   version: z.number().int().positive().default(1),
   /** Shared-phone profile switcher: log on behalf of a household member. */
   targetUserId: z.string().uuid().optional(),

@@ -47,6 +47,16 @@ export const captureUnhandled = (err: unknown, context?: Record<string, unknown>
   Sentry.captureException(err, context ? { extra: context } : undefined);
 };
 
+/**
+ * A problem worth seeing that must not page on-call (Sentry `warning`
+ * level; alert rules page on errors). E.g. a late critical notice (audit
+ * P33) that reached nobody.
+ */
+export const captureWarning = (message: string, context?: Record<string, unknown>): void => {
+  if (!initialised) return;
+  Sentry.captureMessage(message, { level: "warning", ...(context ? { extra: context } : {}) });
+};
+
 export const isSentryEnabled = (): boolean => initialised;
 
 // In production without a DSN we surface a one-line warning so misconfigured

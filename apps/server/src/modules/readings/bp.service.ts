@@ -14,6 +14,8 @@ import type { CriticalAlertMultiCategoryJob } from "../../workers/critical-alert
 import {
   enqueueCriticalAlert,
   isFreshForReplayDispatch,
+  criticalTimingOf,
+  type CriticalTiming,
 } from "../../workers/critical-alert.enqueue.js";
 import type { AnalyzeReadingJob } from "../../workers/analyze-reading.processor.js";
 
@@ -29,6 +31,8 @@ interface CreateBPInput {
   notes?: string | undefined;
   source: "manual" | "voice" | "device";
   measuredAt: string;
+  /** When the device sent it (device clock), for the late-reading check (P33). */
+  sentAt?: string | undefined;
   version: number;
   requestId?: string;
 }
@@ -84,6 +88,8 @@ const handOffBPBypass = async (
   dispatch: MultiCategoryBypassDispatch,
   requestId: string | undefined,
   stamp: boolean,
+  /** Audit P33: a late notice instead of the live chain, and whether it starts the cooldown. */
+  timing: CriticalTiming,
 ): Promise<void> => {
   if (dispatch.withinCooldown) return;
   const job: CriticalAlertMultiCategoryJob = {
@@ -93,9 +99,12 @@ const handOffBPBypass = async (
     dispatch,
     copyParams: { systolic: reading.systolic, diastolic: reading.diastolic },
     ...(requestId ? { requestId } : {}),
+    ...(timing.late ? { late: timing.late } : {}),
   };
   await enqueueCriticalAlert(job, reading.version);
-  if (stamp) {
+  // A reading over 2h old doesn't start the cooldown: a real critical
+  // reading soon after must still reach the family (audit P33).
+  if (stamp && timing.startsCooldown) {
     await markBypassed(
       "bp",
       reading.userId,
@@ -124,7 +133,9 @@ const criticalView = (
  */
 const buildReplayResult = async (
   reading: BPReading,
-  requestId?: string,
+  requestId: string | undefined,
+  /** From the replay request's own sentAt and receive time (review B2). */
+  timing: CriticalTiming,
 ): Promise<CreateBPResult> => {
   const classification = classifyBPReading(reading);
   if (
@@ -137,12 +148,13 @@ const buildReplayResult = async (
       reading.updatedAt.toISOString(),
       bypassOwner(reading.id, reading.version),
     );
-    await handOffBPBypass(reading, dispatch, requestId, false);
+    await handOffBPBypass(reading, dispatch, requestId, false, timing);
   }
   return { reading, critical: criticalView(reading, false) };
 };
 
 export const createBPReading = async (input: CreateBPInput): Promise<CreateBPResult> => {
+  const receivedAt = new Date();
   // Scoped to the caller: a clientUuid owned by another user is never
   // replayed back or updated (P4 review W5).
   const idem = await checkIdempotent(
@@ -155,7 +167,11 @@ export const createBPReading = async (input: CreateBPInput): Promise<CreateBPRes
     throw new DomainError("READING_STALE_VERSION", "incoming version not newer than stored");
   }
   if (idem.kind === "replay") {
-    return await buildReplayResult(idem.existing, input.requestId);
+    return await buildReplayResult(
+      idem.existing,
+      input.requestId,
+      criticalTimingOf({ measuredAt: idem.existing.measuredAt, sentAt: input.sentAt, receivedAt }),
+    );
   }
   const existing = idem.kind === "update" ? idem.existing : null;
 
@@ -225,14 +241,37 @@ export const createBPReading = async (input: CreateBPInput): Promise<CreateBPRes
             { clientUuid: input.clientUuid, userId: input.userId },
             "bp concurrent create resolved as idempotent replay",
           );
-          return await buildReplayResult(winner, input.requestId);
+          return await buildReplayResult(
+            winner,
+            input.requestId,
+            criticalTimingOf({ measuredAt: winner.measuredAt, sentAt: input.sentAt, receivedAt }),
+          );
         }
+        // The key is taken by another profile's reading: never answer with
+        // it. A 409 the app keeps queued, not a 500 that stops its sync.
+        throw new DomainError(
+          "READING_CLIENT_UUID_CONFLICT",
+          "clientUuid already used by another profile",
+        );
       }
       throw err;
     }
   }
 
-  if (plannedBypass) await handOffBPBypass(reading, plannedBypass, input.requestId, true);
+  if (plannedBypass) {
+    await handOffBPBypass(
+      reading,
+      plannedBypass,
+      input.requestId,
+      true,
+      // An edit keeps the stored measuredAt (the partition key).
+      criticalTimingOf({
+        measuredAt: existing?.measuredAt ?? input.measuredAt,
+        sentAt: input.sentAt,
+        receivedAt,
+      }),
+    );
+  }
 
   // Phase 4 §E follow-up — enqueue category-aware ANALYZE_READING so
   // the cross-condition detector fires when BP arrives, not only when

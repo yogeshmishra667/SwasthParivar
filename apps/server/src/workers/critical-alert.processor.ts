@@ -9,7 +9,7 @@ import type { CriticalBypassAutoEscalateJob } from "./critical-bypass-auto-escal
 import { logger } from "../shared/logger.js";
 import { prisma } from "../shared/database.js";
 import { capture as captureAnalyticsEvent } from "../shared/analytics/posthog.js";
-import { captureUnhandled } from "../shared/observability/sentry.js";
+import { captureUnhandled, captureWarning } from "../shared/observability/sentry.js";
 import { sendExpoPush, type ExpoPushMessage } from "../shared/notifications/expo-push.js";
 import { sendSmsBatch, type SmsMessage } from "../shared/notifications/msg91-sms.js";
 import { householdUserIds } from "../shared/notifications/household-delivery.js";
@@ -28,10 +28,25 @@ export type CriticalAlertJob =
   | (CriticalAlertGlucoseJob & { category?: "glucose" })
   | CriticalAlertMultiCategoryJob;
 
+/**
+ * Audit P33: set when the reading reached the server more than 2h after it
+ * was taken. The family is told, with that time; the patient's own phone
+ * isn't re-alerted, and no SOS escalation or on-call page follows.
+ */
+export interface LateCriticalReading {
+  /** As sent (device clock). */
+  measuredAtIso: string;
+  /** When it was taken on the server's clock — shown in the notice. */
+  takenAtIso: string;
+  /** Age when sent, by the device's clock. */
+  minutesLate: number;
+}
+
 export interface CriticalAlertGlucoseJob {
   readingId: string;
   userId: string;
   decision: BypassDecision;
+  late?: LateCriticalReading;
   // Forwarded from the originating HTTP request so the dispatch log line
   // joins the request log under the same requestId. Optional — jobs
   // enqueued from cron paths (none today, but kept resilient) emit with
@@ -44,6 +59,7 @@ export interface CriticalAlertMultiCategoryJob {
   readingId: string;
   userId: string;
   dispatch: MultiCategoryBypassDispatch;
+  late?: LateCriticalReading;
   /**
    * Numeric payload the worker reads to build the localised SMS body.
    * Shape is category-specific; the worker treats this as opaque data
@@ -124,6 +140,7 @@ interface PushRecipients {
 const resolvePushRecipients = async (
   userId: string,
   guardianContactIds: readonly string[],
+  includePatientDevice: boolean,
 ): Promise<PushRecipients> => {
   // The patient's OWN device always receives the alert push, so the
   // alert shows on the patient's phone. Guardian contacts ADD to this set;
@@ -158,7 +175,12 @@ const resolvePushRecipients = async (
     }
   }
 
-  const allUserIds = [...new Set([...patientHouseholdIds, ...[...contactUserIds.values()].flat()])];
+  const allUserIds = [
+    ...new Set([
+      ...(includePatientDevice ? patientHouseholdIds : []),
+      ...[...contactUserIds.values()].flat(),
+    ]),
+  ];
   const tokenRows = await prisma.pushToken.findMany({
     where: { userId: { in: allUserIds } },
     select: { token: true, userId: true },
@@ -183,6 +205,11 @@ interface FanOutInput {
   /** Every emergency contactId in priority order — from the bypass decision. */
   readonly smsTargets: readonly string[];
   readonly buildPushMessage: (token: string) => ExpoPushMessage;
+  /**
+   * False for a late reading (audit P33): the patient's own phone is not
+   * re-alerted (it raised the alert when the reading was taken).
+   */
+  readonly includePatientDevice: boolean;
   readonly smsText: string;
   readonly log: typeof logger;
   /** Extra props for the push_zero_recipients analytics event. */
@@ -251,7 +278,11 @@ const fanOutCriticalAlert = async (input: FanOutInput): Promise<FanOutResult> =>
 
   if (input.triggerPush) {
     try {
-      const { tokens, tokensByContact } = await resolvePushRecipients(userId, input.pushTargets);
+      const { tokens, tokensByContact } = await resolvePushRecipients(
+        userId,
+        input.pushTargets,
+        input.includePatientDevice,
+      );
       if (tokens.length > 0) {
         // sendExpoPush returns one result per message, in message order.
         const results = await sendExpoPush(tokens.map(input.buildPushMessage));
@@ -272,13 +303,17 @@ const fanOutCriticalAlert = async (input: FanOutInput): Promise<FanOutResult> =>
           { userId, guardianContacts: input.pushTargets.length, reason },
           "critical-alert: zero push tokens — falling through to SMS",
         );
-        const householdSize = (await householdUserIds(userId)).length;
-        captureAnalyticsEvent("push_zero_recipients", userId, {
-          surface: "critical_alert",
-          ...input.analytics,
-          reason,
-          household_size: householdSize,
-        });
+        // A late notice leaves the household out on purpose: it says
+        // nothing about token registration.
+        if (input.includePatientDevice) {
+          const householdSize = (await householdUserIds(userId)).length;
+          captureAnalyticsEvent("push_zero_recipients", userId, {
+            surface: "critical_alert",
+            ...input.analytics,
+            reason,
+            household_size: householdSize,
+          });
+        }
       }
     } catch (err) {
       // A push-stage failure (token lookup, Expo client) must never cost
@@ -312,6 +347,7 @@ const fanOutCriticalAlert = async (input: FanOutInput): Promise<FanOutResult> =>
         captureAnalyticsEvent("critical_sms_per_contact", userId, {
           contact_id: c.id,
           delivered: delivered.has(c.id),
+          ...(input.includePatientDevice ? {} : { late: true }),
         });
       }
     }
@@ -385,6 +421,163 @@ export type CriticalAlertJobRef<T extends CriticalAlertJob = CriticalAlertJob> =
   "id" | "data"
 >;
 
+// ─────────────────────────────────────────────────────────────
+// Audit P33 — a critical reading that synced > 2h after it was taken.
+// The family is told, with when it was taken; it is not an emergency page.
+// ─────────────────────────────────────────────────────────────
+
+// Same fixed IST offset the readings service uses for the patient's day.
+const IST_OFFSET_MS = 330 * 60_000;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const pad2 = (n: number): string => String(n).padStart(2, "0");
+
+/** "22:10" today (IST), "26 Oct 22:10" on another day. ASCII. */
+export const formatTakenAt = (measuredAtIso: string, now: Date = new Date()): string => {
+  const taken = new Date(Date.parse(measuredAtIso) + IST_OFFSET_MS);
+  const today = new Date(now.getTime() + IST_OFFSET_MS);
+  const hhmm = `${pad2(taken.getUTCHours())}:${pad2(taken.getUTCMinutes())}`;
+  const sameDay = taken.toISOString().slice(0, 10) === today.toISOString().slice(0, 10);
+  return sameDay ? hhmm : `${taken.getUTCDate()} ${MONTHS[taken.getUTCMonth()] ?? ""} ${hhmm}`;
+};
+
+/** Short ASCII label for the late notice, e.g. "Sugar 52 mg/dL", "BP 190/120 mmHg". */
+const lateReadingLabel = (
+  category: "glucose" | CriticalAlertMultiCategoryJob["category"],
+  p: CriticalAlertMultiCategoryJob["copyParams"] & { valueMgDl?: number },
+  copyKey: string | null,
+  language: Language,
+): string => {
+  const en = language === "en";
+  switch (category) {
+    case "glucose":
+      return `Sugar ${p.valueMgDl ?? 0} mg/dL`;
+    case "bp":
+      return `BP ${p.systolic ?? 0}/${p.diastolic ?? 0} mmHg`;
+    case "cardiac":
+      return copyKey === "critical.cardiac.chest_pain"
+        ? `${en ? "Chest pain" : "Seene mein dard"} ${p.painSeverity ?? 0}/10`
+        : `${en ? "Heart rate" : "Dhadkan"} ${p.heartRateBpm ?? 0}/min`;
+    case "respiratory":
+      return p.peakFlow !== undefined && copyKey === "critical.respiratory.peak_flow"
+        ? `Peak flow ${p.peakFlow} L/min`
+        : en
+          ? "Severe breathing trouble"
+          : "Saans ki gambhir takleef";
+  }
+};
+
+// Plain ASCII like the other critical SMS: one GSM-7 part.
+const lateSmsCopy = (
+  patientName: string,
+  reading: string,
+  takenAt: string,
+  language: Language,
+): string =>
+  language === "en"
+    ? `SwasthParivar: ${patientName}'s reading from ${takenAt} was critical (${reading}). It synced just now. Please call to check on them.`
+    : `SwasthParivar: ${patientName} ki ${takenAt} baje ki reading critical thi (${reading}). Abhi sync hui. Call karke haal poochh lein.`;
+
+/**
+ * Sends the late notice: family push (not the patient's own phone) and SMS
+ * to contacts the push didn't reach, under the same per-contact rules as a
+ * live alert. No on-call page and no SOS escalation: it is not a current
+ * emergency.
+ */
+const processLateCriticalReading = async (input: {
+  category: "glucose" | CriticalAlertMultiCategoryJob["category"];
+  userId: string;
+  readingId: string;
+  late: LateCriticalReading;
+  copyParams: CriticalAlertMultiCategoryJob["copyParams"] & { valueMgDl?: number };
+  copyKey: string | null;
+  triggerPush: boolean;
+  triggerSmsFallback: boolean;
+  pushTargets: readonly string[];
+  smsTargets: readonly string[];
+  log: typeof logger;
+}): Promise<void> => {
+  const { category, userId, readingId, late, log } = input;
+  const patient = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, preferredLanguage: true },
+  });
+  const patientName = patient?.name ?? "Patient";
+  const language = patient?.preferredLanguage ?? "hi";
+  const reading = lateReadingLabel(category, input.copyParams, input.copyKey, language);
+  const takenAt = formatTakenAt(late.takenAtIso);
+  const copy = notif("critical_late", { patientName, reading, takenAt }, language);
+  const notificationId = randomUUID();
+
+  const result = await fanOutCriticalAlert({
+    userId,
+    triggerPush: input.triggerPush,
+    triggerSmsFallback: input.triggerSmsFallback,
+    pushTargets: input.pushTargets,
+    smsTargets: input.smsTargets,
+    includePatientDevice: false,
+    buildPushMessage: (to) => ({
+      to,
+      title: copy.title,
+      body: copy.body,
+      sound: "default",
+      priority: "high",
+      channelId: "critical",
+      data: {
+        notificationId,
+        // Not "critical_alert": the app must not open the fullscreen alert.
+        type: "critical_reading_late",
+        category,
+        readingId,
+        userId,
+        targetUserId: userId,
+        measuredAt: late.measuredAtIso,
+      },
+    }),
+    smsText: lateSmsCopy(patientName, reading, takenAt, language),
+    log,
+    analytics: category === "glucose" ? {} : { category },
+  });
+
+  log.warn(
+    {
+      userId,
+      readingId,
+      category,
+      measuredAt: late.measuredAtIso,
+      pushSuccess: result.pushSuccessCount,
+      contactsReachedByPush: result.contactsReachedByPush,
+      smsContacts: result.smsContacts,
+      smsSuccess: result.smsSuccessCount,
+    },
+    "late critical reading: family notified",
+  );
+  // No on-call page (it is not a current emergency), but a notice that
+  // reached nobody — or SMS that failed — must still be visible (review W3).
+  const reachedSomeone = result.contactsReachedByPush > 0 || result.smsSuccessCount > 0;
+  const hadTargets = input.pushTargets.length > 0 || input.smsTargets.length > 0;
+  if ((hadTargets && !reachedSomeone) || result.smsFailedCount > 0) {
+    captureWarning("late critical notice not fully delivered", {
+      userId,
+      readingId,
+      category,
+      pushTargets: input.pushTargets.length,
+      contactsReachedByPush: result.contactsReachedByPush,
+      smsContacts: result.smsContacts,
+      smsFailed: result.smsFailedCount,
+    });
+  }
+  // Its own event: `critical_bypass_triggered` feeds the live-alert SMS
+  // success metric, which a late notice must not skew.
+  captureAnalyticsEvent("critical_reading_late_notified", userId, {
+    category,
+    minutes_late: late.minutesLate,
+    push_success: result.pushSuccessCount > 0,
+    contacts_reached_by_push: result.contactsReachedByPush,
+    sms_contacts: result.smsContacts,
+    sms_success: result.smsSuccessCount > 0,
+  });
+};
+
 export const processCriticalAlert = async (job: CriticalAlertJobRef): Promise<void> => {
   const data = job.data;
   if (data.category === "bp" || data.category === "cardiac" || data.category === "respiratory") {
@@ -425,6 +618,23 @@ const processGlucoseCriticalAlert = async (
   });
   const value = reading?.valueMgDl ?? 0;
 
+  if (data.late) {
+    await processLateCriticalReading({
+      category: "glucose",
+      userId,
+      readingId,
+      late: data.late,
+      copyParams: { valueMgDl: value },
+      copyKey: decision.copyKey,
+      triggerPush: decision.triggerPush,
+      triggerSmsFallback: decision.triggerSmsFallback,
+      pushTargets: decision.pushTargets,
+      smsTargets: decision.smsTargets,
+      log,
+    });
+    return;
+  }
+
   const copy = copyForSeverity(decision.severity, value, patientName, language);
   const severity = decision.severity;
   const notificationId = randomUUID();
@@ -438,6 +648,7 @@ const processGlucoseCriticalAlert = async (
     triggerSmsFallback: decision.triggerSmsFallback,
     pushTargets: decision.pushTargets,
     smsTargets: decision.smsTargets,
+    includePatientDevice: true,
     buildPushMessage: (to) => ({
       to,
       title: copy.title,
@@ -609,6 +820,23 @@ const processMultiCategoryCriticalAlert = async (
     ...(requestId ? { requestId } : {}),
   });
 
+  if (data.late) {
+    await processLateCriticalReading({
+      category,
+      userId,
+      readingId,
+      late: data.late,
+      copyParams,
+      copyKey: dispatch.copyKey,
+      triggerPush: dispatch.triggerPush,
+      triggerSmsFallback: dispatch.triggerSmsFallback,
+      pushTargets: dispatch.pushTargets,
+      smsTargets: dispatch.smsTargets,
+      log,
+    });
+    return;
+  }
+
   const patient = await prisma.user.findUnique({
     where: { id: userId },
     select: { name: true, preferredLanguage: true },
@@ -625,6 +853,7 @@ const processMultiCategoryCriticalAlert = async (
     triggerSmsFallback: dispatch.triggerSmsFallback,
     pushTargets: dispatch.pushTargets,
     smsTargets: dispatch.smsTargets,
+    includePatientDevice: true,
     buildPushMessage: (to) => ({
       to,
       title: copy.title,
