@@ -59,8 +59,9 @@ deploy).
   UPDATE feedback_events SET feedback_type = 'critical_warn' WHERE feedback_type = 'critical_warn_late';
   ```
 
-  Those readings then count toward the 30-min cooldown again, as before
-  P33.
+  Run it again once the old image is serving (it is idempotent): the new
+  image may write more rows until the revert completes. Those readings then
+  count toward the 30-min cooldown again, as before P33.
 
 ---
 

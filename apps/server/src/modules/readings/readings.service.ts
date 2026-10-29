@@ -422,10 +422,10 @@ export const createGlucoseReading = async (
   }
 
   // Audit P33: a reading over 2h old (offline queue) doesn't start the
-  // cooldown — its feedback row isn't a `critical_warn`, the marker the
-  // cooldown, guardian-alert dedup and chat's active-emergency check look
-  // for — and, when the device's own send time confirms it, the family gets
-  // a late notice instead of the live chain. An edit keeps the stored
+  // cooldown — its feedback row is `critical_warn_late`, which the cooldown
+  // query doesn't match (chat's emergency mode and the guardian dedup do) —
+  // and, when the device's own send time confirms it, the family gets a
+  // late notice instead of the live chain. An edit keeps the stored
   // measuredAt.
   const timing = critical.isCritical
     ? criticalTimingOf({

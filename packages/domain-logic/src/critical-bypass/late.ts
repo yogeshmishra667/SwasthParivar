@@ -26,6 +26,9 @@ export const LATE_CRITICAL_THRESHOLD_MINUTES = 120 as const;
 
 const MS_PER_MIN = 60_000;
 const THRESHOLD_MS = LATE_CRITICAL_THRESHOLD_MINUTES * MS_PER_MIN;
+// Sent before it was taken by more than this: the phone's clock jumped back
+// in between, so its age says nothing (the server's age is used instead).
+const BACKWARD_JUMP_TOLERANCE_MS = 5 * MS_PER_MIN;
 
 export interface ReadingAgeInput {
   /** When the reading was taken (device clock). */
@@ -57,7 +60,8 @@ export const readingAgeAtSendMs = (input: ReadingAgeInput): number | null =>
   input.sentAtIso === null ? null : ageMs(input.measuredAtIso, input.sentAtIso);
 
 export const criticalReadingTiming = (input: ReadingAgeInput): CriticalReadingTiming => {
-  const deviceAgeMs = readingAgeAtSendMs(input);
+  const sentAge = readingAgeAtSendMs(input);
+  const deviceAgeMs = sentAge !== null && sentAge >= -BACKWARD_JUMP_TOLERANCE_MS ? sentAge : null;
   const serverAgeMs = ageMs(input.measuredAtIso, input.receivedAtIso);
   const late = deviceAgeMs !== null && deviceAgeMs > THRESHOLD_MS && serverAgeMs > THRESHOLD_MS;
   const bestAgeMs = deviceAgeMs ?? serverAgeMs;

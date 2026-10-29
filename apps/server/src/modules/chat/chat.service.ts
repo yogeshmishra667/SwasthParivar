@@ -397,7 +397,10 @@ const detectActiveEmergency = async (userId: string): Promise<boolean> => {
   const recent = await prisma.feedbackEvent.findFirst({
     where: {
       userId,
-      feedbackType: "critical_warn",
+      // `critical_warn_late` too (audit P33): an older app build's reading
+      // whose age the server can't trust still paged live. Failing toward
+      // emergency mode costs a canned reply after a truly late sync.
+      feedbackType: { in: ["critical_warn", "critical_warn_late"] },
       shownAt: { gte: new Date(Date.now() - CRITICAL_BYPASS_WINDOW_MIN * 60_000) },
     },
     select: { id: true },

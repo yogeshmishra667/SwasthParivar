@@ -1,9 +1,8 @@
--- Audit P33 — a critical glucose reading that reaches the server more than
--- 2 hours after it was taken (offline queue) is stored with this feedback
--- type instead of `critical_warn`. `critical_warn` is what the critical
--- cooldown, guardian-alert dedup and chat's active-emergency check look
--- for; a late reading must not trigger any of them, or a real critical
--- reading soon after would reach nobody.
+-- Audit P33 — a critical glucose reading over 2 hours old when it reaches
+-- the server (offline queue) is stored with this feedback
+-- type instead of `critical_warn`, which is what the critical cooldown looks
+-- for: an old reading must not start it, or a real critical reading soon
+-- after would reach nobody.
 --
 -- ALTER TYPE ... ADD VALUE is additive: existing rows keep working.
 

@@ -62,6 +62,13 @@ describe("late critical reading (audit P33)", () => {
     expect(timing(4 * 60, 60)).toMatchObject({ late: false, startsCooldown: false });
   });
 
+  it("a clock that jumped back between taking and sending is ignored: the server's age decides", () => {
+    // Sent an hour "before" it was taken; the server sees 6h.
+    expect(timing(-60, 6 * 60)).toEqual({ late: false, startsCooldown: false, deviceAgeMs: null });
+    // A few seconds of jitter is still the device's age.
+    expect(timing(-1, 0)).toMatchObject({ startsCooldown: true, deviceAgeMs: -60_000 });
+  });
+
   it("a reading from the future is live", () => {
     expect(
       readingAgeAtSendMs({ measuredAtIso: at(TAKEN, 10), sentAtIso: TAKEN, receivedAtIso: TAKEN }),
