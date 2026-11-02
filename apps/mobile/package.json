@@ -34,7 +34,7 @@
     "@swasth/domain-logic": "workspace:*",
     "@swasth/shared-types": "workspace:*",
     "axios": "^1.20.0",
-    "expo": "54.0.34",
+    "expo": "54.0.38",
     "expo-build-properties": "^55.0.14",
     "expo-camera": "^17.0.10",
     "expo-constants": "^18.0.13",
